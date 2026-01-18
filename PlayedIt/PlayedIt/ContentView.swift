@@ -1,66 +1,83 @@
-//
-//  ContentView.swift
-//  PlayedIt
-//
-//  Created by Daniel Hankins-Wright on 1/18/26.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @ObservedObject var supabase = SupabaseManager.shared
+    
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        Group {
+            if supabase.isAuthenticated {
+                // Main app (we'll build this later)
+                HomeView()
+            } else {
+                // Auth flow
+                LoginView()
             }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
         }
+        .animation(.easeInOut(duration: 0.3), value: supabase.isAuthenticated)
     }
+}
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+// MARK: - Temporary Home View (placeholder)
+struct HomeView: View {
+    @ObservedObject var supabase = SupabaseManager.shared
+    @State private var showGameSearch = false
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Image("Logo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 100, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 22))
+            
+            HStack(spacing: 0) {
+                Text("played")
+                    .font(.largeTitle)
+                    .foregroundColor(.slate)
+                Text("it")
+                    .font(.largeTitle)
+                    .foregroundColor(.accentOrange)
             }
+            
+            Text("Your list is waiting. What's the first game?")
+                .font(.body)
+                .foregroundColor(.grayText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            // Add Game Button
+            Button {
+                showGameSearch = true
+            } label: {
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Log Game")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, 40)
+            
+            Spacer()
+            
+            // Sign out button
+            Button {
+                Task {
+                    await supabase.signOut()
+                }
+            } label: {
+                Text("Sign Out")
+            }
+            .buttonStyle(TertiaryButtonStyle())
+            .padding(.bottom, 40)
+        }
+        .sheet(isPresented: $showGameSearch) {
+            GameSearchView()
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
