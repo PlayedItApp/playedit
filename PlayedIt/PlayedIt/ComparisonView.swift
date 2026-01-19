@@ -14,6 +14,15 @@ struct ComparisonView: View {
     @State private var finalPosition: Int?
     @State private var showCards = false
     @State private var selectedSide: String? = nil
+    @State private var comparisonHistory: [ComparisonState] = []
+    @State private var showCancelAlert = false
+    
+    // History state for undo
+    struct ComparisonState {
+        let lowIndex: Int
+        let highIndex: Int
+        let comparisonCount: Int
+    }
     
     private let maxComparisons = 10
     
@@ -113,13 +122,29 @@ struct ComparisonView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Skip") {
-                        let position = existingGames.count + 1
-                        onComplete(position)
-                        dismiss()
+                    Button("Cancel") {
+                        showCancelAlert = true
                     }
                     .foregroundColor(.grayText)
                 }
+                
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        undoLastComparison()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .foregroundColor(comparisonHistory.isEmpty ? .gray : .primaryBlue)
+                    .disabled(comparisonHistory.isEmpty)
+                }
+            }
+            .alert("Cancel Ranking?", isPresented: $showCancelAlert) {
+                Button("Keep Ranking", role: .cancel) { }
+                Button("Cancel", role: .destructive) {
+                    dismiss()
+                }
+            } message: {
+                Text("Your progress will be lost and the game won't be ranked.")
             }
             .onAppear {
                 setupComparison()
@@ -181,6 +206,13 @@ struct ComparisonView: View {
     }
     
     private func userChoseNewGame() {
+        // Save current state for undo
+        comparisonHistory.append(ComparisonState(
+            lowIndex: lowIndex,
+            highIndex: highIndex,
+            comparisonCount: comparisonCount
+        ))
+        
         let midIndex = (lowIndex + highIndex) / 2
         highIndex = midIndex - 1
         comparisonCount += 1
@@ -188,10 +220,34 @@ struct ComparisonView: View {
     }
     
     private func userChoseExistingGame() {
+        // Save current state for undo
+        comparisonHistory.append(ComparisonState(
+            lowIndex: lowIndex,
+            highIndex: highIndex,
+            comparisonCount: comparisonCount
+        ))
+        
         let midIndex = (lowIndex + highIndex) / 2
         lowIndex = midIndex + 1
         comparisonCount += 1
         nextComparison()
+    }
+    
+    private func undoLastComparison() {
+        guard let lastState = comparisonHistory.popLast() else { return }
+        
+        // Restore previous state
+        lowIndex = lastState.lowIndex
+        highIndex = lastState.highIndex
+        comparisonCount = lastState.comparisonCount
+        finalPosition = nil
+        
+        // Show the comparison again
+        nextComparison()
+        
+        // Haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
     }
 }
 

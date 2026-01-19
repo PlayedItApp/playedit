@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 struct GameSearchView: View {
     @State private var searchText = ""
@@ -6,6 +7,7 @@ struct GameSearchView: View {
     @State private var isLoading = false
     @State private var hasSearched = false
     @State private var selectedGame: Game?
+    @State private var rankedGameIds: Set<Int> = []
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -71,7 +73,7 @@ struct GameSearchView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(games) { game in
-                                GameSearchRow(game: game) {
+                                GameSearchRow(game: game, isRanked: rankedGameIds.contains(game.id)) {
                                     selectedGame = game
                                 }
                             }
@@ -90,8 +92,15 @@ struct GameSearchView: View {
                     .foregroundColor(.primaryBlue)
                 }
             }
-            .sheet(item: $selectedGame) { game in
+            .sheet(item: $selectedGame, onDismiss: {
+                Task {
+                    await fetchRankedGameIds()
+                }
+            }) { game in
                 GameLogView(game: game)
+            }
+            .task {
+                await fetchRankedGameIds()
             }
         }
     }
@@ -102,6 +111,9 @@ struct GameSearchView: View {
         isLoading = true
         hasSearched = true
         
+        // Refresh ranked game IDs before showing results
+        await fetchRankedGameIds()
+        
         do {
             games = try await RAWGService.shared.searchGames(query: searchText)
         } catch {
@@ -111,11 +123,34 @@ struct GameSearchView: View {
         
         isLoading = false
     }
+    
+    private func fetchRankedGameIds() async {
+        guard let userId = SupabaseManager.shared.currentUser?.id else {
+            print("❌ No user ID found")
+            return
+        }
+        
+        do {
+            // Join with games table to get the rawg_id
+            let response: [UserGameWithRawgId] = try await SupabaseManager.shared.client
+                .from("user_games")
+                .select("game_id, games(rawg_id)")
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+            
+            rankedGameIds = Set(response.compactMap { $0.games?.rawg_id })
+            print("✅ Fetched ranked RAWG IDs: \(rankedGameIds)")
+        } catch {
+            print("❌ Failed to fetch ranked game IDs: \(error)")
+        }
+    }
 }
 
 // MARK: - Game Search Row
 struct GameSearchRow: View {
     let game: Game
+    let isRanked: Bool
     let onSelect: () -> Void
     
     var body: some View {
@@ -162,6 +197,18 @@ struct GameSearchRow: View {
                 
                 Spacer()
                 
+                // Ranked badge
+                if isRanked {
+                    Text("Ranked")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.teal)
+                        .clipShape(Capsule())
+                }
+                
                 // Chevron
                 Image(systemName: "chevron.right")
                     .foregroundColor(.silver)
@@ -178,4 +225,13 @@ struct GameSearchRow: View {
 
 #Preview {
     GameSearchView()
+}
+
+struct UserGameWithRawgId: Decodable {
+    let game_id: Int
+    let games: GameRawgId?
+    
+    struct GameRawgId: Decodable {
+        let rawg_id: Int
+    }
 }

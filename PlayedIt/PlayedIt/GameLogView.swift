@@ -13,6 +13,8 @@ struct GameLogView: View {
     @State private var showComparison = false
     @State private var savedGameId: Int?
     @State private var existingUserGames: [UserGame] = []
+    @State private var existingUserGame: ExistingUserGame? = nil
+    @State private var showReRankAlert = false
     
     // Platform options based on what the game supports
     var availablePlatforms: [String] {
@@ -183,9 +185,71 @@ struct GameLogView: View {
                     .interactiveDismissDisabled()
                 }
             }
+            .task {
+                await checkIfAlreadyRanked()
+            }
+            .alert("Already Ranked", isPresented: $showReRankAlert) {
+                Button("Re-rank") {
+                    Task {
+                        await deleteExistingAndReRank()
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+            } message: {
+                if let existing = existingUserGame {
+                    Text("\(game.title) is already ranked at #\(existing.rank_position). Would you like to re-rank it?")
+                }
+            }
         }
     }
     
+    // MARK: - Check If Already Ranked
+    private func checkIfAlreadyRanked() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            struct GameIdLookup: Decodable {
+                let id: Int
+            }
+            
+            let gameRecords: [GameIdLookup] = try await supabase.client
+                .from("games")
+                .select("id")
+                .eq("rawg_id", value: game.rawgId)
+                .execute()
+                .value
+            
+            guard let gameRecord = gameRecords.first else {
+                return
+            }
+            
+            let response: [ExistingUserGame] = try await supabase.client
+                .from("user_games")
+                .select("id, rank_position")
+                .eq("user_id", value: userId.uuidString)
+                .eq("game_id", value: gameRecord.id)
+                .execute()
+                .value
+            
+            if let existing = response.first {
+                existingUserGame = existing
+                showReRankAlert = true
+            }
+        } catch {
+            print("Failed to check existing game: \(error)")
+        }
+    }
+    
+    // MARK: - Start Re-Rank Flow
+    private func deleteExistingAndReRank() async {
+        // Just trigger the save flow - it will handle re-ranking
+        // We pass a flag by keeping existingUserGame set
+        await saveGame()
+    }
+    
+    // MARK: - Save Game
     private func saveGame() async {
         guard let userId = supabase.currentUser?.id else {
             errorMessage = "Not logged in"
@@ -196,7 +260,6 @@ struct GameLogView: View {
         errorMessage = nil
         
         do {
-            // First, make sure the game exists in our games table
             struct GameInsert: Encodable {
                 let rawg_id: Int
                 let title: String
@@ -221,7 +284,6 @@ struct GameLogView: View {
                 .upsert(gameInsert, onConflict: "rawg_id")
                 .execute()
             
-            // Get the game's ID from our database
             struct GameIdResponse: Decodable {
                 let id: Int
             }
@@ -235,7 +297,6 @@ struct GameLogView: View {
             
             let gameId = gameRecord.id
             
-            // Fetch existing ranked games for comparison
             struct UserGameRow: Decodable {
                 let id: String
                 let game_id: Int
@@ -257,11 +318,11 @@ struct GameLogView: View {
                 .from("user_games")
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: userId.uuidString)
+                .neq("game_id", value: gameId)
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
             
-            // Convert to UserGame
             existingUserGames = rows.map { row in
                 UserGame(
                     id: row.id,
@@ -278,16 +339,14 @@ struct GameLogView: View {
             }
             
             isLoading = false
-            
-            // Store game ID for later
             self.savedGameId = gameId
             
-            if existingUserGames.isEmpty {
-                // First game - no comparison needed, just save at #1
+            if existingUserGames.isEmpty && existingUserGame == nil {
+                // First game ever - no comparison needed, save at #1
                 await saveUserGame(gameId: gameId, position: 1)
                 dismiss()
             } else {
-                // Show comparison flow
+                // Show comparison (either new game with existing list, or re-ranking)
                 showComparison = true
             }
             
@@ -305,16 +364,47 @@ struct GameLogView: View {
         }
     }
     
+    // MARK: - Save User Game
     private func saveUserGame(gameId: Int, position: Int) async {
         guard let userId = supabase.currentUser?.id else { return }
         
         do {
-            // Get all games at or below the new position
-            struct RankUpdate: Encodable {
-                let rank_position: Int
+            // If re-ranking, delete the old entry first and adjust positions
+            if let existing = existingUserGame {
+                // Delete the old entry
+                try await supabase.client
+                    .from("user_games")
+                    .delete()
+                    .eq("id", value: existing.id)
+                    .execute()
+                
+                // Shift games that were below the old position up by 1
+                struct GameToShiftUp: Decodable {
+                    let id: String
+                    let rank_position: Int
+                }
+                
+                let gamesToShiftUp: [GameToShiftUp] = try await supabase.client
+                    .from("user_games")
+                    .select("id, rank_position")
+                    .eq("user_id", value: userId.uuidString)
+                    .gt("rank_position", value: existing.rank_position)
+                    .execute()
+                    .value
+                
+                for game in gamesToShiftUp {
+                    try await supabase.client
+                        .from("user_games")
+                        .update(["rank_position": game.rank_position - 1])
+                        .eq("id", value: game.id)
+                        .execute()
+                }
+                
+                print("✅ Deleted old entry at position \(existing.rank_position)")
+                existingUserGame = nil
             }
             
-            // First, get games that need to shift
+            // Now shift games at or below the new position down by 1
             struct GameToShift: Decodable {
                 let id: String
                 let rank_position: Int
@@ -329,7 +419,6 @@ struct GameLogView: View {
                 .execute()
                 .value
             
-            // Shift each one down (starting from bottom to avoid conflicts)
             for game in gamesToShift {
                 try await supabase.client
                     .from("user_games")
@@ -338,7 +427,7 @@ struct GameLogView: View {
                     .execute()
             }
             
-            // Save the user's game entry
+            // Insert the new entry
             struct UserGameInsert: Encodable {
                 let user_id: String
                 let game_id: Int
@@ -392,6 +481,11 @@ struct PlatformButton: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
+}
+
+struct ExistingUserGame: Decodable {
+    let id: String
+    let rank_position: Int
 }
 
 #Preview {
