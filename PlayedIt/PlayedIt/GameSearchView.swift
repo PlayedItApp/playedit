@@ -5,6 +5,7 @@ struct GameSearchView: View {
     @State private var games: [Game] = []
     @State private var isLoading = false
     @State private var hasSearched = false
+    @State private var selectedGame: Game?
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -71,8 +72,7 @@ struct GameSearchView: View {
                         LazyVStack(spacing: 12) {
                             ForEach(games) { game in
                                 GameSearchRow(game: game) {
-                                    // TODO: Handle game selection
-                                    print("Selected: \(game.title)")
+                                    selectedGame = game
                                 }
                             }
                         }
@@ -89,6 +89,9 @@ struct GameSearchView: View {
                     }
                     .foregroundColor(.primaryBlue)
                 }
+            }
+            .sheet(item: $selectedGame) { game in
+                GameLogView(game: game)
             }
         }
     }

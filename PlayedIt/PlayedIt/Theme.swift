@@ -111,6 +111,8 @@ struct PlayedItTextFieldModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(.system(size: 17, weight: .regular, design: .rounded))
+            .foregroundColor(.slate)
+            .tint(.slate)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
