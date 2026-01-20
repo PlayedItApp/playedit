@@ -5,6 +5,7 @@ struct FeedView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @State private var feedItems: [FeedItem] = []
     @State private var isLoading = true
+    @State private var showGameSearch = false
     
     var body: some View {
         NavigationStack {
@@ -19,7 +20,21 @@ struct FeedView: View {
                 }
             }
             .navigationTitle("Feed")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showGameSearch = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primaryBlue)
+                    }
+                }
+            }
+            .sheet(isPresented: $showGameSearch) {
+                GameSearchView()
+            }
         }
         .task {
             await fetchFeed()

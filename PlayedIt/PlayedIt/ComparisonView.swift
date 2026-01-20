@@ -38,30 +38,18 @@ struct ComparisonView: View {
             VStack(spacing: 16) {
                 // Progress indicator
                 VStack(spacing: 8) {
-                    Text("Comparison \(comparisonCount + 1)")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundColor(.grayText)
-                    
-                    // Progress dots (pixelated style)
-                    HStack(spacing: 4) {
-                        ForEach(0..<min(maxComparisons, max(estimatedTotal, 1)), id: \.self) { i in
-                            Rectangle()
-                                .fill(i < comparisonCount ? Color.accentOrange : (i == comparisonCount ? Color.primaryBlue : Color.silver.opacity(0.4)))
-                                .frame(width: 10, height: 10)
-                                .scaleEffect(i == comparisonCount ? 1.2 : 1.0)
-                                .animation(.spring(response: 0.3), value: comparisonCount)
-                        }
-                    }
                 }
                 .padding(.top, 12)
                 
                 // Prompt
-                Text(prompts[comparisonCount % prompts.count])
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(.slate)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
+                if finalPosition == nil {
+                    Text(prompts[comparisonCount % prompts.count])
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(.slate)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
                 
                 if let opponent = currentComparison {
                     // Head-to-head comparison
@@ -121,21 +109,22 @@ struct ComparisonView: View {
             .navigationTitle("Rank It")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        showCancelAlert = true
+                if finalPosition == nil {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            showCancelAlert = true
+                        }
                     }
-                    .foregroundColor(.grayText)
-                }
-                
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        undoLastComparison()
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                    
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            undoLastComparison()
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .foregroundColor(comparisonHistory.isEmpty ? .gray : .primaryBlue)
+                        .disabled(comparisonHistory.isEmpty)
                     }
-                    .foregroundColor(comparisonHistory.isEmpty ? .gray : .primaryBlue)
-                    .disabled(comparisonHistory.isEmpty)
                 }
             }
             .alert("Cancel Ranking?", isPresented: $showCancelAlert) {
@@ -354,103 +343,97 @@ struct RetroCompletionView: View {
     @State private var confettiParticles: [ConfettiParticle] = []
     
     var body: some View {
-        ZStack {
-            // Pixel confetti
-            ForEach(confettiParticles) { particle in
-                Rectangle()
-                    .fill(particle.color)
-                    .frame(width: particle.size, height: particle.size)
-                    .position(particle.position)
-                    .opacity(showContent ? 0 : 1)
-                    .animation(.easeOut(duration: 2).delay(particle.delay), value: showContent)
-            }
-            
-            VStack(spacing: 20) {
-                // Pixel rank badge
-                PixelRankBadge(position: position)
-                    .scaleEffect(showContent ? 1 : 0)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.6).delay(0.1), value: showContent)
-                
-                Text(celebrationMessage)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundColor(.slate)
-                    .multilineTextAlignment(.center)
-                    .opacity(showContent ? 1 : 0)
-                    .offset(y: showContent ? 0 : 20)
-                    .animation(.easeOut(duration: 0.4).delay(0.3), value: showContent)
-                
-                Text("\(game.title)")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primaryBlue)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                    .opacity(showContent ? 1 : 0)
-                    .animation(.easeOut(duration: 0.4).delay(0.4), value: showContent)
-                
-                Text("is now #\(position)")
-                    .font(.system(size: 16, design: .rounded))
-                    .foregroundColor(.grayText)
-                    .opacity(showContent ? 1 : 0)
-                    .animation(.easeOut(duration: 0.4).delay(0.45), value: showContent)
-                
-                Button("Done") {
-                    onDone()
+        GeometryReader { geometry in
+            ZStack {
+                ForEach(confettiParticles) { particle in
+                    Rectangle()
+                        .fill(particle.color.opacity(0.5))
+                        .frame(width: particle.size, height: particle.size)
+                        .position(particle.position)
+                        .opacity(showContent ? 0 : 1)
+                        .animation(.easeOut(duration: 2).delay(particle.delay), value: showContent)
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.horizontal, 60)
-                .padding(.top, 20)
-                .opacity(showContent ? 1 : 0)
-                .animation(.easeOut(duration: 0.4).delay(0.6), value: showContent)
+                
+                VStack(spacing: 20) {
+                    PixelRankBadge(position: position)
+                        .scaleEffect(showContent ? 1 : 0)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.6).delay(0.1), value: showContent)
+                    
+                    Text(celebrationMessage)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.slate)
+                        .multilineTextAlignment(.center)
+                        .opacity(showContent ? 1 : 0)
+                        .offset(y: showContent ? 0 : 20)
+                        .animation(.easeOut(duration: 0.4).delay(0.3), value: showContent)
+                    
+                    Text("\(game.title)")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primaryBlue)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                        .opacity(showContent ? 1 : 0)
+                        .animation(.easeOut(duration: 0.4).delay(0.4), value: showContent)
+                    
+                    Text("is now #\(position)")
+                        .font(.system(size: 16, design: .rounded))
+                        .foregroundColor(.grayText)
+                        .opacity(showContent ? 1 : 0)
+                        .animation(.easeOut(duration: 0.4).delay(0.45), value: showContent)
+                    
+                    Button("Done") {
+                        onDone()
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .padding(.horizontal, 60)
+                    .padding(.top, 20)
+                    .opacity(showContent ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.6), value: showContent)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }
-        .onAppear {
-            generateConfetti()
-            
-            let notification = UINotificationFeedbackGenerator()
-            notification.notificationOccurred(.success)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                showContent = true
+            .onAppear {
+                generateConfetti(in: geometry.size)
+                
+                let notification = UINotificationFeedbackGenerator()
+                notification.notificationOccurred(.success)
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    showContent = true
+                }
             }
         }
     }
     
-    private func generateConfetti() {
+    private func generateConfetti(in size: CGSize) {
         let colors: [Color] = [.accentOrange, .primaryBlue, .teal, .yellow, .pink]
         
-        for i in 0..<30 {
+        for i in 0..<50 {
             let particle = ConfettiParticle(
                 id: i,
                 color: colors.randomElement()!,
-                size: CGFloat.random(in: 6...12),
+                size: CGFloat.random(in: 8...16),
                 position: CGPoint(
-                    x: CGFloat.random(in: 50...350),
-                    y: CGFloat.random(in: 100...500)
+                    x: CGFloat.random(in: 0...size.width),
+                    y: CGFloat.random(in: 0...size.height)
                 ),
-                delay: Double.random(in: 0...0.5)
+                delay: Double.random(in: 0...0.8)
             )
             confettiParticles.append(particle)
         }
     }
     
     private var celebrationMessage: String {
-        let percentile = Double(position) / Double(totalGames)
-        
-        switch position {
-        case 1:
+        if position == 1 {
             return "New champion!"
-        case 2...3 where totalGames >= 5:
+        } else if position <= 3 {
             return "Elite tier!"
-        default:
-            if percentile <= 0.25 {
-                return "That's high praise!"
-            } else if percentile <= 0.5 {
-                return "Solid pick!"
-            } else if percentile <= 0.75 {
-                return "Middle of the pack"
-            } else {
-                return "Hey, you still finished it!"
-            }
+        } else if position <= totalGames / 2 {
+            return "That's high praise!"
+        } else if position == totalGames {
+            return "Hey, you still finished it!"
+        } else {
+            return "They can't all be bangers."
         }
     }
 }

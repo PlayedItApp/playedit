@@ -22,7 +22,7 @@ struct FriendsView: View {
                 }
             }
             .navigationTitle("Friends")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
