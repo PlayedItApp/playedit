@@ -36,7 +36,7 @@ struct ComparisonView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                // Progress indicator
+                // Progress indicator.
                 VStack(spacing: 8) {
                 }
                 .padding(.top, 12)
