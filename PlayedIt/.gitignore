@@ -1,0 +1,15 @@
+# API Keys - IMPORTANT
+config.swift
+
+# Xcode
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+
+# Build
+build/
