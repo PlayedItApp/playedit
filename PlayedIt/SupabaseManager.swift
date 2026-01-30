@@ -126,6 +126,22 @@ class SupabaseManager: ObservableObject {
         }
     }
     
+    // MARK: - Reset Password
+    func resetPassword(email: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await client.auth.resetPasswordForEmail(email)
+            isLoading = false
+            return true
+        } catch {
+            errorMessage = parseError(error)
+            isLoading = false
+            return false
+        }
+    }
+    
     // MARK: - Error Parsing
     private func parseError(_ error: Error) -> String {
         let errorString = error.localizedDescription.lowercased()

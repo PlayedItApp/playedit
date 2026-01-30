@@ -13,6 +13,8 @@ struct ProfileView: View {
     @State private var avatarURL: String?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingPhoto = false
+    @State private var showImageCropper = false
+    @State private var selectedImage: UIImage?
     
     var body: some View {
         NavigationStack {
@@ -179,7 +181,29 @@ struct ProfileView: View {
         }
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
-                Task { await uploadPhoto(newValue) }
+                Task {
+                    if let data = try? await newValue.loadTransferable(type: Data.self),
+                       let uiImage = UIImage(data: data) {
+                        selectedImage = uiImage
+                        showImageCropper = true
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showImageCropper) {
+            if let image = selectedImage {
+                ImageCropperView(
+                    image: image,
+                    onCrop: { croppedImage in
+                        showImageCropper = false
+                        selectedPhoto = nil
+                        Task { await uploadCroppedPhoto(croppedImage) }
+                    },
+                    onCancel: {
+                        showImageCropper = false
+                        selectedPhoto = nil
+                    }
+                )
             }
         }
     }
@@ -290,7 +314,7 @@ struct ProfileView: View {
         isSaving = false
     }
     
-    private func uploadPhoto(_ item: PhotosPickerItem) async {
+    private func uploadCroppedPhoto(_ image: UIImage) async {
         isUploadingPhoto = true
         
         guard let userId = supabase.currentUser?.id else {
@@ -299,14 +323,7 @@ struct ProfileView: View {
         }
         
         do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
-                print("❌ Could not load image data")
-                isUploadingPhoto = false
-                return
-            }
-            
-            guard let uiImage = UIImage(data: data),
-                  let compressedData = uiImage.jpegData(compressionQuality: 0.5) else {
+            guard let compressedData = image.jpegData(compressionQuality: 0.7) else {
                 print("❌ Could not compress image")
                 isUploadingPhoto = false
                 return
@@ -317,8 +334,8 @@ struct ProfileView: View {
             try await supabase.client.storage
                 .from("avatars")
                 .upload(
-                    path: fileName,
-                    file: compressedData,
+                    fileName,
+                    data: compressedData,
                     options: FileOptions(contentType: "image/jpeg", upsert: true)
                 )
             

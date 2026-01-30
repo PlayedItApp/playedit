@@ -117,21 +117,18 @@ struct FeedView: View {
                 .execute()
                 .value
             
-            let friendIds = friendships.map { f in
+            var feedUserIds = friendships.map { f in
                 f.user_id == userId.uuidString ? f.friend_id : f.user_id
             }
+
+            // Include current user's games in feed
+            feedUserIds.append(userId.uuidString)
             
-            guard !friendIds.isEmpty else {
-                feedItems = []
-                isLoading = false
-                return
-            }
-            
-            // Fetch recent games from friends
+            // Fetch recent games from friends and self
             let rows: [FeedRow] = try await supabase.client
                 .from("user_games")
                 .select("id, user_id, rank_position, logged_at, games(title, cover_url), users(username)")
-                .in("user_id", values: friendIds)
+                .in("user_id", values: feedUserIds)
                 .order("logged_at", ascending: false)
                 .limit(50)
                 .execute()
