@@ -20,14 +20,19 @@ struct ContentView: View {
 struct MainTabView: View {
     @State private var selectedTab = 0
     @State private var pendingRequestCount = 0
+    @State private var unreadNotificationCount = 0
     @ObservedObject var supabase = SupabaseManager.shared
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            FeedView()
+            FeedView(unreadNotificationCount: $unreadNotificationCount)
                 .tabItem {
-                    Image(systemName: "house")
-                    Text("Home")
+                    Label {
+                        Text("Home")
+                    } icon: {
+                        Image(systemName: "house")
+                            .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
+                    }
                 }
                 .tag(0)
             
@@ -47,12 +52,32 @@ struct MainTabView: View {
                 .tag(2)
         }
         .tint(.primaryBlue)
+        .overlay(alignment: .bottomLeading) {
+            // Notification dot on Home tab
+            if unreadNotificationCount > 0 && selectedTab != 0 {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 8, height: 8)
+                    .offset(x: notificationDotOffset, y: -32)
+            }
+        }
         .task {
             await fetchPendingCount()
+            await fetchUnreadNotificationCount()
         }
         .onChange(of: selectedTab) { _, _ in
-            Task { await fetchPendingCount() }
+            Task {
+                await fetchPendingCount()
+                await fetchUnreadNotificationCount()
+            }
         }
+    }
+    
+    private var notificationDotOffset: CGFloat {
+        // Position dot over the Home tab (leftmost tab)
+        let screenWidth = UIScreen.main.bounds.width
+        let tabWidth = screenWidth / 3
+        return (tabWidth / 2) + 12
     }
     
     private func fetchPendingCount() async {
@@ -78,6 +103,25 @@ struct MainTabView: View {
             
         } catch {
             print("❌ Error fetching pending count: \(error)")
+        }
+    }
+    
+    private func fetchUnreadNotificationCount() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            let count: Int = try await supabase.client
+                .from("notifications")
+                .select("*", head: true, count: .exact)
+                .eq("user_id", value: userId.uuidString.lowercased())
+                .eq("is_read", value: false)
+                .execute()
+                .count ?? 0
+            
+            unreadNotificationCount = count
+            
+        } catch {
+            print("❌ Error fetching notification count: \(error)")
         }
     }
 }

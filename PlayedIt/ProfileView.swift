@@ -5,6 +5,7 @@ import PhotosUI
 struct ProfileView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @State private var username = ""
+    @State private var originalUsername = ""
     @State private var isEditing = false
     @State private var isSaving = false
     @State private var message: String?
@@ -13,7 +14,6 @@ struct ProfileView: View {
     @State private var avatarURL: String?
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingPhoto = false
-    @State private var showImageCropper = false
     @State private var selectedImage: UIImage?
     
     var body: some View {
@@ -64,7 +64,7 @@ struct ProfileView: View {
                                                 Text("Edit")
                                                     .font(.caption2)
                                             }
-                                            .foregroundColor(.white)
+                                                .foregroundColor(.white)
                                         )
                                 }
                             }
@@ -79,14 +79,26 @@ struct ProfileView: View {
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                 
-                                Button {
-                                    Task { await saveUsername() }
-                                } label: {
-                                    Text(isSaving ? "Saving..." : "Save")
-                                        .font(.subheadline)
+                                HStack(spacing: 12) {
+                                    Button {
+                                        username = originalUsername
+                                        isEditing = false
+                                        message = nil
+                                    } label: {
+                                        Text("Cancel")
+                                            .font(.subheadline)
+                                    }
+                                    .buttonStyle(SecondaryButtonStyle())
+                                    
+                                    Button {
+                                        Task { await saveUsername() }
+                                    } label: {
+                                        Text(isSaving ? "Saving..." : "Save")
+                                            .font(.subheadline)
+                                    }
+                                    .buttonStyle(PrimaryButtonStyle())
+                                    .disabled(isSaving)
                                 }
-                                .buttonStyle(SecondaryButtonStyle())
-                                .disabled(isSaving)
                             } else {
                                 Text(username.isEmpty ? "Set a username" : username)
                                     .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -182,29 +194,40 @@ struct ProfileView: View {
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
                 Task {
-                    if let data = try? await newValue.loadTransferable(type: Data.self),
-                       let uiImage = UIImage(data: data) {
-                        selectedImage = uiImage
-                        showImageCropper = true
+                    print("📸 Photo selected, loading...")
+                    do {
+                        if let data = try await newValue.loadTransferable(type: Data.self) {
+                            print("📸 Data loaded: \(data.count) bytes")
+                            if let uiImage = UIImage(data: data) {
+                                print("📸 Image created: \(uiImage.size)")
+                                await MainActor.run {
+                                    selectedImage = uiImage
+                                }
+                            } else {
+                                print("❌ Could not create UIImage from data")
+                            }
+                        } else {
+                            print("❌ Data was nil")
+                        }
+                    } catch {
+                        print("❌ Error loading photo: \(error)")
                     }
                 }
             }
         }
-        .sheet(isPresented: $showImageCropper) {
-            if let image = selectedImage {
-                ImageCropperView(
-                    image: image,
-                    onCrop: { croppedImage in
-                        showImageCropper = false
-                        selectedPhoto = nil
-                        Task { await uploadCroppedPhoto(croppedImage) }
-                    },
-                    onCancel: {
-                        showImageCropper = false
-                        selectedPhoto = nil
-                    }
-                )
-            }
+        .fullScreenCover(item: $selectedImage) { image in
+            ImageCropperView(
+                image: image,
+                onCrop: { croppedImage in
+                    selectedImage = nil
+                    selectedPhoto = nil
+                    Task { await uploadCroppedPhoto(croppedImage) }
+                },
+                onCancel: {
+                    selectedImage = nil
+                    selectedPhoto = nil
+                }
+            )
         }
     }
     
@@ -226,6 +249,7 @@ struct ProfileView: View {
                 .value
             
             username = profile.username ?? ""
+            originalUsername = profile.username ?? ""
             avatarURL = profile.avatar_url
             
         } catch {
@@ -289,6 +313,12 @@ struct ProfileView: View {
     private func saveUsername() async {
         guard let userId = supabase.currentUser?.id else { return }
         
+        // Only save if username actually changed
+        guard username != originalUsername else {
+            isEditing = false
+            return
+        }
+        
         isSaving = true
         message = nil
         
@@ -299,6 +329,7 @@ struct ProfileView: View {
                 .eq("id", value: userId.uuidString)
                 .execute()
             
+            originalUsername = username
             message = "Username saved!"
             isEditing = false
             
@@ -343,7 +374,7 @@ struct ProfileView: View {
                 .from("avatars")
                 .getPublicURL(path: fileName)
             
-            let urlWithCacheBuster = "\(publicURL.absoluteString)?v=\(Date().timeIntervalSince1970)"
+            let urlWithCacheBuster = "\(publicURL.absoluteString)?v=\(Int(Date().timeIntervalSince1970))"
             
             try await supabase.client
                 .from("users")
@@ -351,7 +382,17 @@ struct ProfileView: View {
                 .eq("id", value: userId.uuidString)
                 .execute()
             
-            avatarURL = urlWithCacheBuster
+            // Clear the URL first to force AsyncImage to reload
+            await MainActor.run {
+                avatarURL = nil
+            }
+            
+            // Small delay then set the new URL
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+            await MainActor.run {
+                avatarURL = urlWithCacheBuster
+            }
             
         } catch {
             print("❌ Error uploading photo: \(error)")
@@ -361,6 +402,11 @@ struct ProfileView: View {
     }
 }
 
+extension UIImage: @retroactive Identifiable {
+    public var id: Int {
+        hashValue
+    }
+}
 
 #Preview {
     ProfileView()

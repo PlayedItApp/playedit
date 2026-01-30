@@ -73,18 +73,8 @@ struct LoginView: View {
                                 
                                 SecureField("••••••••", text: $password)
                                     .playedItTextField()
-                                
-                                HStack {
-                                    Spacer()
-                                    NavigationLink {
-                                        ForgotPasswordView()
-                                    } label: {
-                                        Text("Forgot password?")
-                                            .font(.callout)
-                                            .foregroundColor(.primaryBlue)
-                                    }
-                                }
-                            }                        }
+                            }
+                        }
                         .padding(.horizontal, 24)
                         .opacity(isAnimating ? 1.0 : 0.0)
                         .offset(y: isAnimating ? 0 : 20)
