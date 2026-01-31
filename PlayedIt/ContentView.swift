@@ -3,16 +3,48 @@ import Supabase
 
 struct ContentView: View {
     @ObservedObject var supabase = SupabaseManager.shared
+    @State private var isCheckingAuth = true
     
     var body: some View {
         Group {
-            if supabase.isAuthenticated {
+            if isCheckingAuth {
+                SplashView()
+            } else if supabase.isAuthenticated {
                 MainTabView()
             } else {
                 LoginView()
             }
         }
         .animation(.easeInOut(duration: 0.3), value: supabase.isAuthenticated)
+        .animation(.easeInOut(duration: 0.3), value: isCheckingAuth)
+        .task {
+            await supabase.checkSession()
+            isCheckingAuth = false
+        }
+    }
+}
+
+// MARK: - Splash View
+struct SplashView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image("Logo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 100, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 22))
+            
+            HStack(spacing: 0) {
+                Text("played")
+                    .font(.largeTitle)
+                    .foregroundColor(.slate)
+                Text("it")
+                    .font(.largeTitle)
+                    .foregroundColor(.accentOrange)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
     }
 }
 
