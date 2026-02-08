@@ -31,6 +31,7 @@ class RAWGService {
 
     private func performSearch(query: String) async throws -> [Game] {
         let cleanedQuery = query
+            .folding(options: .diacriticInsensitive, locale: .current)
             .replacingOccurrences(of: "\u{2019}", with: "")
             .replacingOccurrences(of: "\u{2018}", with: "")
             .replacingOccurrences(of: "'", with: "")
@@ -39,7 +40,7 @@ class RAWGService {
             .trimmingCharacters(in: .whitespaces)
 
         let encodedQuery = cleanedQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cleanedQuery
-        let urlString = "\(baseURL)/games?key=\(apiKey)&search=\(encodedQuery)&search_precise=true&page_size=40"
+        let urlString = "\(baseURL)/games?key=\(apiKey)&search=\(encodedQuery)&search_precise=true&page_size=40&exclude_additions=true"
 
         print("🔍 Searching for: \(cleanedQuery)")
         
@@ -66,8 +67,8 @@ class RAWGService {
             let name1 = game1.title.lowercased()
             let name2 = game2.title.lowercased()
             
-            let score1 = relevanceScore(name: name1, query: queryLower, queryWords: queryWords)
-            let score2 = relevanceScore(name: name2, query: queryLower, queryWords: queryWords)
+            let score1 = relevanceScore(game: game1, name: name1, query: queryLower, queryWords: queryWords)
+            let score2 = relevanceScore(game: game2, name: name2, query: queryLower, queryWords: queryWords)
             
             if score1 == score2 {
                 let year1 = Int(game1.releaseDate?.prefix(4) ?? "9999") ?? 9999
@@ -76,6 +77,12 @@ class RAWGService {
             }
             
             return score1 > score2
+        }
+        
+        for game in sortedGames.prefix(5) {
+            let name = game.title.lowercased()
+            let score = relevanceScore(game: game, name: name, query: queryLower, queryWords: queryWords)
+            print("📊 \(game.title) | added: \(game.added ?? 0) | metacritic: \(game.metacriticScore ?? 0) | score: \(score)")
         }
         
         return Array(sortedGames.prefix(20))
@@ -124,12 +131,14 @@ class RAWGService {
         return variations
     }
 
-    private func relevanceScore(name: String, query: String, queryWords: Set<String>) -> Int {
+private func relevanceScore(game: Game, name: String, query: String, queryWords: Set<String>) -> Int {
         var score = 0
         
         // Normalize both for comparison
         let normalizedName = normalizeForMatching(name)
         let normalizedQuery = normalizeForMatching(query)
+        
+        // === EXISTING: Text matching ===
         
         // Exact match (highest priority)
         if normalizedName == normalizedQuery {
@@ -146,7 +155,7 @@ class RAWGService {
         
         // Bonus for name length similarity to query
         let lengthRatio = Double(normalizedQuery.count) / Double(max(normalizedName.count, 1))
-        score += Int(lengthRatio * 200)
+        score += Int(lengthRatio * 80)
         
         // Penalize remasters, remakes, editions, DLC, demos
         let penaltyTerms = ["remaster", "remake", "edition", "dlc", "demo", "pack", "bundle", "collection", "definitive", "ultimate", "complete", "goty", "game of the year", "anniversary", "enhanced", "hd", "classic"]
@@ -161,6 +170,47 @@ class RAWGService {
             let normalizedWord = word.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
             if normalizedName.contains(normalizedWord) {
                 score += 50
+            }
+        }
+        
+        // === Popularity boost (0-300 points) ===
+        let addedCount = game.added ?? 0
+        if addedCount > 50000 {
+            score += 300
+        } else if addedCount > 20000 {
+            score += 250
+        } else if addedCount > 5000 {
+            score += 200
+        } else if addedCount > 1000 {
+            score += 120
+        } else if addedCount > 100 {
+            score += 50
+        }
+        
+        // === NEW: Recency boost (0-100 points) ===
+        if let yearStr = game.releaseDate?.prefix(4), let year = Int(yearStr) {
+            let currentYear = Calendar.current.component(.year, from: Date())
+            let age = currentYear - year
+            if age <= 2 {
+                score += 100
+            } else if age <= 5 {
+                score += 70
+            } else if age <= 10 {
+                score += 40
+            } else if age <= 20 {
+                score += 15
+            }
+            // 20+ years: no boost
+        }
+        
+        // === NEW: Metacritic boost (0-75 points) ===
+        if let metacritic = game.metacriticScore {
+            if metacritic >= 90 {
+                score += 75
+            } else if metacritic >= 80 {
+                score += 50
+            } else if metacritic >= 70 {
+                score += 25
             }
         }
         
@@ -213,6 +263,7 @@ class RAWGService {
     
     private func normalizeForMatching(_ text: String) -> String {
         var normalized = text
+            .folding(options: .diacriticInsensitive, locale: .current)
             .replacingOccurrences(of: "'", with: "")
             .replacingOccurrences(of: "\u{2019}", with: "")
             .replacingOccurrences(of: ":", with: " ")
@@ -275,6 +326,26 @@ class RAWGService {
         let rawgGame = try decoder.decode(RAWGGame.self, from: data)
         
         return Game(from: rawgGame)
+    }
+    
+    // MARK: - Get Parent Game
+    func getParentGameId(for gameId: Int) async -> Int? {
+        let urlString = "\(baseURL)/games/\(gameId)/parent-games?key=\(apiKey)"
+        
+        guard let url = URL(string: urlString) else { return nil }
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else { return nil }
+            
+            let decoded = try JSONDecoder().decode(RAWGSearchResponse.self, from: data)
+            return decoded.results.first?.id
+        } catch {
+            print("⚠️ Could not fetch parent game for \(gameId): \(error)")
+            return nil
+        }
     }
 }
 

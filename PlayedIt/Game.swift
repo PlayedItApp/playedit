@@ -13,9 +13,11 @@ struct RAWGGame: Codable, Identifiable {
     let metacritic: Int?
     let genres: [RAWGGenre]?
     let platforms: [RAWGPlatformWrapper]?
+    let added: Int?
+    let rating: Double?
     
     enum CodingKeys: String, CodingKey {
-        case id, name, released, metacritic, genres, platforms
+        case id, name, released, metacritic, genres, platforms, added, rating
         case backgroundImage = "background_image"
     }
 }
@@ -44,6 +46,8 @@ struct Game: Identifiable, Codable {
     let platforms: [String]
     let releaseDate: String?
     let metacriticScore: Int?
+    let added: Int?
+    let rating: Double?
     
     init(from rawgGame: RAWGGame) {
         self.id = rawgGame.id
@@ -54,5 +58,7 @@ struct Game: Identifiable, Codable {
         self.platforms = rawgGame.platforms?.map { $0.platform.name } ?? []
         self.releaseDate = rawgGame.released
         self.metacriticScore = rawgGame.metacritic
+        self.added = rawgGame.added
+        self.rating = rawgGame.rating
     }
 }

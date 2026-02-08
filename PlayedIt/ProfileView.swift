@@ -335,6 +335,7 @@ struct ProfileView: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
+                    canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date

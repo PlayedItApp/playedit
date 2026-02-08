@@ -505,7 +505,9 @@ struct ScaleButtonStyle: ButtonStyle {
                 released: "2017-02-28",
                 metacritic: 89,
                 genres: [],
-                platforms: []
+                platforms: [],
+                added: nil,
+                rating: nil
             )
         ),
         existingGames: [],

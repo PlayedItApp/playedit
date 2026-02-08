@@ -411,6 +411,7 @@ struct GameDetailSheet: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
+                    canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date
@@ -478,13 +479,17 @@ struct GameDetailSheet: View {
                     .execute()
             }
             
-            // 4. Insert at new position (preserve original platform/notes/date)
+            // Resolve canonical game ID
+            let canonicalId = await RAWGService.shared.getParentGameId(for: game.gameId) ?? game.gameId
+            
+            // 4. Insert at new position
             struct UserGameInsert: Encodable {
                 let user_id: String
                 let game_id: Int
                 let rank_position: Int
                 let platform_played: [String]
                 let notes: String
+                let canonical_game_id: Int
             }
             
             let insert = UserGameInsert(
@@ -492,7 +497,8 @@ struct GameDetailSheet: View {
                 game_id: game.gameId,
                 rank_position: newPosition,
                 platform_played: game.platformPlayed,
-                notes: game.notes ?? ""
+                notes: game.notes ?? "",
+                canonical_game_id: canonicalId
             )
             
             try await supabase.client.from("user_games")

@@ -452,7 +452,10 @@ struct FriendProfileView: View {
     private var sharedGames: [(mine: UserGame, theirs: UserGame)] {
         var shared: [(mine: UserGame, theirs: UserGame)] = []
         for myGame in myGames {
-            if let theirGame = friendGames.first(where: { $0.gameId == myGame.gameId }) {
+            let myCanonical = myGame.canonicalGameId ?? myGame.gameId
+            if let theirGame = friendGames.first(where: {
+                ($0.canonicalGameId ?? $0.gameId) == myCanonical
+            }) {
                 shared.append((mine: myGame, theirs: theirGame))
             }
         }
@@ -869,6 +872,7 @@ struct FriendProfileView: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
+                    canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date
@@ -893,6 +897,7 @@ struct FriendProfileView: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
+                    canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date

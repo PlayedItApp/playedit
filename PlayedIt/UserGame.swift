@@ -8,6 +8,7 @@ struct UserGame: Identifiable, Codable {
     let platformPlayed: [String]
     let notes: String?
     let loggedAt: String?
+    let canonicalGameId: Int?
     
     // Game details (joined from games table)
     let gameTitle: String
@@ -22,6 +23,7 @@ struct UserGame: Identifiable, Codable {
         case platformPlayed = "platform_played"
         case notes
         case loggedAt = "logged_at"
+        case canonicalGameId = "canonical_game_id"
         case gameTitle = "game_title"
         case gameCoverURL = "game_cover_url"
         case gameReleaseDate = "game_release_date"
@@ -38,7 +40,9 @@ extension UserGame {
                 released: gameReleaseDate,
                 metacritic: nil,
                 genres: nil,
-                platforms: nil
+                platforms: nil,
+                added: nil,
+                rating: nil
             )
         )
     }

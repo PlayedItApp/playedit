@@ -332,6 +332,7 @@ struct GameLogView: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
+                    canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date
@@ -427,6 +428,10 @@ struct GameLogView: View {
                     .execute()
             }
             
+            // Resolve canonical game ID
+            let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
+            print("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
+            
             // Insert the new entry
             struct UserGameInsert: Encodable {
                 let user_id: String
@@ -434,6 +439,7 @@ struct GameLogView: View {
                 let rank_position: Int
                 let platform_played: [String]
                 let notes: String
+                let canonical_game_id: Int
             }
             
             let userGameInsert = UserGameInsert(
@@ -441,7 +447,8 @@ struct GameLogView: View {
                 game_id: gameId,
                 rank_position: position,
                 platform_played: Array(selectedPlatforms),
-                notes: notes
+                notes: notes,
+                canonical_game_id: canonicalId
             )
             
             try await supabase.client.from("user_games")
@@ -497,7 +504,9 @@ struct ExistingUserGame: Decodable {
             released: "2017-03-03",
             metacritic: 97,
             genres: [RAWGGenre(id: 1, name: "Action")],
-            platforms: [RAWGPlatformWrapper(platform: RAWGPlatform(id: 1, name: "Nintendo Switch"))]
+            platforms: [RAWGPlatformWrapper(platform: RAWGPlatform(id: 1, name: "Nintendo Switch"))],
+            added: nil,
+            rating: nil
         )
     ))
 }
