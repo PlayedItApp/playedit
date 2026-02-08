@@ -132,10 +132,39 @@ class SupabaseManager: ObservableObject {
         errorMessage = nil
         
         do {
-            try await client.auth.resetPasswordForEmail(email)
+            try await client.auth.resetPasswordForEmail(
+                email,
+                redirectTo: URL(string: "playedit://reset-callback")
+            )
             isLoading = false
             return true
         } catch {
+            errorMessage = parseError(error)
+            isLoading = false
+            return false
+        }
+    }
+    
+    // MARK: - Sign in with Apple
+    func signInWithApple(idToken: String, nonce: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let session = try await client.auth.signInWithIdToken(
+                credentials: .init(
+                    provider: .apple,
+                    idToken: idToken,
+                    nonce: nonce
+                )
+            )
+            
+            self.currentUser = session.user
+            self.isAuthenticated = true
+            isLoading = false
+            return true
+        } catch {
+            print("❌ Apple sign in error: \(error)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -158,6 +187,34 @@ class SupabaseManager: ObservableObject {
             return "Slow down, speedrunner! Give it a sec."
         } else {
             return "Oops! Something went wrong. Try again?"
+        }
+    }
+    
+    // MARK: - Link Apple ID
+    func linkAppleID() async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await client.auth.linkIdentity(provider: .apple)
+            isLoading = false
+            return true
+        } catch {
+            print("❌ Link Apple ID error: \(error)")
+            errorMessage = parseError(error)
+            isLoading = false
+            return false
+        }
+    }
+
+    // MARK: - Check if Apple ID is linked
+    func hasAppleIdentity() async -> Bool {
+        do {
+            let identities = try await client.auth.userIdentities()
+            return identities.contains { $0.provider == "apple" }
+        } catch {
+            print("❌ Error fetching identities: \(error)")
+            return false
         }
     }
 }

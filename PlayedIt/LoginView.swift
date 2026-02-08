@@ -1,4 +1,6 @@
 import SwiftUI
+import AuthenticationServices
+import CryptoKit
 
 struct LoginView: View {
     @ObservedObject var supabase = SupabaseManager.shared
@@ -7,6 +9,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var showSignUp = false
     @State private var isAnimating = false
+    @State private var currentNonce: String?
     
     var body: some View {
         NavigationStack {
@@ -61,6 +64,7 @@ struct LoginView: View {
                                 TextField("email or username", text: $email)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
+                                    .textContentType(.username)
                                     .playedItTextField()
                             }
                             
@@ -72,7 +76,19 @@ struct LoginView: View {
                                     .foregroundColor(.slate)
                                 
                                 SecureField("••••••••", text: $password)
+                                    .textContentType(.password)
                                     .playedItTextField()
+                                
+                                HStack {
+                                    Spacer()
+                                    NavigationLink {
+                                        ForgotPasswordView(prefillEmail: email)
+                                    } label: {
+                                        Text("Forgot password?")
+                                            .font(.callout)
+                                            .foregroundColor(.primaryBlue)
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal, 24)
@@ -111,6 +127,38 @@ struct LoginView: View {
                             .disabled(email.isEmpty || password.isEmpty || supabase.isLoading)
                             .opacity(email.isEmpty || password.isEmpty ? 0.6 : 1.0)
                             
+                            // Divider
+                            HStack {
+                                Rectangle()
+                                    .fill(Color.silver)
+                                    .frame(height: 1)
+                                Text("or")
+                                    .font(.callout)
+                                    .foregroundColor(.grayText)
+                                Rectangle()
+                                    .fill(Color.silver)
+                                    .frame(height: 1)
+                            }
+                            .padding(.vertical, 4)
+                            
+                            // Sign in with Apple
+                            SignInWithAppleButton(.signIn) { request in
+                                let nonce = randomNonceString()
+                                currentNonce = nonce
+                                request.requestedScopes = [.email, .fullName]
+                                request.nonce = sha256(nonce)
+                            } onCompletion: { result in
+                                switch result {
+                                case .success(let authorization):
+                                    handleAppleSignIn(authorization)
+                                case .failure(let error):
+                                    print("❌ Apple sign in failed: \(error)")
+                                }
+                            }
+                            .signInWithAppleButtonStyle(.black)
+                            .frame(height: 50)
+                            .cornerRadius(12)
+                            
                             Button {
                                 showSignUp = true
                             } label: {
@@ -143,6 +191,39 @@ struct LoginView: View {
                 isAnimating = true
             }
         }
+    }
+    
+    // MARK: - Apple Sign In Handler
+    private func handleAppleSignIn(_ authorization: ASAuthorization) {
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let identityTokenData = appleIDCredential.identityToken,
+              let idToken = String(data: identityTokenData, encoding: .utf8),
+              let nonce = currentNonce else {
+            print("❌ Missing Apple credential data")
+            return
+        }
+        
+        Task {
+            await supabase.signInWithApple(idToken: idToken, nonce: nonce)
+        }
+    }
+    
+    // MARK: - Nonce Helpers
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+        }
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(randomBytes.map { charset[Int($0) % charset.count] })
+    }
+    
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        return hashedData.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
 

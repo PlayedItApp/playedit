@@ -56,6 +56,8 @@ struct SignUpView: View {
                             TextField("your@email.com", text: $email)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
+                                .textContentType(.emailAddress)
+                                .keyboardType(.emailAddress)
                                 .playedItTextField()
                         }
                         
@@ -69,6 +71,7 @@ struct SignUpView: View {
                             TextField("coolplayer42", text: $username)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
+                                .textContentType(.username)
                                 .playedItTextField()
                             
                             Text("This is how friends will find you")
@@ -84,6 +87,7 @@ struct SignUpView: View {
                                 .foregroundColor(.slate)
                             
                             SecureField("At least 8 characters", text: $password)
+                                .textContentType(.newPassword)
                                 .playedItTextField()
                         }
                         
@@ -95,6 +99,7 @@ struct SignUpView: View {
                                 .foregroundColor(.slate)
                             
                             SecureField("Type it again", text: $confirmPassword)
+                                .textContentType(.newPassword)
                                 .playedItTextField()
                             
                             // Password match indicator

@@ -308,8 +308,8 @@ struct FeedbackView: View {
             try await supabase.client.storage
                 .from("avatars")
                 .upload(
-                    path: fileName,
-                    file: data,
+                    fileName,
+                    data: data,
                     options: FileOptions(contentType: "image/jpeg", upsert: true)
                 )
             

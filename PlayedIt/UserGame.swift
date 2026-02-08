@@ -27,3 +27,19 @@ struct UserGame: Identifiable, Codable {
         case gameReleaseDate = "game_release_date"
     }
 }
+
+extension UserGame {
+    func toGame() -> Game {
+        Game(
+            from: RAWGGame(
+                id: gameId,
+                name: gameTitle,
+                backgroundImage: gameCoverURL,
+                released: gameReleaseDate,
+                metacritic: nil,
+                genres: nil,
+                platforms: nil
+            )
+        )
+    }
+}

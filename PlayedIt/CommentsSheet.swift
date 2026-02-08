@@ -12,6 +12,12 @@ struct CommentsSheet: View {
     @State private var isSending = false
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isInputFocused: Bool
+    @State private var editingComment: FeedComment? = nil
+    @State private var editText = ""
+
+    private var isPostOwner: Bool {
+        feedItem.userId.lowercased() == (supabase.currentUser?.id.uuidString ?? "").lowercased()
+    }
     
     var body: some View {
         NavigationStack {
@@ -73,9 +79,17 @@ struct CommentsSheet: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(comments) { comment in
-                                CommentRowView(comment: comment, onDelete: {
-                                    deleteComment(comment)
-                                })
+                                CommentRowView(
+                                    comment: comment,
+                                    isPostOwner: isPostOwner,
+                                    onEdit: {
+                                        editingComment = comment
+                                        editText = comment.content
+                                    },
+                                    onDelete: {
+                                        deleteComment(comment)
+                                    }
+                                )
                             }
                         }
                         .padding()
@@ -85,23 +99,61 @@ struct CommentsSheet: View {
                 Divider()
                 
                 // Comment input
-                HStack(spacing: 12) {
-                    TextField("Add a comment...", text: $newComment, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.subheadline)
-                        .lineLimit(1...4)
-                        .focused($isInputFocused)
-                    
-                    Button {
-                        sendComment()
-                    } label: {
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .silver : .primaryBlue)
+                VStack(spacing: 0) {
+                    if editingComment != nil {
+                        HStack {
+                            Text("Editing comment")
+                                .font(.caption)
+                                .foregroundColor(.primaryBlue)
+                            Spacer()
+                            Button {
+                                editingComment = nil
+                                editText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.grayText)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                     }
-                    .disabled(newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                    
+                    HStack(spacing: 12) {
+                        if editingComment != nil {
+                            TextField("Edit comment...", text: $editText, axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .font(.subheadline)
+                                .lineLimit(1...4)
+                                .focused($isInputFocused)
+                            
+                            Button {
+                                saveEdit()
+                            } label: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .silver : .primaryBlue)
+                            }
+                            .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                        } else {
+                            TextField("Add a comment...", text: $newComment, axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .font(.subheadline)
+                                .lineLimit(1...4)
+                                .focused($isInputFocused)
+                            
+                            Button {
+                                sendComment()
+                            } label: {
+                                Image(systemName: "paperplane.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .silver : .primaryBlue)
+                            }
+                            .disabled(newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending)
+                        }
+                    }
+                    .padding()
                 }
-                .padding()
                 .background(Color.white)
             }
             .navigationTitle("Comments")
@@ -136,12 +188,13 @@ struct CommentsSheet: View {
                 
                 struct UserInfo: Decodable {
                     let username: String?
+                    let avatar_url: String?
                 }
             }
             
             let data: [CommentData] = try await supabase.client
                 .from("feed_comments")
-                .select("id, user_id, content, created_at, users(username)")
+                .select("id, user_id, content, created_at, users(username, avatar_url)")
                 .eq("user_game_id", value: feedItem.userGameId)
                 .order("created_at", ascending: true)
                 .execute()
@@ -152,9 +205,10 @@ struct CommentsSheet: View {
                     id: row.id,
                     userId: row.user_id,
                     username: row.users?.username ?? "User",
+                    avatarURL: row.users?.avatar_url,
                     content: row.content,
                     createdAt: row.created_at,
-                    isOwn: row.user_id == userId.uuidString
+                    isOwn: row.user_id.lowercased() == userId.uuidString.lowercased()
                 )
             }
             
@@ -212,6 +266,34 @@ struct CommentsSheet: View {
             }
         }
     }
+    
+    private func saveEdit() {
+        guard let comment = editingComment else { return }
+        let content = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
+        
+        isSending = true
+        
+        Task {
+            do {
+                try await supabase.client
+                    .from("feed_comments")
+                    .update(["content": content])
+                    .eq("id", value: comment.id)
+                    .execute()
+                
+                isInputFocused = false
+                await fetchComments()
+                editingComment = nil
+                editText = ""
+                
+            } catch {
+                print("❌ Error editing comment: \(error)")
+            }
+            
+            isSending = false
+        }
+    }
 }
 
 // MARK: - Comment Model
@@ -219,6 +301,7 @@ struct FeedComment: Identifiable {
     let id: String
     let userId: String
     let username: String
+    let avatarURL: String?
     let content: String
     let createdAt: String
     let isOwn: Bool
@@ -227,21 +310,47 @@ struct FeedComment: Identifiable {
 // MARK: - Comment Row View
 struct CommentRowView: View {
     let comment: FeedComment
+    let isPostOwner: Bool
+    let onEdit: () -> Void
     let onDelete: () -> Void
     
     @State private var showDeleteConfirm = false
     
+    // Can delete if: it's your own comment OR you own the post
+    private var canDelete: Bool {
+        comment.isOwn || isPostOwner
+    }
+    
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            // Avatar placeholder
-            Circle()
-                .fill(Color.primaryBlue.opacity(0.2))
-                .frame(width: 32, height: 32)
-                .overlay(
-                    Text(String(comment.username.prefix(1)).uppercased())
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primaryBlue)
-                )
+            Group {
+                if let avatarURL = comment.avatarURL, let url = URL(string: avatarURL) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.primaryBlue.opacity(0.2))
+                            .overlay(
+                                Text(String(comment.username.prefix(1)).uppercased())
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primaryBlue)
+                            )
+                    }
+                    .frame(width: 32, height: 32)
+                    .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color.primaryBlue.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Text(String(comment.username.prefix(1)).uppercased())
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.primaryBlue)
+                        )
+                }
+            }
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -255,13 +364,26 @@ struct CommentRowView: View {
                     
                     Spacer()
                     
-                    if comment.isOwn {
-                        Button {
-                            showDeleteConfirm = true
+                    if comment.isOwn || isPostOwner {
+                        Menu {
+                            if comment.isOwn {
+                                Button {
+                                    onEdit()
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                            }
+                            
+                            Button(role: .destructive) {
+                                showDeleteConfirm = true
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         } label: {
-                            Image(systemName: "trash")
+                            Image(systemName: "ellipsis")
                                 .font(.caption)
                                 .foregroundColor(.grayText)
+                                .padding(4)
                         }
                     }
                 }

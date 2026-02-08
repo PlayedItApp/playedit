@@ -1,6 +1,8 @@
 import SwiftUI
 import Supabase
 import PhotosUI
+import AuthenticationServices
+import CryptoKit
 
 struct ProfileView: View {
     @ObservedObject var supabase = SupabaseManager.shared
@@ -15,6 +17,9 @@ struct ProfileView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var isUploadingPhoto = false
     @State private var selectedImage: UIImage?
+    @State private var hasAppleLinked = false
+    @State private var currentNonce: String?
+    @AppStorage("startTab") private var startTab = 0
     
     var body: some View {
         NavigationStack {
@@ -168,6 +173,37 @@ struct ProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        if !hasAppleLinked {
+                            Button {
+                                triggerAppleLinking()
+                            } label: {
+                                Label("Link Apple ID", systemImage: "apple.logo")
+                            }
+                        }
+                        
+                        Menu {
+                            Button { startTab = 0 } label: {
+                                HStack {
+                                    Text("Feed")
+                                    if startTab == 0 { Image(systemName: "checkmark") }
+                                }
+                            }
+                            Button { startTab = 1 } label: {
+                                HStack {
+                                    Text("Friends")
+                                    if startTab == 1 { Image(systemName: "checkmark") }
+                                }
+                            }
+                            Button { startTab = 2 } label: {
+                                HStack {
+                                    Text("Profile")
+                                    if startTab == 2 { Image(systemName: "checkmark") }
+                                }
+                            }
+                        } label: {
+                            Label("Start Screen", systemImage: "house")
+                        }
+                        
                         NavigationLink {
                             FeedbackView()
                         } label: {
@@ -190,6 +226,7 @@ struct ProfileView: View {
         .task {
             await fetchProfile()
             await fetchRankedGames()
+            hasAppleLinked = await supabase.hasAppleIdentity()
         }
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
@@ -399,6 +436,20 @@ struct ProfileView: View {
         }
         
         isUploadingPhoto = false
+    }
+    
+    // MARK: - Apple ID Linking
+    private func triggerAppleLinking() {
+        Task {
+            let success = await supabase.linkAppleID()
+            if success {
+                hasAppleLinked = true
+                message = "Apple ID linked!"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    message = nil
+                }
+            }
+        }
     }
 }
 

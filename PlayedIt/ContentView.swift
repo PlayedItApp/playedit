@@ -50,6 +50,7 @@ struct SplashView: View {
 
 // MARK: - Main Tab View
 struct MainTabView: View {
+    @AppStorage("startTab") private var startTab = 0
     @State private var selectedTab = 0
     @State private var pendingRequestCount = 0
     @State private var unreadNotificationCount = 0
@@ -59,12 +60,8 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             FeedView(unreadNotificationCount: $unreadNotificationCount)
                 .tabItem {
-                    Label {
-                        Text("Home")
-                    } icon: {
-                        Image(systemName: "house")
-                            .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
-                    }
+                    Image(systemName: "newspaper")
+                    Text("Feed")
                 }
                 .tag(0)
             
@@ -87,13 +84,16 @@ struct MainTabView: View {
         .overlay(alignment: .bottomLeading) {
             // Notification dot on Home tab
             if unreadNotificationCount > 0 && selectedTab != 0 {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 8, height: 8)
-                    .offset(x: notificationDotOffset, y: -32)
+                GeometryReader { geo in
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 8, height: 8)
+                        .offset(x: notificationDotOffset(screenWidth: geo.size.width), y: geo.size.height - 32)
+                }
             }
         }
         .task {
+            selectedTab = startTab
             await fetchPendingCount()
             await fetchUnreadNotificationCount()
         }
@@ -105,9 +105,7 @@ struct MainTabView: View {
         }
     }
     
-    private var notificationDotOffset: CGFloat {
-        // Position dot over the Home tab (leftmost tab)
-        let screenWidth = UIScreen.main.bounds.width
+    private func notificationDotOffset(screenWidth: CGFloat) -> CGFloat {
         let tabWidth = screenWidth / 3
         return (tabWidth / 2) + 12
     }
@@ -234,6 +232,12 @@ struct GameDetailSheet: View {
     let game: UserGame
     let rank: Int
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject var supabase = SupabaseManager.shared
+    
+    @State private var showComparison = false
+    @State private var existingUserGames: [UserGame] = []
+    @State private var isLoadingReRank = false
+    @State private var oldRank: Int? = nil
     
     var body: some View {
         NavigationStack {
@@ -275,7 +279,6 @@ struct GameDetailSheet: View {
                     
                     // Details
                     VStack(alignment: .leading, spacing: 16) {
-                        // Platform
                         if !game.platformPlayed.isEmpty {
                             DetailRow(
                                 icon: "gamecontroller",
@@ -284,7 +287,6 @@ struct GameDetailSheet: View {
                             )
                         }
                         
-                        // Release year
                         if let year = game.gameReleaseDate?.prefix(4) {
                             DetailRow(
                                 icon: "calendar",
@@ -293,7 +295,6 @@ struct GameDetailSheet: View {
                             )
                         }
                         
-                        // Notes
                         if let notes = game.notes, !notes.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label("Notes", systemImage: "note.text")
@@ -308,6 +309,32 @@ struct GameDetailSheet: View {
                     }
                     .padding(.horizontal, 24)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // Re-rank button
+                    Button {
+                        Task {
+                            await startReRank()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isLoadingReRank {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                            } else {
+                                Image(systemName: "arrow.up.arrow.down")
+                                    .font(.system(size: 13))
+                                Text("Re-rank")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                            }
+                        }
+                        .foregroundColor(.primaryBlue)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.primaryBlue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .disabled(isLoadingReRank)
+                    .padding(.top, 8)
                     
                     Spacer()
                 }
@@ -325,6 +352,157 @@ struct GameDetailSheet: View {
                     }
                 }
             }
+            .sheet(isPresented: $showComparison) {
+                ComparisonView(
+                    newGame: game.toGame(),
+                    existingGames: existingUserGames,
+                    onComplete: { newPosition in
+                        Task {
+                            await saveReRankedGame(newPosition: newPosition)
+                            dismiss()
+                        }
+                    }
+                )
+                .interactiveDismissDisabled()
+            }
+        }
+    }
+    
+    // MARK: - Start Re-Rank
+    private func startReRank() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        isLoadingReRank = true
+        oldRank = rank
+        
+        do {
+            // Fetch all user's games EXCEPT this one, for comparisons
+            struct UserGameRow: Decodable {
+                let id: String
+                let game_id: Int
+                let user_id: String
+                let rank_position: Int
+                let platform_played: [String]
+                let notes: String?
+                let logged_at: String?
+                let games: GameDetails
+                
+                struct GameDetails: Decodable {
+                    let title: String
+                    let cover_url: String?
+                    let release_date: String?
+                }
+            }
+            
+            let rows: [UserGameRow] = try await supabase.client
+                .from("user_games")
+                .select("*, games(title, cover_url, release_date)")
+                .eq("user_id", value: userId.uuidString)
+                .neq("game_id", value: game.gameId)
+                .order("rank_position", ascending: true)
+                .execute()
+                .value
+            
+            existingUserGames = rows.map { row in
+                UserGame(
+                    id: row.id,
+                    gameId: row.game_id,
+                    userId: row.user_id,
+                    rankPosition: row.rank_position,
+                    platformPlayed: row.platform_played,
+                    notes: row.notes,
+                    loggedAt: row.logged_at,
+                    gameTitle: row.games.title,
+                    gameCoverURL: row.games.cover_url,
+                    gameReleaseDate: row.games.release_date
+                )
+            }
+            
+            isLoadingReRank = false
+            showComparison = true
+            
+        } catch {
+            print("❌ Error loading games for re-rank: \(error)")
+            isLoadingReRank = false
+        }
+    }
+    
+    // MARK: - Save Re-Ranked Game
+    private func saveReRankedGame(newPosition: Int) async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            // 1. Delete the old entry
+            try await supabase.client
+                .from("user_games")
+                .delete()
+                .eq("id", value: game.id)
+                .execute()
+            
+            // 2. Shift games that were below the old rank up by 1
+            struct GameToShift: Decodable {
+                let id: String
+                let rank_position: Int
+            }
+            
+            let gamesToShiftUp: [GameToShift] = try await supabase.client
+                .from("user_games")
+                .select("id, rank_position")
+                .eq("user_id", value: userId.uuidString)
+                .gt("rank_position", value: rank)
+                .execute()
+                .value
+            
+            for g in gamesToShiftUp {
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": g.rank_position - 1])
+                    .eq("id", value: g.id)
+                    .execute()
+            }
+            
+            // 3. Shift games at or below the new position down by 1
+            let gamesToShiftDown: [GameToShift] = try await supabase.client
+                .from("user_games")
+                .select("id, rank_position")
+                .eq("user_id", value: userId.uuidString)
+                .gte("rank_position", value: newPosition)
+                .order("rank_position", ascending: false)
+                .execute()
+                .value
+            
+            for g in gamesToShiftDown {
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": g.rank_position + 1])
+                    .eq("id", value: g.id)
+                    .execute()
+            }
+            
+            // 4. Insert at new position (preserve original platform/notes/date)
+            struct UserGameInsert: Encodable {
+                let user_id: String
+                let game_id: Int
+                let rank_position: Int
+                let platform_played: [String]
+                let notes: String
+            }
+            
+            let insert = UserGameInsert(
+                user_id: userId.uuidString,
+                game_id: game.gameId,
+                rank_position: newPosition,
+                platform_played: game.platformPlayed,
+                notes: game.notes ?? ""
+            )
+            
+            try await supabase.client.from("user_games")
+                .insert(insert)
+                .execute()
+            
+            print("✅ Re-ranked from #\(rank) → #\(newPosition)")
+            
+        } catch {
+            print("❌ Error saving re-ranked game: \(error)")
         }
     }
 }

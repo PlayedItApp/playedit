@@ -4,6 +4,7 @@ struct ForgotPasswordView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @Environment(\.dismiss) private var dismiss
     
+    var prefillEmail: String = ""
     @State private var email = ""
     @State private var emailSent = false
     
@@ -103,6 +104,11 @@ struct ForgotPasswordView: View {
             }
         }
         .navigationBarBackButtonHidden(emailSent)
+        .onAppear {
+            if !prefillEmail.isEmpty && email.isEmpty {
+                email = prefillEmail
+            }
+        }
         .toolbar {
             if !emailSent {
                 ToolbarItem(placement: .navigationBarLeading) {
