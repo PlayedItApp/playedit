@@ -214,12 +214,13 @@ struct FriendsView: View {
                     let id: String
                     let username: String?
                     let email: String?
+                    let avatar_url: String?
                 }
                 
                 do {
                     let userInfo: UserInfo = try await supabase.client
                         .from("users")
-                        .select("id, username, email")
+                        .select("id, username, email, avatar_url")
                         .eq("id", value: friendUserId)
                         .single()
                         .execute()
@@ -231,7 +232,8 @@ struct FriendsView: View {
                         id: friendship.id,
                         friendshipId: friendship.id,
                         username: userInfo.username ?? userInfo.email ?? "Unknown",
-                        userId: friendUserId
+                        userId: friendUserId,
+                        avatarURL: userInfo.avatar_url
                     )
                     
                     if friendship.status == "accepted" {
@@ -349,12 +351,14 @@ struct Friend: Identifiable {
     let friendshipId: String
     let username: String
     let userId: String
+    let avatarURL: String?
     
-    init(id: String, friendshipId: String, username: String, userId: String) {
+    init(id: String, friendshipId: String, username: String, userId: String, avatarURL: String? = nil) {
         self.id = id
         self.friendshipId = friendshipId
         self.username = username
         self.userId = userId
+        self.avatarURL = avatarURL
     }
 }
 
@@ -364,14 +368,32 @@ struct FriendRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.primaryBlue.opacity(0.2))
-                .frame(width: 44, height: 44)
-                .overlay(
-                    Text(String(friend.username.prefix(1)).uppercased())
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundColor(.primaryBlue)
-                )
+            Group {
+                if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.primaryBlue.opacity(0.2))
+                            .overlay(
+                                Text(String(friend.username.prefix(1)).uppercased())
+                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.primaryBlue)
+                            )
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color.primaryBlue.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            Text(String(friend.username.prefix(1)).uppercased())
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                .foregroundColor(.primaryBlue)
+                        )
+                }
+            }
             
             Text(friend.username)
                 .font(.system(size: 16, weight: .medium, design: .rounded))
@@ -398,14 +420,52 @@ struct PendingRequestRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.accentOrange.opacity(0.2))
-                .frame(width: 44, height: 44)
-                .overlay(
-                    Text(String(friend.username.prefix(1)).uppercased())
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundColor(.accentOrange)
-                )
+            Group {
+                if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.primaryBlue.opacity(0.2))
+                            .overlay(
+                                Text(String(friend.username.prefix(1)).uppercased())
+                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.primaryBlue)
+                            )
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                } else {
+                    Group {
+                        if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Circle()
+                                    .fill(Color.primaryBlue.opacity(0.2))
+                                    .overlay(
+                                        Text(String(friend.username.prefix(1)).uppercased())
+                                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                            .foregroundColor(.primaryBlue)
+                                    )
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                        } else {
+                            Circle()
+                                .fill(Color.primaryBlue.opacity(0.2))
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    Text(String(friend.username.prefix(1)).uppercased())
+                                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.primaryBlue)
+                                )
+                        }
+                    }
+                }
+            }
             
             Text(friend.username)
                 .font(.system(size: 16, weight: .medium, design: .rounded))
@@ -470,24 +530,38 @@ struct FriendProfileView: View {
             let maxPossibleDiff = max(myGames.count, friendGames.count)
             let actualDiff = abs(pair.mine.rankPosition - pair.theirs.rankPosition)
             
-            // Convert to percentage (closer ranks = higher match)
             if maxPossibleDiff == 0 { return 100 }
             let percentage = 100 - Int((Double(actualDiff) / Double(maxPossibleDiff)) * 100)
             return max(0, min(100, percentage))
         }
         
-        // Spearman's rank correlation coefficient for 2+ games
         let n = Double(sharedGames.count)
         var sumDSquared: Double = 0
         
-        for pair in sharedGames {
-            let d = Double(pair.mine.rankPosition - pair.theirs.rankPosition)
+        // Assign relative ranks: rank by position in each user's list
+        var myRelativeRanks: [Int] = Array(repeating: 0, count: sharedGames.count)
+        var theirRelativeRanks: [Int] = Array(repeating: 0, count: sharedGames.count)
+        
+        // Sort indices by my rank position
+        let myOrder = sharedGames.indices.sorted { sharedGames[$0].mine.rankPosition < sharedGames[$1].mine.rankPosition }
+        for (rank, idx) in myOrder.enumerated() {
+            myRelativeRanks[idx] = rank + 1
+        }
+        
+        // Sort indices by their rank position
+        let theirOrder = sharedGames.indices.sorted { sharedGames[$0].theirs.rankPosition < sharedGames[$1].theirs.rankPosition }
+        for (rank, idx) in theirOrder.enumerated() {
+            theirRelativeRanks[idx] = rank + 1
+        }
+        
+        for i in sharedGames.indices {
+            let d = Double(myRelativeRanks[i] - theirRelativeRanks[i])
             sumDSquared += d * d
         }
         
         // ρ = 1 - (6 * Σd²) / (n * (n² - 1))
         let denominator = n * (n * n - 1)
-        guard denominator != 0 else { return 50 } // Fallback
+        guard denominator != 0 else { return 50 }
         
         let rho = 1 - (6 * sumDSquared) / denominator
         
@@ -591,16 +665,34 @@ struct FriendProfileView: View {
     }
     
     // MARK: - Profile Header
-    private var profileHeader: some View {
-        VStack(spacing: 12) {
-            Circle()
-                .fill(Color.primaryBlue.opacity(0.2))
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Text(String(friend.username.prefix(1)).uppercased())
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundColor(.primaryBlue)
-                )
+        private var profileHeader: some View {
+            VStack(spacing: 12) {
+                Group {
+                    if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                        AsyncImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.primaryBlue.opacity(0.2))
+                                .overlay(
+                                    Text(String(friend.username.prefix(1)).uppercased())
+                                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                                        .foregroundColor(.primaryBlue)
+                                )
+                        }
+                        .frame(width: 80, height: 80)
+                        .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(Color.primaryBlue.opacity(0.2))
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Text(String(friend.username.prefix(1)).uppercased())
+                                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                                    .foregroundColor(.primaryBlue)
+                            )
+                    }
+                }
             
             Text(friend.username)
                 .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -908,7 +1000,6 @@ struct FriendProfileView: View {
             
         } catch {
             print("❌ Error loading friend data: \(error)")
-            isLoading = false
         }
     }
 }
