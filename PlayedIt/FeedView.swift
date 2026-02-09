@@ -163,21 +163,22 @@ struct FeedView: View {
             struct FeedRow: Decodable {
                 let id: String
                 let user_id: String
+                let game_id: Int
                 let rank_position: Int
                 let logged_at: String?
                 let games: GameInfo
                 let users: UserInfo
                 
-                struct GameInfo: Decodable {
-                    let title: String
-                    let cover_url: String?
-                }
-                
-                struct UserInfo: Decodable {
-                    let username: String?
-                }
+            struct GameInfo: Decodable {
+                let title: String
+                let cover_url: String?
             }
             
+            struct UserInfo: Decodable {
+                let username: String?
+            }
+        }
+        
             struct Friendship: Decodable {
                 let user_id: String
                 let friend_id: String
@@ -212,7 +213,7 @@ struct FeedView: View {
             // Fetch recent games from friends and self
             let rows: [FeedRow] = try await supabase.client
                 .from("user_games")
-                .select("id, user_id, rank_position, logged_at, games(title, cover_url), users(username)")
+                .select("id, user_id, game_id, rank_position, logged_at, games(title, cover_url), users(username)")
                 .in("user_id", values: feedUserIds)
                 .order("logged_at", ascending: false)
                 .limit(50)
@@ -269,6 +270,7 @@ struct FeedView: View {
                     userGameId: row.id,
                     userId: row.user_id,
                     username: row.users.username ?? "Friend",
+                    gameId: row.game_id,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     rankPosition: row.rank_position,
@@ -313,6 +315,7 @@ struct FeedItem: Identifiable {
     let userGameId: String
     let userId: String
     let username: String
+    let gameId: Int
     let gameTitle: String
     let gameCoverURL: String?
     let rankPosition: Int
@@ -327,10 +330,14 @@ struct FeedItemRow: View {
     let item: FeedItem
     let onLikeTapped: () -> Void
     let onCommentTapped: () -> Void
+    @State private var showGameDetail = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Main content
+            Button {
+                showGameDetail = true
+            } label: {
             HStack(spacing: 12) {
                 // Cover art
                 AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
@@ -375,6 +382,8 @@ struct FeedItemRow: View {
                 Spacer()
             }
             .padding(12)
+            }
+            .buttonStyle(.plain)
             
             // Divider
             Divider()
@@ -422,6 +431,9 @@ struct FeedItemRow: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .sheet(isPresented: $showGameDetail) {
+            FeedGameDetailSheet(item: item)
+        }
     }
     
     private func timeAgo(from dateString: String) -> String {
@@ -446,6 +458,186 @@ struct FeedItemRow: View {
             let days = Int(interval / 86400)
             return "\(days)d ago"
         }
+    }
+}
+
+// MARK: - Feed Game Detail Sheet
+struct FeedGameDetailSheet: View {
+    let item: FeedItem
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var supabase = SupabaseManager.shared
+    @State private var userGame: UserGame? = nil
+    @State private var friend: Friend? = nil
+    @State private var myGames: [UserGame] = []
+    @State private var isLoading = true
+    
+    var body: some View {
+        NavigationStack {
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button { dismiss() } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.silver)
+                            }
+                        }
+                    }
+            } else if let userGame = userGame, let friend = friend {
+                GameDetailFromFriendView(
+                    userGame: userGame,
+                    friend: friend,
+                    myGames: myGames
+                )
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.silver)
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 12) {
+                    Text("Couldn't load game details")
+                        .font(.system(size: 16, design: .rounded))
+                        .foregroundColor(.grayText)
+                    Button("Dismiss") { dismiss() }
+                }
+            }
+        }
+        .task {
+            await loadData()
+        }
+    }
+    
+    private func loadData() async {
+        guard let userId = supabase.currentUser?.id else {
+            isLoading = false
+            return
+        }
+        
+        do {
+            struct UserGameRow: Decodable {
+                let id: String
+                let game_id: Int
+                let user_id: String
+                let rank_position: Int
+                let platform_played: [String]
+                let notes: String?
+                let logged_at: String?
+                let canonical_game_id: Int?
+                let games: GameDetails
+                
+                struct GameDetails: Decodable {
+                    let title: String
+                    let cover_url: String?
+                    let release_date: String?
+                }
+            }
+            
+            // 1. Fetch the user_game entry
+            let row: UserGameRow = try await supabase.client
+                .from("user_games")
+                .select("*, games(title, cover_url, release_date)")
+                .eq("id", value: item.userGameId)
+                .single()
+                .execute()
+                .value
+            
+            userGame = UserGame(
+                id: row.id,
+                gameId: row.game_id,
+                userId: row.user_id,
+                rankPosition: row.rank_position,
+                platformPlayed: row.platform_played,
+                notes: row.notes,
+                loggedAt: row.logged_at,
+                canonicalGameId: row.canonical_game_id,
+                gameTitle: row.games.title,
+                gameCoverURL: row.games.cover_url,
+                gameReleaseDate: row.games.release_date
+            )
+            
+            // 2. Fetch the poster's profile and friendship
+            struct UserProfile: Decodable {
+                let id: String
+                let username: String?
+                let avatar_url: String?
+            }
+            
+            let profile: UserProfile = try await supabase.client
+                .from("users")
+                .select("id, username, avatar_url")
+                .eq("id", value: item.userId)
+                .single()
+                .execute()
+                .value
+            
+            // Find the friendship ID
+            struct FriendshipRow: Decodable {
+                let id: String
+            }
+            
+            let friendshipId: String
+            if item.userId.lowercased() == userId.uuidString.lowercased() {
+                // It's your own post
+                friendshipId = ""
+            } else {
+                let friendships: [FriendshipRow] = try await supabase.client
+                    .from("friendships")
+                    .select("id")
+                    .or("and(user_id.eq.\(userId.uuidString),friend_id.eq.\(item.userId)),and(user_id.eq.\(item.userId),friend_id.eq.\(userId.uuidString))")
+                    .eq("status", value: "accepted")
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                friendshipId = friendships.first?.id ?? ""
+            }
+            
+            friend = Friend(
+                id: friendshipId,
+                friendshipId: friendshipId,
+                username: profile.username ?? item.username,
+                userId: profile.id,
+                avatarURL: profile.avatar_url
+            )
+            
+            // 3. Fetch my games
+            let myRows: [UserGameRow] = try await supabase.client
+                .from("user_games")
+                .select("*, games(title, cover_url, release_date)")
+                .eq("user_id", value: userId.uuidString)
+                .order("rank_position", ascending: true)
+                .execute()
+                .value
+            
+            myGames = myRows.map { r in
+                UserGame(
+                    id: r.id,
+                    gameId: r.game_id,
+                    userId: r.user_id,
+                    rankPosition: r.rank_position,
+                    platformPlayed: r.platform_played,
+                    notes: r.notes,
+                    loggedAt: r.logged_at,
+                    canonicalGameId: r.canonical_game_id,
+                    gameTitle: r.games.title,
+                    gameCoverURL: r.games.cover_url,
+                    gameReleaseDate: r.games.release_date
+                )
+            }
+            
+        } catch {
+            print("❌ Error loading feed game detail: \(error)")
+        }
+        
+        isLoading = false
     }
 }
 

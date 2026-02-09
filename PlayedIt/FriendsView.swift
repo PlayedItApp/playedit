@@ -507,6 +507,7 @@ struct FriendProfileView: View {
     @State private var isLoading = true
     @State private var showCompareView = false
     @State private var showMatchInfo = false
+    @State private var showBatchRank = false
     
     // Computed taste match
     private var sharedGames: [(mine: UserGame, theirs: UserGame)] {
@@ -617,15 +618,27 @@ struct FriendProfileView: View {
                     
                     // Compare Lists Button
                     if !friendGames.isEmpty && !myGames.isEmpty {
-                        Button {
-                            showCompareView = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "arrow.left.arrow.right")
-                                Text("Compare Lists")
+                        HStack(spacing: 12) {
+                            Button {
+                                showCompareView = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "arrow.left.arrow.right")
+                                    Text("Compare Lists")
+                                }
                             }
+                            .buttonStyle(SecondaryButtonStyle())
+                            
+                            Button {
+                                showBatchRank = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "gamecontroller.fill")
+                                    Text("Rank Their Games")
+                                }
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
                         }
-                        .buttonStyle(SecondaryButtonStyle())
                         .padding(.horizontal, 16)
                     }
                     
@@ -656,6 +669,13 @@ struct FriendProfileView: View {
             CompareListsView(
                 myGames: myGames,
                 friendGames: friendGames,
+                friendName: friend.username
+            )
+        }
+        .sheet(isPresented: $showBatchRank) {
+            BatchRankSelectionView(
+                friendGames: friendGames,
+                myGames: myGames,
                 friendName: friend.username
             )
         }
@@ -840,18 +860,34 @@ struct FriendProfileView: View {
     // MARK: - Agreements Section
     private var agreementsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("You both loved 🤝")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.grayText)
-                .padding(.horizontal, 16)
+            HStack(spacing: 6) {
+                Image(systemName: "circle.circle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.teal)
+                Text("You both loved")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.teal)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.teal.opacity(0.1))
+            .cornerRadius(8)
+            .padding(.horizontal, 16)
             
             ForEach(agreements.prefix(5), id: \.mine.id) { pair in
-                ComparisonGameRow(
-                    game: pair.mine,
-                    myRank: pair.mine.rankPosition,
-                    theirRank: pair.theirs.rankPosition,
-                    friendName: friend.username
-                )
+                NavigationLink(destination: GameDetailFromFriendView(
+                    userGame: pair.theirs,
+                    friend: friend,
+                    myGames: myGames
+                )) {
+                    ComparisonGameRow(
+                        game: pair.mine,
+                        myRank: pair.mine.rankPosition,
+                        theirRank: pair.theirs.rankPosition,
+                        friendName: friend.username
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
                 .padding(.horizontal, 16)
             }
         }
@@ -860,18 +896,34 @@ struct FriendProfileView: View {
     // MARK: - Disagreements Section
     private var disagreementsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Biggest debates 🔥")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.grayText)
-                .padding(.horizontal, 16)
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.accentOrange)
+                Text("Biggest debates")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.accentOrange)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.accentOrange.opacity(0.1))
+            .cornerRadius(8)
+            .padding(.horizontal, 16)
             
             ForEach(disagreements.prefix(5), id: \.mine.id) { pair in
-                ComparisonGameRow(
-                    game: pair.mine,
-                    myRank: pair.mine.rankPosition,
-                    theirRank: pair.theirs.rankPosition,
-                    friendName: friend.username
-                )
+                NavigationLink(destination: GameDetailFromFriendView(
+                    userGame: pair.theirs,
+                    friend: friend,
+                    myGames: myGames
+                )) {
+                    ComparisonGameRow(
+                        game: pair.mine,
+                        myRank: pair.mine.rankPosition,
+                        theirRank: pair.theirs.rankPosition,
+                        friendName: friend.username
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
                 .padding(.horizontal, 16)
             }
         }
@@ -880,18 +932,34 @@ struct FriendProfileView: View {
     // MARK: - They Love Section
     private var theyLoveSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(friend.username) loved these, you... didn't 😬")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.grayText)
-                .padding(.horizontal, 16)
+            HStack(spacing: 6) {
+                Image(systemName: "hand.thumbsup.circle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.slate)
+                Text("\(friend.username) loved these, you... didn't")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.slate)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.slate.opacity(0.08))
+            .cornerRadius(8)
+            .padding(.horizontal, 16)
             
             ForEach(theyLoveYouDont.prefix(5), id: \.mine.id) { pair in
-                ComparisonGameRow(
-                    game: pair.mine,
-                    myRank: pair.mine.rankPosition,
-                    theirRank: pair.theirs.rankPosition,
-                    friendName: friend.username
-                )
+                NavigationLink(destination: GameDetailFromFriendView(
+                    userGame: pair.theirs,
+                    friend: friend,
+                    myGames: myGames
+                )) {
+                    ComparisonGameRow(
+                        game: pair.mine,
+                        myRank: pair.mine.rankPosition,
+                        theirRank: pair.theirs.rankPosition,
+                        friendName: friend.username
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
                 .padding(.horizontal, 16)
             }
         }
@@ -913,8 +981,15 @@ struct FriendProfileView: View {
                     .padding(.vertical, 20)
             } else {
                 ForEach(friendGames.sorted { $0.rankPosition < $1.rankPosition }) { game in
-                    FriendGameRow(game: game, myRank: myGames.first(where: { $0.gameId == game.gameId })?.rankPosition)
-                        .padding(.horizontal, 16)
+                    NavigationLink(destination: GameDetailFromFriendView(
+                        userGame: game,
+                        friend: friend,
+                        myGames: myGames
+                    )) {
+                        FriendGameRow(game: game, myRank: myGames.first(where: { $0.gameId == game.gameId })?.rankPosition)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.horizontal, 16)
                 }
             }
         }

@@ -433,6 +433,7 @@ struct CommentRowView: View {
             userGameId: "1",
             userId: "user1",
             username: "TestUser",
+            gameId: 0,
             gameTitle: "The Legend of Zelda: Breath of the Wild",
             gameCoverURL: nil,
             rankPosition: 1,

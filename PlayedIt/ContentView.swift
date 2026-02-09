@@ -160,6 +160,7 @@ struct MainTabView: View {
 struct RankedGameRow: View {
     let rank: Int
     let game: UserGame
+    var onUpdate: (() -> Void)? = nil
     @State private var showDetail = false
     
     var body: some View {
@@ -213,7 +214,9 @@ struct RankedGameRow: View {
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showDetail) {
+        .sheet(isPresented: $showDetail, onDismiss: {
+            onUpdate?()
+        }) {
             GameDetailSheet(game: game, rank: rank)
         }
     }
@@ -238,6 +241,8 @@ struct GameDetailSheet: View {
     @State private var existingUserGames: [UserGame] = []
     @State private var isLoadingReRank = false
     @State private var oldRank: Int? = nil
+    @State private var showRemoveConfirm = false
+    @State private var isRemoving = false
     
     var body: some View {
         NavigationStack {
@@ -335,6 +340,41 @@ struct GameDetailSheet: View {
                     }
                     .disabled(isLoadingReRank)
                     .padding(.top, 8)
+                    
+                    // Remove game button
+                    Button {
+                        showRemoveConfirm = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isRemoving {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .red))
+                            } else {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 13))
+                                Text("Remove from List")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                            }
+                        }
+                        .foregroundColor(.red.opacity(0.8))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                    }
+                    .disabled(isRemoving)
+                    .confirmationDialog(
+                        "Remove \(game.gameTitle)?",
+                        isPresented: $showRemoveConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Remove from Rankings", role: .destructive) {
+                            Task {
+                                await removeGame()
+                            }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This will remove the game from your rankings, feed, and all reactions. This can't be undone.")
+                    }
                     
                     Spacer()
                 }
@@ -509,6 +549,63 @@ struct GameDetailSheet: View {
             
         } catch {
             print("❌ Error saving re-ranked game: \(error)")
+        }
+    }
+    
+    // MARK: - Remove Game
+    private func removeGame() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        isRemoving = true
+        
+        do {
+            // 1. Delete reactions and comments on this entry
+            try await supabase.client
+                .from("feed_reactions")
+                .delete()
+                .eq("user_game_id", value: game.id)
+                .execute()
+            
+            try await supabase.client
+                .from("feed_comments")
+                .delete()
+                .eq("user_game_id", value: game.id)
+                .execute()
+            
+            // 2. Delete the user_game entry
+            try await supabase.client
+                .from("user_games")
+                .delete()
+                .eq("id", value: game.id)
+                .execute()
+            
+            // 3. Shift all games ranked below this one up by 1
+            struct GameToShift: Decodable {
+                let id: String
+                let rank_position: Int
+            }
+            
+            let gamesToShift: [GameToShift] = try await supabase.client
+                .from("user_games")
+                .select("id, rank_position")
+                .eq("user_id", value: userId.uuidString)
+                .gt("rank_position", value: rank)
+                .execute()
+                .value
+            
+            for g in gamesToShift {
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": g.rank_position - 1])
+                    .eq("id", value: g.id)
+                    .execute()
+            }
+            
+            print("✅ Removed \(game.gameTitle) from rankings")
+            dismiss()
+            
+        } catch {
+            print("❌ Error removing game: \(error)")
+            isRemoving = false
         }
     }
 }
