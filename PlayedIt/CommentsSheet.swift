@@ -100,6 +100,9 @@ struct CommentsSheet: View {
                 
                 // Comment input
                 VStack(spacing: 0) {
+                    SpoilerHint()
+                        .padding(.horizontal)
+                        .padding(.top, 4)
                     if editingComment != nil {
                         HStack {
                             Text("Editing comment")
@@ -388,7 +391,7 @@ struct CommentRowView: View {
                     }
                 }
                 
-                Text(comment.content)
+                SpoilerTextView(comment.content)
                     .font(.subheadline)
                     .foregroundColor(.slate)
             }
@@ -433,6 +436,7 @@ struct CommentRowView: View {
             userGameId: "1",
             userId: "user1",
             username: "TestUser",
+            avatarURL: nil,
             gameId: 0,
             gameTitle: "The Legend of Zelda: Breath of the Wild",
             gameCoverURL: nil,

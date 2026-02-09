@@ -152,6 +152,9 @@ struct GameSearchRow: View {
     let game: Game
     let isRanked: Bool
     let onSelect: () -> Void
+    @ObservedObject private var wantToPlayManager = WantToPlayManager.shared
+    @State private var showToast = false
+    @State private var toastMessage = ""
     
     var body: some View {
         Button(action: onSelect) {
@@ -197,16 +200,37 @@ struct GameSearchRow: View {
                 
                 Spacer()
                 
-                // Ranked badge
-                if isRanked {
-                    Text("Ranked")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.teal)
-                        .clipShape(Capsule())
+                // Status badges
+                VStack(spacing: 6) {
+                    if isRanked {
+                        Text("Ranked")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.teal)
+                            .clipShape(Capsule())
+                    } else if wantToPlayManager.myWantToPlayIds.contains(game.id) {
+                        Text("Want to Play")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.accentOrange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.accentOrange.opacity(0.15))
+                            .clipShape(Capsule())
+                    } else {
+                        // Want to Play button
+                        Button {
+                            Task { await addToWantToPlay() }
+                        } label: {
+                            Image(systemName: "bookmark")
+                                .font(.system(size: 16))
+                                .foregroundColor(.grayText)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 
                 // Chevron
@@ -218,8 +242,38 @@ struct GameSearchRow: View {
             .background(Color.white)
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            .overlay(
+                Group {
+                    if showToast {
+                        Text(toastMessage)
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.slate)
+                            .cornerRadius(8)
+                            .transition(.opacity)
+                    }
+                }
+            )
         }
         .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func addToWantToPlay() async {
+        let success = await wantToPlayManager.addGame(
+            gameId: game.id,
+            gameTitle: game.title,
+            gameCoverUrl: game.coverURL,
+            source: "search"
+        )
+        if success {
+            toastMessage = "Saved to Want to Play!"
+            withAnimation { showToast = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { showToast = false }
+            }
+        }
     }
 }
 

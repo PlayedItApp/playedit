@@ -176,6 +176,7 @@ struct FeedView: View {
             
             struct UserInfo: Decodable {
                 let username: String?
+                let avatar_url: String?
             }
         }
         
@@ -213,7 +214,7 @@ struct FeedView: View {
             // Fetch recent games from friends and self
             let rows: [FeedRow] = try await supabase.client
                 .from("user_games")
-                .select("id, user_id, game_id, rank_position, logged_at, games(title, cover_url), users(username)")
+                .select("id, user_id, game_id, rank_position, logged_at, games(title, cover_url), users(username, avatar_url)")
                 .in("user_id", values: feedUserIds)
                 .order("logged_at", ascending: false)
                 .limit(50)
@@ -270,6 +271,7 @@ struct FeedView: View {
                     userGameId: row.id,
                     userId: row.user_id,
                     username: row.users.username ?? "Friend",
+                    avatarURL: row.users.avatar_url,
                     gameId: row.game_id,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
@@ -315,6 +317,7 @@ struct FeedItem: Identifiable {
     let userGameId: String
     let userId: String
     let username: String
+    let avatarURL: String?
     let gameId: Int
     let gameTitle: String
     let gameCoverURL: String?
@@ -331,6 +334,8 @@ struct FeedItemRow: View {
     let onLikeTapped: () -> Void
     let onCommentTapped: () -> Void
     @State private var showGameDetail = false
+    @State private var toastMessage = ""
+    @State private var showToast = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -338,7 +343,7 @@ struct FeedItemRow: View {
             Button {
                 showGameDetail = true
             } label: {
-            HStack(spacing: 12) {
+                HStack(spacing: 12) {
                 // Cover art
                 AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
                     image
@@ -380,6 +385,36 @@ struct FeedItemRow: View {
                 }
                 
                 Spacer()
+                
+                // Profile photo
+                Group {
+                    if let avatarURL = item.avatarURL, let url = URL(string: avatarURL) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Circle()
+                                .fill(Color.primaryBlue.opacity(0.2))
+                                .overlay(
+                                    Text(String(item.username.prefix(1)).uppercased())
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor(.primaryBlue)
+                                )
+                        }
+                        .frame(width: 28, height: 28)
+                        .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(Color.primaryBlue.opacity(0.2))
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Text(String(item.username.prefix(1)).uppercased())
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.primaryBlue)
+                            )
+                    }
+                }
             }
             .padding(12)
             }
@@ -424,6 +459,32 @@ struct FeedItemRow: View {
                 .buttonStyle(.plain)
                 
                 Spacer()
+                                                
+                // Bookmark (only on friends' posts)
+                if item.userId.lowercased() != (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") {
+                    HStack(spacing: 6) {
+                        if showToast {
+                            Text(toastMessage)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundColor(.grayText)
+                                .transition(.opacity)
+                        }
+                        BookmarkButton(
+                            gameId: item.gameId,
+                            gameTitle: item.gameTitle,
+                            gameCoverUrl: item.gameCoverURL,
+                            source: "feed",
+                            sourceFriendId: item.userId,
+                            onToast: { message in
+                                toastMessage = message
+                                withAnimation { showToast = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation { showToast = false }
+                                }
+                            }
+                        )
+                    }
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -638,6 +699,70 @@ struct FeedGameDetailSheet: View {
         }
         
         isLoading = false
+    }
+}
+
+// MARK: - Bookmark Button
+struct BookmarkButton: View {
+    let gameId: Int
+    let gameTitle: String
+    let gameCoverUrl: String?
+    let source: String
+    var sourceFriendId: String? = nil
+    var onToast: ((String) -> Void)? = nil
+    
+    @ObservedObject private var manager = WantToPlayManager.shared
+    @State private var isRanked = false
+    
+    var body: some View {
+        let isWantToPlay = manager.myWantToPlayIds.contains(gameId)
+        
+        if !isRanked {
+            Button {
+                Task { await handleTap(isWantToPlay: isWantToPlay) }
+            } label: {
+                Image(systemName: isWantToPlay ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 18))
+                    .foregroundColor(isWantToPlay ? .accentOrange : .grayText)
+            }
+            .buttonStyle(.plain)
+            .task {
+                await checkIfRanked()
+            }
+        }
+    }
+    
+    private func handleTap(isWantToPlay: Bool) async {
+        if isWantToPlay {
+            let success = await manager.removeGame(gameId: gameId)
+            if success { onToast?("Removed") }
+        } else {
+            let success = await manager.addGame(
+                gameId: gameId,
+                gameTitle: gameTitle,
+                gameCoverUrl: gameCoverUrl,
+                source: source,
+                sourceFriendId: sourceFriendId
+            )
+            if success { onToast?("Saved!") }
+        }
+    }
+    
+    private func checkIfRanked() async {
+        guard let userId = SupabaseManager.shared.currentUser?.id else { return }
+        do {
+            let response: [UserGameWithRawgId] = try await SupabaseManager.shared.client
+                .from("user_games")
+                .select("game_id, games(rawg_id)")
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+            
+            let rankedIds = Set(response.compactMap { $0.games?.rawg_id })
+            isRanked = rankedIds.contains(gameId)
+        } catch {
+            print("❌ Error checking ranked status: \(error)")
+        }
     }
 }
 

@@ -169,10 +169,7 @@ struct GameDetailFromFriendView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Divider()
                         
-                        Text(notes)
-                            .font(.system(size: 15, design: .rounded))
-                            .foregroundColor(.slate)
-                            .fixedSize(horizontal: false, vertical: true)
+                        SpoilerTextView(notes, font: .system(size: 15, design: .rounded), color: .slate)
                     }
                     .padding(.top, 4)
                 }
@@ -227,10 +224,7 @@ struct GameDetailFromFriendView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Divider()
                             
-                            Text(notes)
-                                .font(.system(size: 15, design: .rounded))
-                                .foregroundColor(.slate)
-                                .fixedSize(horizontal: false, vertical: true)
+                            SpoilerTextView(notes, font: .system(size: 15, design: .rounded), color: .slate)
                         }
                         .padding(.top, 4)
                     }

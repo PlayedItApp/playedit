@@ -54,6 +54,7 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     @State private var pendingRequestCount = 0
     @State private var unreadNotificationCount = 0
+    @State private var showWhatsNew = false
     @ObservedObject var supabase = SupabaseManager.shared
     
     var body: some View {
@@ -92,10 +93,21 @@ struct MainTabView: View {
                 }
             }
         }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewView()
+        }
+        .onAppear {
+            if WhatsNewManager.shouldShow {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showWhatsNew = true
+                }
+            }
+        }
         .task {
             selectedTab = startTab
             await fetchPendingCount()
             await fetchUnreadNotificationCount()
+            await WantToPlayManager.shared.refreshMyIds()
         }
         .onChange(of: selectedTab) { _, _ in
             Task {
@@ -243,6 +255,9 @@ struct GameDetailSheet: View {
     @State private var oldRank: Int? = nil
     @State private var showRemoveConfirm = false
     @State private var isRemoving = false
+    @State private var isEditingNotes = false
+    @State private var editedNotes: String = ""
+    @State private var isSavingNotes = false
     
     var body: some View {
         NavigationStack {
@@ -300,15 +315,94 @@ struct GameDetailSheet: View {
                             )
                         }
                         
-                        if let notes = game.notes, !notes.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
+                        // Notes section
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
                                 Label("Notes", systemImage: "note.text")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundColor(.grayText)
                                 
-                                Text(notes)
-                                    .font(.system(size: 16, design: .rounded))
-                                    .foregroundColor(.slate)
+                                Spacer()
+                                
+                                if !isEditingNotes {
+                                    Button {
+                                        editedNotes = game.notes ?? ""
+                                        isEditingNotes = true
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: game.notes?.isEmpty ?? true ? "plus" : "pencil")
+                                                .font(.system(size: 11))
+                                            Text(game.notes?.isEmpty ?? true ? "Add" : "Edit")
+                                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        }
+                                        .foregroundColor(.primaryBlue)
+                                    }
+                                }
+                            }
+                            
+                            if isEditingNotes {
+                                TextEditor(text: $editedNotes)
+                                    .frame(minHeight: 100)
+                                    .padding(12)
+                                    .background(Color.lightGray)
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.silver, lineWidth: 1)
+                                    )
+                                    .overlay(
+                                        Group {
+                                            if editedNotes.isEmpty {
+                                                Text("Favorite moments? Hot takes? (optional)")
+                                                    .foregroundColor(.grayText)
+                                                    .padding(.leading, 16)
+                                                    .padding(.top, 20)
+                                            }
+                                        },
+                                        alignment: .topLeading
+                                    )
+                                
+                                SpoilerHint()
+                                
+                                HStack(spacing: 12) {
+                                    Button {
+                                        isEditingNotes = false
+                                        editedNotes = ""
+                                    } label: {
+                                        Text("Cancel")
+                                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                                            .foregroundColor(.grayText)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                    }
+                                    
+                                    Button {
+                                        Task { await saveNotes() }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            if isSavingNotes {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            } else {
+                                                Text("Save Notes")
+                                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                            }
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color.primaryBlue)
+                                        .cornerRadius(8)
+                                    }
+                                    .disabled(isSavingNotes)
+                                }
+                            } else if let notes = game.notes, !notes.isEmpty {
+                                SpoilerTextView(notes, font: .system(size: 16, design: .rounded), color: .slate)
+                            } else {
+                                Text("No notes yet — tap Add to write a review!")
+                                    .font(.system(size: 14, design: .rounded))
+                                    .foregroundColor(.grayText)
+                                    .italic()
                             }
                         }
                     }
@@ -607,6 +701,33 @@ struct GameDetailSheet: View {
             print("❌ Error removing game: \(error)")
             isRemoving = false
         }
+    }
+    
+    // MARK: - Save Notes
+    private func saveNotes() async {
+        isSavingNotes = true
+        
+        do {
+            let trimmed = editedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            try await supabase.client
+                .from("user_games")
+                .update(["notes": trimmed])
+                .eq("id", value: game.id)
+               
+                .execute()
+            
+            print("✅ Notes saved")
+            isEditingNotes = false
+            
+            // Dismiss and let the parent refresh to show updated notes
+            dismiss()
+            
+        } catch {
+            print("❌ Error saving notes: \(error)")
+        }
+        
+        isSavingNotes = false
     }
 }
 

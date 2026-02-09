@@ -7,6 +7,7 @@ struct GameLogView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     
     @State private var selectedPlatforms: Set<String> = []
+    @State private var customPlatform: String = ""
     @State private var notes: String = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -70,7 +71,7 @@ struct GameLogView: View {
                     
                     // Platform Selection
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Where'd you play it?")
+                        Text("Where'd you play it? (optional)")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundColor(.slate)
                         
@@ -92,6 +93,60 @@ struct GameLogView: View {
                                     } else {
                                         selectedPlatforms.insert(platform)
                                     }
+                                }
+                            }
+                        }
+                        
+                        // Custom platform
+                        HStack(spacing: 10) {
+                            TextField("Other platform...", text: $customPlatform)
+                                .font(.system(size: 14, design: .rounded))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.lightGray)
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.silver, lineWidth: 1)
+                                )
+                            
+                            Button {
+                                let trimmed = customPlatform.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                selectedPlatforms.insert(trimmed)
+                                customPlatform = ""
+                            } label: {
+                                Text("Add")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                    .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.silver : Color.primaryBlue)
+                                    .cornerRadius(8)
+                            }
+                            .disabled(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        
+                        // Show custom selections that aren't in the grid
+                        let customSelections = selectedPlatforms.filter { !availablePlatforms.contains($0) }
+                        if !customSelections.isEmpty {
+                            FlowLayout(spacing: 8) {
+                                ForEach(Array(customSelections).sorted(), id: \.self) { platform in
+                                    HStack(spacing: 4) {
+                                        Text(platform)
+                                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                                        Button {
+                                            selectedPlatforms.remove(platform)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 12))
+                                        }
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.primaryBlue)
+                                    .cornerRadius(16)
                                 }
                             }
                         }
@@ -124,6 +179,7 @@ struct GameLogView: View {
                                 },
                                 alignment: .topLeading
                             )
+                        SpoilerHint()
                     }
                     .padding(.horizontal, 20)
                     
@@ -166,8 +222,8 @@ struct GameLogView: View {
                                 .fontWeight(.semibold)
                         }
                     }
-                    .foregroundColor(selectedPlatforms.isEmpty ? .gray : .primaryBlue)
-                    .disabled(selectedPlatforms.isEmpty || isLoading)
+                    .foregroundColor(isLoading ? .gray : .primaryBlue)
+                    .disabled(isLoading)
                 }
             }
             .sheet(isPresented: $showComparison) {
@@ -446,7 +502,7 @@ struct GameLogView: View {
                 user_id: userId.uuidString,
                 game_id: gameId,
                 rank_position: position,
-                platform_played: Array(selectedPlatforms),
+                platform_played: selectedPlatforms.isEmpty ? [] : Array(selectedPlatforms),
                 notes: notes,
                 canonical_game_id: canonicalId
             )
@@ -493,6 +549,47 @@ struct PlatformButton: View {
 struct ExistingUserGame: Decodable {
     let id: String
     let rank_position: Int
+}
+
+// MARK: - Flow Layout
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = arrange(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(proposal: proposal, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
+        }
+    }
+    
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (positions: [CGPoint], size: CGSize) {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+        
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth && x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x)
+        }
+        
+        return (positions, CGSize(width: maxX, height: y + rowHeight))
+    }
 }
 
 #Preview {

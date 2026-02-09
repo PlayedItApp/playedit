@@ -346,7 +346,7 @@ struct FriendsView: View {
 }
 
 // MARK: - Friend Model
-struct Friend: Identifiable {
+struct Friend: Identifiable, Hashable {
     let id: String
     let friendshipId: String
     let username: String
@@ -1185,6 +1185,17 @@ struct FriendGameRow: View {
             }
             
             Spacer()
+            
+            // Bookmark (only if not in my list)
+            if myRank == nil {
+                BookmarkButton(
+                    gameId: game.gameId,
+                    gameTitle: game.gameTitle,
+                    gameCoverUrl: game.gameCoverURL,
+                    source: "profile",
+                    sourceFriendId: game.userId
+                )
+            }
         }
         .padding(.vertical, 8)
     }

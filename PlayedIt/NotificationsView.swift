@@ -5,6 +5,9 @@ struct NotificationsView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @State private var notifications: [AppNotification] = []
     @State private var isLoading = true
+    @State private var selectedFeedItem: FeedItem?
+    @State private var selectedFriend: Friend?
+    @State private var showComments = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -70,8 +73,10 @@ struct NotificationsView: View {
             LazyVStack(spacing: 0) {
                 ForEach(notifications) { notification in
                     NotificationRow(notification: notification)
+                        .contentShape(Rectangle())
                         .onTapGesture {
                             markAsRead(notification)
+                            handleNotificationTap(notification)
                         }
                     
                     Divider()
@@ -81,6 +86,14 @@ struct NotificationsView: View {
         }
         .refreshable {
             await fetchNotifications()
+        }
+        .sheet(isPresented: $showComments) {
+            if let feedItem = selectedFeedItem {
+                CommentsSheet(feedItem: feedItem, onDismiss: {})
+            }
+        }
+        .navigationDestination(item: $selectedFriend) { friend in
+            FriendProfileView(friend: friend)
         }
     }
     
@@ -128,7 +141,9 @@ struct NotificationsView: View {
                 AppNotification(
                     id: row.id,
                     type: NotificationType(rawValue: row.type) ?? .like,
+                    fromUserId: row.from_user_id,
                     fromUsername: row.from_user.username ?? "Someone",
+                    userGameId: row.user_game_id,
                     gameTitle: row.user_games?.games.title,
                     gameCoverURL: row.user_games?.games.cover_url,
                     isRead: row.is_read,
@@ -160,7 +175,9 @@ struct NotificationsView: View {
                     notifications[index] = AppNotification(
                         id: notification.id,
                         type: notification.type,
+                        fromUserId: notification.fromUserId,
                         fromUsername: notification.fromUsername,
+                        userGameId: notification.userGameId,
                         gameTitle: notification.gameTitle,
                         gameCoverURL: notification.gameCoverURL,
                         isRead: true,
@@ -191,7 +208,9 @@ struct NotificationsView: View {
                     AppNotification(
                         id: notification.id,
                         type: notification.type,
+                        fromUserId: notification.fromUserId,
                         fromUsername: notification.fromUsername,
+                        userGameId: notification.userGameId,
                         gameTitle: notification.gameTitle,
                         gameCoverURL: notification.gameCoverURL,
                         isRead: true,
@@ -202,6 +221,41 @@ struct NotificationsView: View {
             } catch {
                 print("❌ Error marking all as read: \(error)")
             }
+        }
+    }
+    
+    private func handleNotificationTap(_ notification: AppNotification) {
+        switch notification.type {
+        case .like, .comment:
+            // Open comments sheet for this post
+            guard let userGameId = notification.userGameId else { return }
+            
+            // Build a minimal FeedItem to pass to CommentsSheet
+            selectedFeedItem = FeedItem(
+                id: userGameId,
+                userGameId: userGameId,
+                userId: supabase.currentUser?.id.uuidString ?? "",
+                username: "You",
+                avatarURL: nil,
+                gameId: 0,
+                gameTitle: notification.gameTitle ?? "Unknown Game",
+                gameCoverURL: notification.gameCoverURL,
+                rankPosition: 0,
+                loggedAt: nil,
+                likeCount: 0,
+                commentCount: 0,
+                isLikedByMe: false
+            )
+            showComments = true
+            
+        case .friendRequest, .friendAccepted:
+            // Navigate to the friend's profile
+            selectedFriend = Friend(
+                id: notification.fromUserId,
+                friendshipId: "",
+                username: notification.fromUsername,
+                userId: notification.fromUserId
+            )
         }
     }
 }
@@ -218,7 +272,9 @@ enum NotificationType: String {
 struct AppNotification: Identifiable {
     let id: String
     let type: NotificationType
+    let fromUserId: String
     let fromUsername: String
+    let userGameId: String?
     let gameTitle: String?
     let gameCoverURL: String?
     let isRead: Bool

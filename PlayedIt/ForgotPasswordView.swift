@@ -103,7 +103,7 @@ struct ForgotPasswordView: View {
                 }
             }
         }
-        .navigationBarBackButtonHidden(emailSent)
+        .navigationBarBackButtonHidden(true)
         .onAppear {
             if !prefillEmail.isEmpty && email.isEmpty {
                 email = prefillEmail

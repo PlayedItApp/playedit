@@ -19,7 +19,10 @@ struct ProfileView: View {
     @State private var selectedImage: UIImage?
     @State private var hasAppleLinked = false
     @State private var currentNonce: String?
+    @State private var appleLinkDelegate: AppleLinkDelegate?
     @AppStorage("startTab") private var startTab = 0
+    @State private var showGameSearch = false
+    @State private var selectedListTab = 0
     
     var body: some View {
         NavigationStack {
@@ -137,34 +140,44 @@ struct ProfileView: View {
                     Divider()
                         .padding(.horizontal, 20)
                     
-                    // Ranked Games List
+                    // Tab Picker
+                    Picker("List", selection: $selectedListTab) {
+                        Text("Ranked").tag(0)
+                        Text("Want to Play").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 20)
+                    
+                    // List Content
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("My Rankings")
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
-                            .padding(.horizontal, 20)
-                        
-                        if isLoadingGames {
-                            ProgressView()
+                        if selectedListTab == 0 {
+                            // Ranked Games
+                            if isLoadingGames {
+                                ProgressView()
+                                    .padding(.top, 20)
+                            } else if rankedGames.isEmpty {
+                                VStack(spacing: 8) {
+                                    Text("No games ranked yet")
+                                        .font(.body)
+                                        .foregroundColor(.grayText)
+                                    Text("Your list is waiting. What's the first game?")
+                                        .font(.caption)
+                                        .foregroundColor(.silver)
+                                }
+                                .frame(maxWidth: .infinity)
                                 .padding(.top, 20)
-                        } else if rankedGames.isEmpty {
-                            VStack(spacing: 8) {
-                                Text("No games ranked yet")
-                                    .font(.body)
-                                    .foregroundColor(.grayText)
-                                Text("Your list is waiting. What's the first game?")
-                                    .font(.caption)
-                                    .foregroundColor(.silver)
+                            } else {
+                                ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
+                                    RankedGameRow(rank: index + 1, game: game) {
+                                        Task { await fetchRankedGames() }
+                                    }
+                                }
+                                .padding(.horizontal, 20)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 20)
                         } else {
-                            ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
-                                                            RankedGameRow(rank: index + 1, game: game) {
-                                                                Task { await fetchRankedGames() }
-                                                            }
-                                                        }
-                            .padding(.horizontal, 20)
+                            // Want to Play
+                            WantToPlayListView()
+                                .padding(.horizontal, 20)
                         }
                     }
                     .padding(.top, 8)
@@ -172,7 +185,20 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showGameSearch) {
+                GameSearchView()
+            }
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        showGameSearch = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primaryBlue)
+                    }
+                }
+                
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         if !hasAppleLinked {
@@ -443,8 +469,16 @@ struct ProfileView: View {
     
     // MARK: - Apple ID Linking
     private func triggerAppleLinking() {
-        Task {
-            let success = await supabase.linkAppleID()
+        let nonce = randomNonceString()
+        currentNonce = nonce
+        
+        let appleIDProvider = ASAuthorizationAppleIDProvider()
+        let request = appleIDProvider.createRequest()
+        request.requestedScopes = [.email]
+        request.nonce = sha256(nonce)
+        
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        let delegate = AppleLinkDelegate(nonce: nonce) { success in
             if success {
                 hasAppleLinked = true
                 message = "Apple ID linked!"
@@ -453,6 +487,66 @@ struct ProfileView: View {
                 }
             }
         }
+        appleLinkDelegate = delegate
+        controller.delegate = delegate
+        print("🍎 Performing Apple auth request...")
+        controller.performRequests()
+    }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("SecRandomCopyBytes failed with OSStatus \(errorCode)")
+        }
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(randomBytes.map { charset[Int($0) % charset.count] })
+    }
+
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        return hashedData.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - Apple Link Delegate
+class AppleLinkDelegate: NSObject, ASAuthorizationControllerDelegate {
+    let nonce: String
+    let completion: (Bool) -> Void
+    
+    init(nonce: String, completion: @escaping (Bool) -> Void) {
+        self.nonce = nonce
+        self.completion = completion
+    }
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        print("🍎 Apple auth completed successfully")
+        guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let identityTokenData = appleIDCredential.identityToken,
+              let idToken = String(data: identityTokenData, encoding: .utf8) else {
+            print("❌ Missing Apple credential data")
+            completion(false)
+            return
+        }
+        print("🍎 Got Apple ID token, calling Edge Function...")
+        
+        Task {
+            let success = await SupabaseManager.shared.linkAppleID(idToken: idToken, nonce: nonce)
+            print("🍎 Edge Function result: \(success)")
+            if let error = await SupabaseManager.shared.errorMessage {
+                print("🍎 Error message: \(error)")
+            }
+            await MainActor.run {
+                completion(success)
+            }
+        }
+    }
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        print("❌ Apple linking failed: \(error)")
+        completion(false)
     }
 }
 
