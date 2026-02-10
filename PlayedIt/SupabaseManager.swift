@@ -126,20 +126,74 @@ class SupabaseManager: ObservableObject {
         }
     }
     
-    // MARK: - Reset Password
-    func resetPassword(email: String) async -> Bool {
+    // MARK: - Custom Password Reset (bypasses Supabase email)
+    func requestPasswordReset(email: String) async -> Bool {
         isLoading = true
         errorMessage = nil
         
         do {
-            try await client.auth.resetPasswordForEmail(
-                email,
-                redirectTo: URL(string: "playedit://reset-callback")
-            )
-            isLoading = false
-            return true
+            let url = URL(string: "\(Config.supabaseURL)/functions/v1/request-reset")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(["email": email])
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
+            }
+            
+            if httpResponse.statusCode == 200 {
+                isLoading = false
+                return true
+            } else {
+                let result = try? JSONDecoder().decode([String: String].self, from: data)
+                errorMessage = result?["error"] ?? "Something went wrong. Try again?"
+                isLoading = false
+                return false
+            }
         } catch {
-            errorMessage = parseError(error)
+            errorMessage = "Can't connect right now. Check your internet and try again?"
+            isLoading = false
+            return false
+        }
+    }
+    
+    func verifyResetCode(email: String, code: String, newPassword: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let url = URL(string: "\(Config.supabaseURL)/functions/v1/verify-reset")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let body: [String: String] = [
+                "email": email,
+                "code": code,
+                "new_password": newPassword
+            ]
+            request.httpBody = try JSONEncoder().encode(body)
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
+            }
+            
+            if httpResponse.statusCode == 200 {
+                isLoading = false
+                return true
+            } else {
+                let result = try? JSONDecoder().decode([String: String].self, from: data)
+                errorMessage = result?["error"] ?? "Something went wrong. Try again?"
+                isLoading = false
+                return false
+            }
+        } catch {
+            errorMessage = "Can't connect right now. Check your internet and try again?"
             isLoading = false
             return false
         }

@@ -23,6 +23,8 @@ struct ProfileView: View {
     @AppStorage("startTab") private var startTab = 0
     @State private var showGameSearch = false
     @State private var selectedListTab = 0
+    @State private var showResetRankings = false
+    @State private var showResetFlow = false
     
     var body: some View {
         NavigationStack {
@@ -188,6 +190,19 @@ struct ProfileView: View {
             .sheet(isPresented: $showGameSearch) {
                 GameSearchView()
             }
+            .alert("Start fresh?", isPresented: $showResetRankings) {
+                Button("Yeah, let's start over", role: .destructive) {
+                    showResetFlow = true
+                }
+                Button("Nevermind", role: .cancel) { }
+            } message: {
+                Text("This will reset all your rankings and take you through the comparison flow again from the top. Your games, notes, and platforms stay. Just the order gets wiped. This can't be undone!")
+            }
+            .fullScreenCover(isPresented: $showResetFlow) {
+                ResetRankingsView(games: rankedGames) {
+                    Task { await fetchRankedGames() }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -208,7 +223,6 @@ struct ProfileView: View {
                                 Label("Link Apple ID", systemImage: "apple.logo")
                             }
                         }
-                        
                         Menu {
                             Button { startTab = 0 } label: {
                                 HStack {
@@ -238,7 +252,17 @@ struct ProfileView: View {
                             Label("Send Feedback", systemImage: "bubble.left.and.bubble.right")
                         }
                         
-                        Button(role: .destructive) {
+                        if rankedGames.count >= 2 {
+                            Button(role: .destructive) {
+                                showResetRankings = true
+                            } label: {
+                                Label("Reset Rankings", systemImage: "arrow.counterclockwise")
+                            }
+                            
+                            Divider()
+                        }
+                        
+                        Button {
                             Task { await supabase.signOut() }
                         } label: {
                             Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")

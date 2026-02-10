@@ -232,9 +232,9 @@ struct GameLogView: View {
                         newGame: game,
                         existingGames: existingUserGames,
                         onComplete: { position in
+                            dismiss()
                             Task {
                                 await saveUserGame(gameId: gameId, position: position)
-                                dismiss()
                             }
                         }
                     )

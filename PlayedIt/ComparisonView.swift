@@ -3,6 +3,7 @@ import SwiftUI
 struct ComparisonView: View {
     let newGame: Game
     let existingGames: [UserGame]
+    var skipCelebration: Bool = false
     let onComplete: (Int) -> Void
     
     @Environment(\.dismiss) var dismiss
@@ -98,12 +99,19 @@ struct ComparisonView: View {
                         .padding(.bottom, 24)
                     
                 } else if let position = finalPosition {
-                    Spacer()
-                    RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1) {
-                        onComplete(position)
-                        dismiss()
+                    if skipCelebration {
+                        Color.clear.onAppear {
+                            onComplete(position)
+                            dismiss()
+                        }
+                    } else {
+                        Spacer()
+                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1) {
+                            onComplete(position)
+                            dismiss()
+                        }
+                        Spacer()
                     }
-                    Spacer()
                 }
             }
             .navigationTitle("Rank It")

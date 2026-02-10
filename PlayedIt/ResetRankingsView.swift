@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 //
 //  ResetRankingsView.swift
 //  PlayedIt
@@ -6,3 +7,522 @@
 //
 
 import Foundation
+=======
+import SwiftUI
+import Supabase
+
+struct ResetRankingsView: View {
+    let games: [UserGame]
+    let onComplete: () -> Void
+    
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var supabase = SupabaseManager.shared
+    
+    @State private var shuffledGames: [UserGame] = []
+    @State private var rankedSoFar: [UserGame] = []
+    @State private var currentGameIndex = 0
+    @State private var showIntro = true
+    @State private var isResetting = false
+    @State private var isComplete = false
+    @State private var showCancelAlert = false
+    @State private var errorMessage: String?
+    
+    // Inline comparison state
+    @State private var isComparing = false
+    @State private var lowIndex = 0
+    @State private var highIndex = 0
+    @State private var comparisonCount = 0
+    @State private var currentOpponent: UserGame?
+    @State private var showCards = false
+    @State private var selectedSide: String? = nil
+    @State private var comparisonHistory: [ComparisonState] = []
+    
+    private let maxComparisons = 10
+    
+    private let prompts = [
+        "Which did you enjoy more?",
+        "Tough call... which one wins?",
+        "Head to head: your pick?",
+        "If you could only replay one..."
+    ]
+    
+    struct ComparisonState {
+        let lowIndex: Int
+        let highIndex: Int
+        let comparisonCount: Int
+    }
+    
+    var body: some View {
+        NavigationStack {
+            VStack {
+                if showIntro {
+                    introView
+                } else if isComplete {
+                    completionView
+                } else if isComparing, let opponent = currentOpponent, let currentGame = currentGame {
+                    comparisonView(currentGame: currentGame, opponent: opponent)
+                } else if let currentGame = currentGame {
+                    // Brief transition showing which game is next
+                    waitingView(currentGame: currentGame)
+                }
+            }
+            .navigationTitle(showIntro ? "" : "Reset Rankings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if !isComplete {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            showCancelAlert = true
+                        }
+                    }
+                    
+                    if isComparing && !comparisonHistory.isEmpty {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button {
+                                undoLastComparison()
+                            } label: {
+                                Image(systemName: "arrow.uturn.backward")
+                            }
+                            .foregroundColor(.primaryBlue)
+                        }
+                    }
+                }
+            }
+            .alert("Cancel Re-ranking?", isPresented: $showCancelAlert) {
+                Button("Keep Ranking", role: .cancel) { }
+                Button("Cancel", role: .destructive) {
+                    dismiss()
+                }
+            } message: {
+                Text("Your rankings have been wiped. If you cancel now, your games will be unranked until you finish.")
+            }
+        }
+    }
+    
+    // MARK: - Subviews
+    
+    private var introView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Text("🎮")
+                .font(.system(size: 60))
+            
+            Text("Round two!")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(.slate)
+            
+            Text("Same games, fresh rankings. Let's see if your opinions have changed.")
+                .font(.system(size: 17, design: .rounded))
+                .foregroundColor(.grayText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Text("\(games.count) games to rank")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundColor(.primaryBlue)
+            
+            Spacer()
+            
+            Button {
+                Task { await startReset() }
+            } label: {
+                if isResetting {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                } else {
+                    Text("Let's rank 'em!")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(isResetting)
+            .padding(.horizontal, 40)
+            .padding(.bottom, 40)
+        }
+    }
+    
+    private var completionView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Text("✨")
+                .font(.system(size: 60))
+            
+            Text("All done!")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(.slate)
+            
+            Text("Your rankings have been rebuilt from scratch.")
+                .font(.system(size: 17, design: .rounded))
+                .foregroundColor(.grayText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Spacer()
+            
+            Button {
+                onComplete()
+                dismiss()
+            } label: {
+                Text("See My Rankings")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, 40)
+            .padding(.bottom, 40)
+        }
+    }
+    
+    private func comparisonView(currentGame: UserGame, opponent: UserGame) -> some View {
+        VStack(spacing: 16) {
+            // Progress
+            VStack(spacing: 4) {
+                Text("Ranking game \(currentGameIndex + 1) of \(shuffledGames.count)")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundColor(.grayText)
+                
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.lightGray)
+                            .frame(height: 6)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.accentOrange)
+                            .frame(width: geo.size.width * CGFloat(currentGameIndex) / CGFloat(shuffledGames.count), height: 6)
+                            .animation(.easeInOut(duration: 0.3), value: currentGameIndex)
+                    }
+                }
+                .frame(height: 6)
+                .padding(.horizontal, 40)
+            }
+            .padding(.top, 12)
+            
+            // Prompt
+            Text(prompts[comparisonCount % prompts.count])
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundColor(.slate)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            
+            // Head-to-head cards
+            HStack(spacing: 8) {
+                GameComparisonCard(
+                    title: currentGame.gameTitle,
+                    coverURL: currentGame.gameCoverURL,
+                    year: String(currentGame.gameReleaseDate?.prefix(4) ?? ""),
+                    isHighlighted: selectedSide == "left"
+                ) {
+                    selectGame(side: "left")
+                }
+                .opacity(showCards ? 1 : 0)
+                .offset(x: showCards ? 0 : -50)
+                .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.1), value: showCards)
+                
+                PixelVS()
+                    .opacity(showCards ? 1 : 0)
+                    .scaleEffect(showCards ? 1 : 0.5)
+                    .animation(.spring(response: 0.4).delay(0.2), value: showCards)
+                
+                GameComparisonCard(
+                    title: opponent.gameTitle,
+                    coverURL: opponent.gameCoverURL,
+                    year: String(opponent.gameReleaseDate?.prefix(4) ?? ""),
+                    isHighlighted: selectedSide == "right"
+                ) {
+                    selectGame(side: "right")
+                }
+                .opacity(showCards ? 1 : 0)
+                .offset(x: showCards ? 0 : 50)
+                .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.15), value: showCards)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 16)
+            
+            Spacer()
+            
+            Text("Tap the game you liked better")
+                .font(.caption)
+                .foregroundColor(.grayText)
+                .padding(.bottom, 24)
+        }
+    }
+    
+    private func waitingView(currentGame: UserGame) -> some View {
+        VStack(spacing: 12) {
+            // Progress
+            VStack(spacing: 4) {
+                Text("Ranking game \(currentGameIndex + 1) of \(shuffledGames.count)")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundColor(.grayText)
+                
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.lightGray)
+                            .frame(height: 6)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.accentOrange)
+                            .frame(width: geo.size.width * CGFloat(currentGameIndex) / CGFloat(shuffledGames.count), height: 6)
+                            .animation(.easeInOut(duration: 0.3), value: currentGameIndex)
+                    }
+                }
+                .frame(height: 6)
+                .padding(.horizontal, 40)
+            }
+            .padding(.top, 16)
+            
+            Spacer()
+            
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+            
+            Spacer()
+            
+            if let error = errorMessage {
+                Text(error)
+                    .font(.callout)
+                    .foregroundColor(.error)
+                    .padding(.horizontal, 20)
+            }
+        }
+    }
+    
+    // MARK: - Current Game
+    
+    private var currentGame: UserGame? {
+        guard currentGameIndex < shuffledGames.count else { return nil }
+        return shuffledGames[currentGameIndex]
+    }
+    
+    // MARK: - Comparison Logic
+    
+    private func startComparisonForCurrentGame() {
+        guard let _ = currentGame else { return }
+        
+        comparisonHistory = []
+        
+        if rankedSoFar.isEmpty {
+            // First game, no comparison needed
+            Task { await placeGame(shuffledGames[currentGameIndex], at: 1) }
+            return
+        }
+        
+        lowIndex = 0
+        highIndex = rankedSoFar.count - 1
+        comparisonCount = 0
+        isComparing = true
+        
+        nextComparison()
+    }
+    
+    private func nextComparison() {
+        showCards = false
+        selectedSide = nil
+        
+        if lowIndex > highIndex || comparisonCount >= maxComparisons {
+            let position = lowIndex + 1
+            isComparing = false
+            currentOpponent = nil
+            Task { await placeGame(shuffledGames[currentGameIndex], at: position) }
+            return
+        }
+        
+        let midIndex = (lowIndex + highIndex) / 2
+        currentOpponent = rankedSoFar[midIndex]
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            showCards = true
+        }
+    }
+    
+    private func selectGame(side: String) {
+        selectedSide = side
+        
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            comparisonHistory.append(ComparisonState(
+                lowIndex: lowIndex,
+                highIndex: highIndex,
+                comparisonCount: comparisonCount
+            ))
+            
+            let midIndex = (lowIndex + highIndex) / 2
+            if side == "left" {
+                highIndex = midIndex - 1
+            } else {
+                lowIndex = midIndex + 1
+            }
+            comparisonCount += 1
+            nextComparison()
+        }
+    }
+    
+    private func undoLastComparison() {
+        guard let lastState = comparisonHistory.popLast() else { return }
+        lowIndex = lastState.lowIndex
+        highIndex = lastState.highIndex
+        comparisonCount = lastState.comparisonCount
+        nextComparison()
+        
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
+    
+    // MARK: - Start Reset
+    
+    private func startReset() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        isResetting = true
+        
+        do {
+            try await supabase.client.rpc("reset_user_rankings", params: ["p_user_id": userId.uuidString])
+                .execute()
+            
+            print("✅ All rank positions wiped")
+            
+            shuffledGames = games.shuffled()
+            rankedSoFar = []
+            currentGameIndex = 0
+            showIntro = false
+            isResetting = false
+            
+            // First game goes straight to #1
+            if !shuffledGames.isEmpty {
+                startComparisonForCurrentGame()
+            }
+            
+        } catch {
+            print("❌ Error resetting ranks: \(error)")
+            errorMessage = "Couldn't reset rankings. Try again?"
+            isResetting = false
+        }
+    }
+    
+    // MARK: - Place Game at Position
+    
+    private func placeGame(_ game: UserGame, at position: Int) async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            struct GameToShift: Decodable {
+                let id: String
+                let rank_position: Int
+            }
+            
+            let gamesToShift: [GameToShift] = try await supabase.client
+                .from("user_games")
+                .select("id, rank_position")
+                .eq("user_id", value: userId.uuidString)
+                .gte("rank_position", value: position)
+                .order("rank_position", ascending: false)
+                .execute()
+                .value
+            
+            for g in gamesToShift {
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": g.rank_position + 1])
+                    .eq("id", value: g.id)
+                    .execute()
+            }
+            
+            try await supabase.client
+                .from("user_games")
+                .update(["rank_position": position])
+                .eq("id", value: game.id)
+                .execute()
+            
+            print("✅ Placed \(game.gameTitle) at #\(position)")
+            
+            // Update local state
+            var updatedGame = game
+            updatedGame.rankPosition = position
+            
+            rankedSoFar = rankedSoFar.map { g in
+                var mutable = g
+                if mutable.rankPosition >= position {
+                    mutable.rankPosition += 1
+                }
+                return mutable
+            }
+            rankedSoFar.append(updatedGame)
+            rankedSoFar.sort { $0.rankPosition < $1.rankPosition }
+            
+            // Move to next game
+            currentGameIndex += 1
+            
+            if currentGameIndex >= shuffledGames.count {
+                await postFeedEntry()
+                isComplete = true
+            } else {
+                // Immediately start comparison for next game — no sheet dismiss/present
+                startComparisonForCurrentGame()
+            }
+            
+        } catch {
+            print("❌ Error placing game: \(error)")
+            errorMessage = "Something went wrong. Try again?"
+        }
+    }
+    
+    // MARK: - Post Feed Entry
+    
+    private func postFeedEntry() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        guard games.count >= 2 else { return }
+        
+        do {
+            struct ActivityFeedInsert: Encodable {
+                let user_id: String
+                let activity_type: String
+            }
+            
+            struct ActivityFeedResponse: Decodable {
+                let id: String
+            }
+            
+            let activityResponse: ActivityFeedResponse = try await supabase.client
+                .from("activity_feed")
+                .insert(ActivityFeedInsert(
+                    user_id: userId.uuidString,
+                    activity_type: "reset_rankings"
+                ))
+                .select("id")
+                .single()
+                .execute()
+                .value
+            
+            struct FeedPostInsert: Encodable {
+                let user_id: String
+                let post_type: String
+                let activity_feed_id: String
+            }
+            
+            try await supabase.client
+                .from("feed_posts")
+                .insert(FeedPostInsert(
+                    user_id: userId.uuidString,
+                    post_type: "reset_rankings",
+                    activity_feed_id: activityResponse.id
+                ))
+                .execute()
+            
+            print("✅ Posted reset rankings feed entry")
+        } catch {
+            print("❌ Error posting feed entry: \(error)")
+        }
+    }
+}
+>>>>>>> ce99902 (various fixed)

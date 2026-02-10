@@ -5,7 +5,6 @@ import Supabase
 
 @main
 struct PlayedItApp: App {
-    @State private var showResetPassword = false
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -24,15 +23,6 @@ struct PlayedItApp: App {
             WindowGroup {
                 ContentView()
                     .preferredColorScheme(.light)
-                    .onOpenURL { url in
-                        Task {
-                            _ = try? await SupabaseManager.shared.client.auth.session(from: url)
-                            showResetPassword = true
-                        }
-                    }
-                    .sheet(isPresented: $showResetPassword) {
-                        ResetPasswordView()
-                    }
             }
             .modelContainer(sharedModelContainer)
         }

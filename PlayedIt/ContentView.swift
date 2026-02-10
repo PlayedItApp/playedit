@@ -99,9 +99,8 @@ struct MainTabView: View {
             await fetchUnreadNotificationCount()
             await WantToPlayManager.shared.refreshMyIds()
         }
-        .onChange(of: selectedTab) { _, _ in
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             Task {
-                await fetchPendingCount()
                 await fetchUnreadNotificationCount()
             }
         }
@@ -207,6 +206,7 @@ struct RankedGameRow: View {
                     .foregroundColor(.silver)
             }
             .padding(12)
+            .contentShape(Rectangle())
             .background(Color.white)
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
@@ -839,7 +839,6 @@ struct GameDetailSheet: View {
                 print("✅ Platforms saved")
                 isEditingPlatforms = false
                 customPlatform = ""
-                dismiss()
                 
             } catch {
                 print("❌ Error saving platforms: \(error)")
@@ -864,9 +863,6 @@ struct GameDetailSheet: View {
             
             print("✅ Notes saved")
             isEditingNotes = false
-            
-            // Dismiss and let the parent refresh to show updated notes
-            dismiss()
             
         } catch {
             print("❌ Error saving notes: \(error)")

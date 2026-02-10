@@ -116,6 +116,9 @@ struct FriendsView: View {
         .refreshable {
             await fetchFriends()
         }
+        .onAppear {
+            Task { await fetchFriends() }
+        }
     }
     
     private var addFriendSheet: some View {

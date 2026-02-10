@@ -15,9 +15,13 @@ struct SignUpView: View {
     }
     
     var isFormValid: Bool {
+        !email.isEmpty && !username.isEmpty && !password.isEmpty && password.count >= 8
+    }
+    /*
+    var isFormValid: Bool {
         !email.isEmpty && !username.isEmpty && !password.isEmpty && passwordsMatch
     }
-    
+    */
     var body: some View {
         ZStack {
             Color.white
@@ -46,21 +50,6 @@ struct SignUpView: View {
                     
                     // Form
                     VStack(spacing: 16) {
-                        // Email
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Email")
-                                .font(.callout)
-                                .fontWeight(.medium)
-                                .foregroundColor(.slate)
-                            
-                            TextField("your@email.com", text: $email)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                                .playedItTextField()
-                        }
-                        
                         // Username
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Username")
@@ -71,12 +60,26 @@ struct SignUpView: View {
                             TextField("coolplayer42", text: $username)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                                .textContentType(.username)
                                 .playedItTextField()
                             
                             Text("This is how friends will find you")
                                 .font(.caption)
                                 .foregroundColor(.grayText)
+                        }
+                        
+                        // Email
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Email")
+                                .font(.callout)
+                                .fontWeight(.medium)
+                                .foregroundColor(.slate)
+                            
+                            TextField("your@email.com", text: $email)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textContentType(.username)
+                                .keyboardType(.emailAddress)
+                                .playedItTextField()
                         }
                         
                         // Password
@@ -87,10 +90,10 @@ struct SignUpView: View {
                                 .foregroundColor(.slate)
                             
                             SecureField("At least 8 characters", text: $password)
-                                .textContentType(.newPassword)
+                                .textContentType(.password)
                                 .playedItTextField()
                         }
-                        
+                        /*
                         // Confirm Password
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Confirm Password")
@@ -99,7 +102,7 @@ struct SignUpView: View {
                                 .foregroundColor(.slate)
                             
                             SecureField("Type it again", text: $confirmPassword)
-                                .textContentType(.newPassword)
+                                .textContentType(.password)
                                 .playedItTextField()
                             
                             // Password match indicator
@@ -113,6 +116,7 @@ struct SignUpView: View {
                                 }
                             }
                         }
+                         */
                     }
                     .padding(.horizontal, 24)
                     .opacity(isAnimating ? 1.0 : 0.0)

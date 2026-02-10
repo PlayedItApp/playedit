@@ -24,29 +24,44 @@ struct CommentsSheet: View {
             VStack(spacing: 0) {
                 // Post header
                 HStack(spacing: 12) {
-                    AsyncImage(url: URL(string: feedItem.gameCoverURL ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.lightGray)
+                    if feedItem.gameCoverURL != nil {
+                        AsyncImage(url: URL(string: feedItem.gameCoverURL ?? "")) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color.lightGray)
+                        }
+                        .frame(width: 40, height: 54)
+                        .cornerRadius(4)
+                        .clipped()
                     }
-                    .frame(width: 40, height: 54)
-                    .cornerRadius(4)
-                    .clipped()
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(feedItem.username) ranked")
-                            .font(.caption)
-                            .foregroundColor(.grayText)
-                        Text(feedItem.gameTitle)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
-                            .lineLimit(1)
-                        Text("at #\(feedItem.rankPosition)")
-                            .font(.caption)
-                            .foregroundColor(.primaryBlue)
+                        if feedItem.gameTitle == "Reset Rankings" {
+                            HStack(spacing: 4) {
+                                Text(feedItem.username)
+                                Text(feedItem.username)
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.primaryBlue)
+                                Text("rebuilt their rankings")
+                            }
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundColor(.slate)
+                        } else {
+                            Text("\(feedItem.username) ranked")
+                                .font(.caption)
+                                .foregroundColor(.grayText)
+                            Text(feedItem.gameTitle)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundColor(.slate)
+                                .lineLimit(1)
+                            Text("at #\(feedItem.rankPosition ?? 0)")
+                                .font(.caption)
+                                .foregroundColor(.primaryBlue)
+                        }
                     }
                     
                     Spacer()
@@ -198,7 +213,7 @@ struct CommentsSheet: View {
             let data: [CommentData] = try await supabase.client
                 .from("feed_comments")
                 .select("id, user_id, content, created_at, users(username, avatar_url)")
-                .eq("user_game_id", value: feedItem.userGameId)
+                .eq("feed_post_id", value: feedItem.feedPostId)
                 .order("created_at", ascending: true)
                 .execute()
                 .value
@@ -232,13 +247,21 @@ struct CommentsSheet: View {
         
         Task {
             do {
+                struct CommentInsert: Encodable {
+                    let feed_post_id: String
+                    let user_game_id: String?
+                    let user_id: String
+                    let content: String
+                }
+                
                 try await supabase.client
                     .from("feed_comments")
-                    .insert([
-                        "user_game_id": feedItem.userGameId,
-                        "user_id": userId.uuidString,
-                        "content": content
-                    ])
+                    .insert(CommentInsert(
+                        feed_post_id: feedItem.feedPostId,
+                        user_game_id: feedItem.userGameId.isEmpty ? nil : feedItem.userGameId,
+                        user_id: userId.uuidString,
+                        content: content
+                    ))
                     .execute()
                 
                 newComment = ""
@@ -254,49 +277,49 @@ struct CommentsSheet: View {
     }
     
     private func deleteComment(_ comment: FeedComment) {
-        Task {
-            do {
-                try await supabase.client
-                    .from("feed_comments")
-                    .delete()
-                    .eq("id", value: comment.id)
-                    .execute()
-                
-                await fetchComments()
-                
-            } catch {
-                print("❌ Error deleting comment: \(error)")
+            Task {
+                do {
+                    try await supabase.client
+                        .from("feed_comments")
+                        .delete()
+                        .eq("id", value: comment.id)
+                        .execute()
+                    
+                    await fetchComments()
+                    
+                } catch {
+                    print("❌ Error deleting comment: \(error)")
+                }
             }
         }
-    }
     
     private func saveEdit() {
-        guard let comment = editingComment else { return }
-        let content = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
-        
-        isSending = true
-        
-        Task {
-            do {
-                try await supabase.client
-                    .from("feed_comments")
-                    .update(["content": content])
-                    .eq("id", value: comment.id)
-                    .execute()
-                
-                isInputFocused = false
-                await fetchComments()
-                editingComment = nil
-                editText = ""
-                
-            } catch {
-                print("❌ Error editing comment: \(error)")
-            }
+            guard let comment = editingComment else { return }
+            let content = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !content.isEmpty else { return }
             
-            isSending = false
+            isSending = true
+            
+            Task {
+                do {
+                    try await supabase.client
+                        .from("feed_comments")
+                        .update(["content": content])
+                        .eq("id", value: comment.id)
+                        .execute()
+                    
+                    isInputFocused = false
+                    await fetchComments()
+                    editingComment = nil
+                    editText = ""
+                    
+                } catch {
+                    print("❌ Error editing comment: \(error)")
+                }
+                
+                isSending = false
+            }
         }
-    }
 }
 
 // MARK: - Comment Model
@@ -433,6 +456,7 @@ struct CommentRowView: View {
     CommentsSheet(
         feedItem: FeedItem(
             id: "1",
+            feedPostId: "1",
             userGameId: "1",
             userId: "user1",
             username: "TestUser",

@@ -5,6 +5,7 @@ struct FeedView: View {
     @Binding var unreadNotificationCount: Int
     @ObservedObject var supabase = SupabaseManager.shared
     @State private var feedItems: [FeedItem] = []
+    @State private var combinedFeed: [FeedEntry] = []
     @State private var isLoading = true
     @State private var showGameSearch = false
     @State private var selectedItem: FeedItem?
@@ -16,7 +17,7 @@ struct FeedView: View {
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
-                } else if feedItems.isEmpty {
+                } else if combinedFeed.isEmpty {
                     emptyStateView
                 } else {
                     feedListView
@@ -102,13 +103,39 @@ struct FeedView: View {
     
     private var feedListView: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(feedItems) { item in
-                    FeedItemRow(
-                        item: item,
-                        onLikeTapped: { toggleLike(for: item) },
-                        onCommentTapped: { selectedItem = item }
-                    )
+            LazyVStack(spacing: 16) {
+                ForEach(combinedFeed) { entry in
+                    switch entry {
+                    case .game(let item):
+                        FeedItemRow(
+                            item: item,
+                            onLikeTapped: { toggleLike(for: item) },
+                            onCommentTapped: { selectedItem = item }
+                        )
+                    case .activity(let item):
+                        ActivityFeedRow(
+                            item: item,
+                            onLikeTapped: { toggleActivityLike(for: item) },
+                            onCommentTapped: {
+                                selectedItem = FeedItem(
+                                    id: item.id,
+                                    feedPostId: item.feedPostId,
+                                    userGameId: "",
+                                    userId: item.userId,
+                                    username: item.username,
+                                    avatarURL: item.avatarURL,
+                                    gameId: 0,
+                                    gameTitle: "Reset Rankings",
+                                    gameCoverURL: nil,
+                                    rankPosition: nil,
+                                    loggedAt: nil,
+                                    likeCount: item.likeCount,
+                                    commentCount: item.commentCount,
+                                    isLikedByMe: item.isLikedByMe
+                                )
+                            }
+                        )
+                    }
                 }
             }
             .padding(16)
@@ -125,18 +152,17 @@ struct FeedView: View {
         Task {
             do {
                 if item.isLikedByMe {
-                    // Remove like
                     try await supabase.client
                         .from("feed_reactions")
                         .delete()
-                        .eq("user_game_id", value: item.userGameId)
+                        .eq("feed_post_id", value: item.feedPostId)
                         .eq("user_id", value: userId.uuidString)
                         .execute()
                 } else {
-                    // Add like
                     try await supabase.client
                         .from("feed_reactions")
                         .insert([
+                            "feed_post_id": item.feedPostId,
                             "user_game_id": item.userGameId,
                             "user_id": userId.uuidString,
                             "emoji": "❤️"
@@ -144,7 +170,6 @@ struct FeedView: View {
                         .execute()
                 }
                 
-                // Refresh feed to update counts
                 await fetchFeed()
                 
             } catch {
@@ -153,6 +178,37 @@ struct FeedView: View {
         }
     }
     
+    private func toggleActivityLike(for item: ActivityFeedItem) {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            Task {
+                do {
+                    if item.isLikedByMe {
+                        try await supabase.client
+                            .from("feed_reactions")
+                            .delete()
+                            .eq("feed_post_id", value: item.feedPostId)
+                            .eq("user_id", value: userId.uuidString)
+                            .execute()
+                    } else {
+                        try await supabase.client
+                            .from("feed_reactions")
+                            .insert([
+                                "feed_post_id": item.feedPostId,
+                                "user_id": userId.uuidString,
+                                "emoji": "❤️"
+                            ])
+                            .execute()
+                    }
+                    
+                    await fetchFeed()
+                    
+                } catch {
+                    print("❌ Error toggling activity like: \(error)")
+                }
+            }
+        }
+    
     private func fetchFeed() async {
         guard let userId = supabase.currentUser?.id else {
             isLoading = false
@@ -160,39 +216,10 @@ struct FeedView: View {
         }
         
         do {
-            struct FeedRow: Decodable {
-                let id: String
-                let user_id: String
-                let game_id: Int
-                let rank_position: Int
-                let logged_at: String?
-                let games: GameInfo
-                let users: UserInfo
-                
-            struct GameInfo: Decodable {
-                let title: String
-                let cover_url: String?
-            }
-            
-            struct UserInfo: Decodable {
-                let username: String?
-                let avatar_url: String?
-            }
-        }
-        
             struct Friendship: Decodable {
                 let user_id: String
                 let friend_id: String
                 let status: String
-            }
-            
-            struct ReactionRow: Decodable {
-                let user_game_id: String
-                let user_id: String
-            }
-            
-            struct CommentCountRow: Decodable {
-                let user_game_id: String
             }
             
             // Get friend IDs
@@ -207,83 +234,147 @@ struct FeedView: View {
             var feedUserIds = friendships.map { f in
                 f.user_id.lowercased() == userId.uuidString.lowercased() ? f.friend_id : f.user_id
             }
-            
-            // Include current user's games in feed
             feedUserIds.append(userId.uuidString)
-            print("📰 Feed user IDs: \(feedUserIds)")
             
-            // Fetch recent games from friends and self
-            let rows: [FeedRow] = try await supabase.client
-                .from("user_games")
-                .select("id, user_id, game_id, rank_position, logged_at, games(title, cover_url), users(username, avatar_url)")
+            // Fetch feed_posts
+            struct FeedPostRow: Decodable {
+                let id: String
+                let user_id: String
+                let post_type: String
+                let user_game_id: String?
+                let activity_feed_id: String?
+                let created_at: String
+                let users: UserInfo
+                let user_games: GamePostInfo?
+                
+                struct UserInfo: Decodable {
+                    let username: String?
+                    let avatar_url: String?
+                }
+                
+                struct GamePostInfo: Decodable {
+                    let game_id: Int
+                    let rank_position: Int?
+                    let logged_at: String?
+                    let games: GameDetails
+                    
+                    struct GameDetails: Decodable {
+                        let title: String
+                        let cover_url: String?
+                    }
+                }
+            }
+            
+            let posts: [FeedPostRow] = try await supabase.client
+                .from("feed_posts")
+                .select("id, user_id, post_type, user_game_id, activity_feed_id, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, games(title, cover_url))")
                 .in("user_id", values: feedUserIds)
-                .order("logged_at", ascending: false)
+                .order("created_at", ascending: false)
                 .limit(50)
                 .execute()
                 .value
             
-            let userGameIds = rows.map { $0.id }
+            let feedPostIds = posts.map { $0.id }
             
-            // Skip reaction/comment queries if no feed items
-            guard !userGameIds.isEmpty else {
+            guard !feedPostIds.isEmpty else {
                 feedItems = []
+                combinedFeed = []
                 isLoading = false
                 return
             }
             
-            // Fetch all reactions for these posts
+            // Fetch reactions for all posts
+            struct ReactionRow: Decodable {
+                let feed_post_id: String
+                let user_id: String
+            }
+            
             let reactions: [ReactionRow] = try await supabase.client
                 .from("feed_reactions")
-                .select("user_game_id, user_id")
-                .in("user_game_id", values: userGameIds)
+                .select("feed_post_id, user_id")
+                .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
             
-            // Count likes per post and track user's own likes
             var likeCountMap: [String: Int] = [:]
             var myLikedIds: Set<String> = []
             
             for reaction in reactions {
-                likeCountMap[reaction.user_game_id, default: 0] += 1
-                print("🔍 Reaction user_id: \(reaction.user_id)")
-                print("🔍 Current userId: \(userId.uuidString)")
-                print("🔍 Match: \(reaction.user_id == userId.uuidString)")
+                likeCountMap[reaction.feed_post_id, default: 0] += 1
                 if reaction.user_id.lowercased() == userId.uuidString.lowercased() {
-                    myLikedIds.insert(reaction.user_game_id)
+                    myLikedIds.insert(reaction.feed_post_id)
                 }
             }
             
             // Fetch comment counts
+            struct CommentCountRow: Decodable {
+                let feed_post_id: String
+            }
+            
             let commentRows: [CommentCountRow] = try await supabase.client
                 .from("feed_comments")
-                .select("user_game_id")
-                .in("user_game_id", values: userGameIds)
+                .select("feed_post_id")
+                .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
             
             var commentCountMap: [String: Int] = [:]
             for comment in commentRows {
-                commentCountMap[comment.user_game_id, default: 0] += 1
-            }
-            print("📰 Feed rows returned: \(rows.count)")
-            feedItems = rows.map { row in
-                FeedItem(
-                    id: row.id,
-                    userGameId: row.id,
-                    userId: row.user_id,
-                    username: row.users.username ?? "Friend",
-                    avatarURL: row.users.avatar_url,
-                    gameId: row.game_id,
-                    gameTitle: row.games.title,
-                    gameCoverURL: row.games.cover_url,
-                    rankPosition: row.rank_position,
-                    loggedAt: row.logged_at,
-                    likeCount: likeCountMap[row.id] ?? 0,
-                    commentCount: commentCountMap[row.id] ?? 0,
-                    isLikedByMe: myLikedIds.contains(row.id)
-                )
+                commentCountMap[comment.feed_post_id, default: 0] += 1
             }
             
+            feedItems = []
+            // Build combined feed
+            var combined: [FeedEntry] = []
+            
+            for post in posts {
+                let likes = likeCountMap[post.id] ?? 0
+                let comments = commentCountMap[post.id] ?? 0
+                let isLiked = myLikedIds.contains(post.id)
+                
+                switch post.post_type {
+                case "ranked_game":
+                    guard let ug = post.user_games, ug.rank_position != nil else { continue }
+                    let item = FeedItem(
+                        id: post.user_game_id ?? post.id,
+                        feedPostId: post.id,
+                        userGameId: post.user_game_id ?? "",
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        gameId: ug.game_id,
+                        gameTitle: ug.games.title,
+                        gameCoverURL: ug.games.cover_url,
+                        rankPosition: ug.rank_position,
+                        loggedAt: ug.logged_at,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    feedItems.append(item)
+                    combined.append(.game(item))
+                    
+                case "reset_rankings":
+                    let item = ActivityFeedItem(
+                        id: post.activity_feed_id ?? post.id,
+                        feedPostId: post.id,
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        activityType: post.post_type,
+                        createdAt: post.created_at,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    combined.append(.activity(item))
+                    
+                default:
+                    continue
+                }
+            }
+            
+            combinedFeed = combined
             isLoading = false
             
         } catch {
@@ -312,9 +403,44 @@ struct FeedView: View {
     }
 }
 
+// MARK: - Activity Feed Item Model
+struct ActivityFeedItem: Identifiable {
+    let id: String
+    let feedPostId: String
+    let userId: String
+    let username: String
+    let avatarURL: String?
+    let activityType: String
+    let createdAt: String
+    let likeCount: Int
+    let commentCount: Int
+    let isLikedByMe: Bool
+}
+
+// MARK: - Combined Feed Entry
+enum FeedEntry: Identifiable {
+    case game(FeedItem)
+    case activity(ActivityFeedItem)
+    
+    var id: String {
+        switch self {
+        case .game(let item): return "game-\(item.id)"
+        case .activity(let item): return "activity-\(item.id)"
+        }
+    }
+    
+    var sortDate: String {
+        switch self {
+        case .game(let item): return item.loggedAt ?? ""
+        case .activity(let item): return item.createdAt
+        }
+    }
+}
+
 // MARK: - Feed Item Model
 struct FeedItem: Identifiable {
     let id: String
+    let feedPostId: String
     let userGameId: String
     let userId: String
     let username: String
@@ -322,7 +448,7 @@ struct FeedItem: Identifiable {
     let gameId: Int
     let gameTitle: String
     let gameCoverURL: String?
-    let rankPosition: Int
+    let rankPosition: Int?
     let loggedAt: String?
     let likeCount: Int
     let commentCount: Int
@@ -373,7 +499,7 @@ struct FeedItemRow: View {
                         .lineLimit(2)
                     
                     HStack(spacing: 4) {
-                        Text("at #\(item.rankPosition)")
+                        Text("at #\(item.rankPosition ?? 0)")
                             .font(.subheadline)
                             .foregroundColor(.primaryBlue)
                         
@@ -418,11 +544,12 @@ struct FeedItemRow: View {
                     }
                 }
                 }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
+                }
                 .buttonStyle(.plain)
-            }
-            .padding(12)
-            }
-            .buttonStyle(.plain)
             
             // Divider
             Divider()
@@ -523,6 +650,120 @@ struct FeedItemRow: View {
             let days = Int(interval / 86400)
             return "\(days)d ago"
         }
+    }
+}
+
+// MARK: - Activity Feed Row
+struct ActivityFeedRow: View {
+    let item: ActivityFeedItem
+    let onLikeTapped: () -> Void
+    let onCommentTapped: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                // Avatar
+                if let avatarURL = item.avatarURL, let url = URL(string: avatarURL) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        avatarPlaceholder
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                } else {
+                    avatarPlaceholder
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text(item.username)
+                        Text("rebuilt their rankings")
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.primaryBlue)
+                    }
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundColor(.slate)
+                    
+                    Text(timeAgo(from: item.createdAt))
+                        .font(.caption)
+                        .foregroundColor(.grayText)
+                }
+                
+                Spacer()
+            }
+            .padding(12)
+            
+            Divider()
+                .padding(.horizontal, 12)
+            
+            // Like and Comment buttons
+            HStack(spacing: 24) {
+                Button(action: onLikeTapped) {
+                    HStack(spacing: 6) {
+                        Image(systemName: item.isLikedByMe ? "heart.fill" : "heart")
+                            .font(.system(size: 18))
+                            .foregroundColor(item.isLikedByMe ? .orange : .grayText)
+                        
+                        if item.likeCount > 0 {
+                            Text("\(item.likeCount)")
+                                .font(.subheadline)
+                                .foregroundColor(item.isLikedByMe ? .orange : .grayText)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                Button(action: onCommentTapped) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.right")
+                            .font(.system(size: 18))
+                            .foregroundColor(.grayText)
+                        
+                        if item.commentCount > 0 {
+                            Text("\(item.commentCount)")
+                                .font(.subheadline)
+                                .foregroundColor(.grayText)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var avatarPlaceholder: some View {
+        Circle()
+            .fill(Color.primaryBlue.opacity(0.2))
+            .frame(width: 40, height: 40)
+            .overlay(
+                Text(String(item.username.prefix(1)).uppercased())
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primaryBlue)
+            )
+    }
+    
+    private func timeAgo(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        guard let date = formatter.date(from: dateString) else { return "" }
+        let interval = Date().timeIntervalSince(date)
+        
+        if interval < 60 { return "Just now" }
+        else if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        else if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        else { return "\(Int(interval / 86400))d ago" }
     }
 }
 

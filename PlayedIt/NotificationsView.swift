@@ -111,6 +111,7 @@ struct NotificationsView: View {
                 let user_game_id: String?
                 let is_read: Bool
                 let created_at: String
+                let feed_post_id: String?
                 let from_user: UserInfo
                 let user_games: GameInfo?
                 
@@ -130,7 +131,7 @@ struct NotificationsView: View {
             
             let rows: [NotificationData] = try await supabase.client
                 .from("notifications")
-                .select("id, type, from_user_id, user_game_id, is_read, created_at, from_user:users!from_user_id(username), user_games(games(title, cover_url))")
+                .select("id, type, from_user_id, user_game_id, feed_post_id, is_read, created_at, from_user:users!from_user_id(username), user_games(games(title, cover_url))")
                 .eq("user_id", value: userId.uuidString)
                 .order("created_at", ascending: false)
                 .limit(50)
@@ -144,6 +145,7 @@ struct NotificationsView: View {
                     fromUserId: row.from_user_id,
                     fromUsername: row.from_user.username ?? "Someone",
                     userGameId: row.user_game_id,
+                    feedPostId: row.feed_post_id,
                     gameTitle: row.user_games?.games.title,
                     gameCoverURL: row.user_games?.games.cover_url,
                     isRead: row.is_read,
@@ -178,6 +180,7 @@ struct NotificationsView: View {
                         fromUserId: notification.fromUserId,
                         fromUsername: notification.fromUsername,
                         userGameId: notification.userGameId,
+                        feedPostId: notification.feedPostId,
                         gameTitle: notification.gameTitle,
                         gameCoverURL: notification.gameCoverURL,
                         isRead: true,
@@ -211,6 +214,7 @@ struct NotificationsView: View {
                         fromUserId: notification.fromUserId,
                         fromUsername: notification.fromUsername,
                         userGameId: notification.userGameId,
+                        feedPostId: notification.feedPostId,
                         gameTitle: notification.gameTitle,
                         gameCoverURL: notification.gameCoverURL,
                         isRead: true,
@@ -233,6 +237,7 @@ struct NotificationsView: View {
             // Build a minimal FeedItem to pass to CommentsSheet
             selectedFeedItem = FeedItem(
                 id: userGameId,
+                feedPostId: notification.feedPostId ?? "",
                 userGameId: userGameId,
                 userId: supabase.currentUser?.id.uuidString ?? "",
                 username: "You",
@@ -275,6 +280,7 @@ struct AppNotification: Identifiable {
     let fromUserId: String
     let fromUsername: String
     let userGameId: String?
+    let feedPostId: String?
     let gameTitle: String?
     let gameCoverURL: String?
     let isRead: Bool
