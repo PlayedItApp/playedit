@@ -1,5 +1,6 @@
 import SwiftUI
 import Supabase
+import Combine
 
 struct ContentView: View {
     @ObservedObject var supabase = SupabaseManager.shared
@@ -248,6 +249,9 @@ struct GameDetailSheet: View {
     @State private var editedPlatforms: Set<String> = []
     @State private var customPlatform: String = ""
     @State private var isSavingPlatforms = false
+    @State private var displayedNotes: String? = nil
+    @State private var displayedPlatforms: [String] = []
+    @State private var hasInitialized = false
     
     var body: some View {
         NavigationStack {
@@ -299,13 +303,13 @@ struct GameDetailSheet: View {
                                 
                                 if !isEditingPlatforms {
                                     Button {
-                                        editedPlatforms = Set(game.platformPlayed)
+                                        editedPlatforms = Set(displayedPlatforms)
                                         isEditingPlatforms = true
                                     } label: {
                                         HStack(spacing: 4) {
-                                            Image(systemName: game.platformPlayed.isEmpty ? "plus" : "pencil")
+                                            Image(systemName: displayedPlatforms.isEmpty ? "plus" : "pencil")
                                                 .font(.system(size: 11))
-                                            Text(game.platformPlayed.isEmpty ? "Add" : "Edit")
+                                            Text(displayedPlatforms.isEmpty ? "Add" : "Edit")
                                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                         }
                                         .foregroundColor(.primaryBlue)
@@ -417,8 +421,8 @@ struct GameDetailSheet: View {
                                     }
                                     .disabled(isSavingPlatforms)
                                 }
-                            } else if !game.platformPlayed.isEmpty {
-                                Text(game.platformPlayed.joined(separator: ", "))
+                            } else if !displayedPlatforms.isEmpty {
+                                Text(displayedPlatforms.joined(separator: ", "))
                                     .font(.system(size: 16, design: .rounded))
                                     .foregroundColor(.slate)
                             } else {
@@ -448,13 +452,13 @@ struct GameDetailSheet: View {
                                 
                                 if !isEditingNotes {
                                     Button {
-                                        editedNotes = game.notes ?? ""
+                                        editedNotes = displayedNotes ?? ""
                                         isEditingNotes = true
                                     } label: {
                                         HStack(spacing: 4) {
-                                            Image(systemName: game.notes?.isEmpty ?? true ? "plus" : "pencil")
+                                            Image(systemName: displayedNotes?.isEmpty ?? true ? "plus" : "pencil")
                                                 .font(.system(size: 11))
-                                            Text(game.notes?.isEmpty ?? true ? "Add" : "Edit")
+                                            Text(displayedNotes?.isEmpty ?? true ? "Add" : "Edit")
                                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                         }
                                         .foregroundColor(.primaryBlue)
@@ -518,8 +522,8 @@ struct GameDetailSheet: View {
                                     }
                                     .disabled(isSavingNotes)
                                 }
-                            } else if let notes = game.notes, !notes.isEmpty {
-                                SpoilerTextView(notes, font: .system(size: 16, design: .rounded), color: .slate)
+                            } else if let notes = displayedNotes, !notes.isEmpty {
+                                    SpoilerTextView(notes, font: .system(size: 16, design: .rounded), color: .slate)
                             } else {
                                 Text("No notes yet. Tap Add to write a review!")
                                     .font(.system(size: 14, design: .rounded))
@@ -595,6 +599,13 @@ struct GameDetailSheet: View {
                     Spacer()
                 }
                 .padding(.top, 24)
+            }
+            .onAppear {
+                if !hasInitialized {
+                    displayedNotes = game.notes
+                    displayedPlatforms = game.platformPlayed
+                    hasInitialized = true
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -837,6 +848,7 @@ struct GameDetailSheet: View {
                     .execute()
                 
                 print("✅ Platforms saved")
+                displayedPlatforms = Array(editedPlatforms)
                 isEditingPlatforms = false
                 customPlatform = ""
                 
@@ -862,6 +874,7 @@ struct GameDetailSheet: View {
                 .execute()
             
             print("✅ Notes saved")
+            displayedNotes = trimmed
             isEditingNotes = false
             
         } catch {

@@ -101,7 +101,7 @@ struct ForgotPasswordView: View {
                                 .multilineTextAlignment(.center)
                                 .font(.system(size: 24, weight: .bold, design: .monospaced))
                                 .playedItTextField()
-                                .onChange(of: code) { newValue in
+                                .onChange(of: code) { oldValue, newValue in
                                     code = String(newValue.filter { $0.isNumber }.prefix(6))
                                 }
                         }

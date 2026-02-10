@@ -335,6 +335,7 @@ struct GameComparisonCard: View {
             )
             .scaleEffect(isHighlighted ? 1.02 : 1.0)
             .animation(.spring(response: 0.2), value: isHighlighted)
+            .contentShape(Rectangle())
         }
         .buttonStyle(ScaleButtonStyle())
     }

@@ -26,6 +26,7 @@ struct ResetRankingsView: View {
     @State private var showCards = false
     @State private var selectedSide: String? = nil
     @State private var comparisonHistory: [ComparisonState] = []
+    @State private var gameHistory: [GameSnapshot] = []
     
     private let maxComparisons = 10
     
@@ -40,6 +41,12 @@ struct ResetRankingsView: View {
         let lowIndex: Int
         let highIndex: Int
         let comparisonCount: Int
+    }
+
+    struct GameSnapshot {
+        let gameIndex: Int
+        let rankedSoFar: [UserGame]
+        let lastPlacedPosition: Int
     }
     
     var body: some View {
@@ -360,14 +367,70 @@ struct ResetRankingsView: View {
     }
     
     private func undoLastComparison() {
-        guard let lastState = comparisonHistory.popLast() else { return }
-        lowIndex = lastState.lowIndex
-        highIndex = lastState.highIndex
-        comparisonCount = lastState.comparisonCount
-        nextComparison()
+        // If we have comparison history within the current game, undo that
+        if let lastState = comparisonHistory.popLast() {
+            lowIndex = lastState.lowIndex
+            highIndex = lastState.highIndex
+            comparisonCount = lastState.comparisonCount
+            nextComparison()
+        } else {
+            // No comparison history — go back to previous game
+            Task { await undoPreviousGame() }
+        }
         
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
+    }
+    
+    private func undoPreviousGame() async {
+        guard let snapshot = gameHistory.popLast() else { return }
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            // 1. Remove the rank from the game we just placed
+            let placedGame = shuffledGames[snapshot.gameIndex]
+            try await supabase.client
+                .from("user_games")
+                .update(["rank_position": NSNull()])
+                .eq("id", value: placedGame.id)
+                .execute()
+            
+            // 2. Shift games that were pushed down back up
+            struct GameToShift: Decodable {
+                let id: String
+                let rank_position: Int
+            }
+            
+            let gamesToShift: [GameToShift] = try await supabase.client
+                .from("user_games")
+                .select("id, rank_position")
+                .eq("user_id", value: userId.uuidString)
+                .gt("rank_position", value: snapshot.lastPlacedPosition)
+                .not("rank_position", operator: .is, value: "null")
+                .execute()
+                .value
+            
+            for g in gamesToShift {
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": g.rank_position - 1])
+                    .eq("id", value: g.id)
+                    .execute()
+            }
+            
+            // 3. Restore local state
+            rankedSoFar = snapshot.rankedSoFar
+            currentGameIndex = snapshot.gameIndex
+            comparisonHistory = []
+            
+            // 4. Restart comparisons for this game
+            startComparisonForCurrentGame()
+            
+            print("✅ Undid placement of \(placedGame.gameTitle), back to game \(snapshot.gameIndex + 1)")
+            
+        } catch {
+            print("❌ Error undoing game placement: \(error)")
+        }
     }
     
     // MARK: - Start Reset
@@ -404,6 +467,13 @@ struct ResetRankingsView: View {
     
     private func placeGame(_ game: UserGame, at position: Int) async {
         guard let userId = supabase.currentUser?.id else { return }
+        
+        // Save snapshot for game-level undo
+        gameHistory.append(GameSnapshot(
+            gameIndex: currentGameIndex,
+            rankedSoFar: rankedSoFar,
+            lastPlacedPosition: position
+        ))
         
         do {
             struct GameToShift: Decodable {
