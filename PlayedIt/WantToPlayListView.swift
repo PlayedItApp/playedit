@@ -51,7 +51,7 @@ struct WantToPlayListView: View {
                         await loadGames()
                     }
                 }, onPlayed: {
-                    // Dismiss and open game log — handled by parent
+                    // Dismiss and open game log - handled by parent
                 })
             }
         }

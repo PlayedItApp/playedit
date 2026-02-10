@@ -28,7 +28,7 @@ struct ComparisonView: View {
     
     private let prompts = [
         "Which did you enjoy more?",
-        "Tough call — which one wins?",
+        "Tough call... which one wins?",
         "Head to head: your pick?",
         "If you could only replay one..."
     ]

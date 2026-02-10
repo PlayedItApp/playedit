@@ -88,6 +88,9 @@ struct LoginView: View {
                                             .font(.callout)
                                             .foregroundColor(.primaryBlue)
                                     }
+                                    .simultaneousGesture(TapGesture().onEnded {
+                                        supabase.errorMessage = nil
+                                    })
                                 }
                             }
                         }

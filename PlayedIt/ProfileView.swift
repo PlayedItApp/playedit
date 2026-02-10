@@ -535,7 +535,7 @@ class AppleLinkDelegate: NSObject, ASAuthorizationControllerDelegate {
         Task {
             let success = await SupabaseManager.shared.linkAppleID(idToken: idToken, nonce: nonce)
             print("🍎 Edge Function result: \(success)")
-            if let error = await SupabaseManager.shared.errorMessage {
+            if let error = SupabaseManager.shared.errorMessage {
                 print("🍎 Error message: \(error)")
             }
             await MainActor.run {

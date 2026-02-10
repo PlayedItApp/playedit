@@ -99,7 +99,7 @@ private struct WrappingHStack: View {
                 .foregroundColor(color)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
-            // Has spoilers — use string interpolation for inline flow
+            // Has spoilers - use string interpolation for inline flow
             Text(segments.reduce(into: AttributedString()) { result, segment in
                 switch segment {
                 case .plain(let text):

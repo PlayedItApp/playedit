@@ -80,7 +80,7 @@ class SupabaseManager: ObservableObject {
         do {
             var loginEmail = email
             
-            // If input doesn't contain @, it's a username — look up the email
+            // If input doesn't contain @, it's a username - look up the email
             if !email.contains("@") {
                 let response = try await client.from("users")
                     .select("email")

@@ -388,6 +388,12 @@ struct CommentRowView: View {
                                 .foregroundColor(.grayText)
                                 .padding(4)
                         }
+                        .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                            Button("Delete", role: .destructive) {
+                                onDelete()
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        }
                     }
                 }
                 
@@ -395,12 +401,6 @@ struct CommentRowView: View {
                     .font(.subheadline)
                     .foregroundColor(.slate)
             }
-        }
-        .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                onDelete()
-            }
-            Button("Cancel", role: .cancel) {}
         }
     }
     

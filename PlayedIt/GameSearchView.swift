@@ -93,8 +93,12 @@ struct GameSearchView: View {
                 }
             }
             .sheet(item: $selectedGame, onDismiss: {
+                let previousCount = rankedGameIds.count
                 Task {
                     await fetchRankedGameIds()
+                    if rankedGameIds.count > previousCount {
+                        dismiss()
+                    }
                 }
             }) { game in
                 GameLogView(game: game)

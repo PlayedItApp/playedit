@@ -209,7 +209,7 @@ struct GameDetailFromFriendView: View {
                     if diff >= 5 {
                         HStack(spacing: 8) {
                             Text("🔥")
-                            Text("±\(diff) rank difference — one of your biggest debates!")
+                            Text("±\(diff) rank difference. One of your biggest debates!")
                                 .font(.system(size: 14, design: .rounded))
                                 .foregroundColor(.accentOrange)
                         }

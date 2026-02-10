@@ -205,11 +205,12 @@ struct FeedView: View {
                 .value
             
             var feedUserIds = friendships.map { f in
-                f.user_id == userId.uuidString ? f.friend_id : f.user_id
+                f.user_id.lowercased() == userId.uuidString.lowercased() ? f.friend_id : f.user_id
             }
             
             // Include current user's games in feed
             feedUserIds.append(userId.uuidString)
+            print("📰 Feed user IDs: \(feedUserIds)")
             
             // Fetch recent games from friends and self
             let rows: [FeedRow] = try await supabase.client
@@ -264,7 +265,7 @@ struct FeedView: View {
             for comment in commentRows {
                 commentCountMap[comment.user_game_id, default: 0] += 1
             }
-            
+            print("📰 Feed rows returned: \(rows.count)")
             feedItems = rows.map { row in
                 FeedItem(
                     id: row.id,
@@ -384,11 +385,12 @@ struct FeedItemRow: View {
                     }
                 }
                 
-                Spacer()
-                
-                // Profile photo
-                Group {
-                    if let avatarURL = item.avatarURL, let url = URL(string: avatarURL) {
+                    Spacer()
+                                    
+                    // Profile photo - tap to view profile (only for friends' posts)
+                    NavigationLink(destination: item.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: item.userId, friendshipId: "", username: item.username, userId: item.userId, avatarURL: item.avatarURL)))) {
+                        Group {
+                            if let avatarURL = item.avatarURL, let url = URL(string: avatarURL) {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()
@@ -415,6 +417,8 @@ struct FeedItemRow: View {
                             )
                     }
                 }
+                }
+                .buttonStyle(.plain)
             }
             .padding(12)
             }

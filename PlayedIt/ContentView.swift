@@ -65,6 +65,7 @@ struct MainTabView: View {
                     Text("Feed")
                 }
                 .tag(0)
+                .badge(unreadNotificationCount > 0 ? unreadNotificationCount : 0)
             
             FriendsView()
                 .tabItem {
@@ -82,17 +83,6 @@ struct MainTabView: View {
                 .tag(2)
         }
         .tint(.primaryBlue)
-        .overlay(alignment: .bottomLeading) {
-            // Notification dot on Home tab
-            if unreadNotificationCount > 0 && selectedTab != 0 {
-                GeometryReader { geo in
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 8, height: 8)
-                        .offset(x: notificationDotOffset(screenWidth: geo.size.width), y: geo.size.height - 32)
-                }
-            }
-        }
         .sheet(isPresented: $showWhatsNew) {
             WhatsNewView()
         }
@@ -115,11 +105,6 @@ struct MainTabView: View {
                 await fetchUnreadNotificationCount()
             }
         }
-    }
-    
-    private func notificationDotOffset(screenWidth: CGFloat) -> CGFloat {
-        let tabWidth = screenWidth / 3
-        return (tabWidth / 2) + 12
     }
     
     private func fetchPendingCount() async {
@@ -155,14 +140,15 @@ struct MainTabView: View {
             let count: Int = try await supabase.client
                 .from("notifications")
                 .select("*", head: true, count: .exact)
-                .eq("user_id", value: userId.uuidString.lowercased())
+                .eq("user_id", value: userId.uuidString)
                 .eq("is_read", value: false)
                 .execute()
                 .count ?? 0
             
             unreadNotificationCount = count
-            
-        } catch {
+                print("🔔 MainTab unread count: \(count) for user: \(userId.uuidString)")
+                
+            } catch {
             print("❌ Error fetching notification count: \(error)")
         }
     }
@@ -258,6 +244,10 @@ struct GameDetailSheet: View {
     @State private var isEditingNotes = false
     @State private var editedNotes: String = ""
     @State private var isSavingNotes = false
+    @State private var isEditingPlatforms = false
+    @State private var editedPlatforms: Set<String> = []
+    @State private var customPlatform: String = ""
+    @State private var isSavingPlatforms = false
     
     var body: some View {
         NavigationStack {
@@ -299,12 +289,144 @@ struct GameDetailSheet: View {
                     
                     // Details
                     VStack(alignment: .leading, spacing: 16) {
-                        if !game.platformPlayed.isEmpty {
-                            DetailRow(
-                                icon: "gamecontroller",
-                                label: "Played on",
-                                value: game.platformPlayed.joined(separator: ", ")
-                            )
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Label("Played on", systemImage: "gamecontroller")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundColor(.grayText)
+                                
+                                Spacer()
+                                
+                                if !isEditingPlatforms {
+                                    Button {
+                                        editedPlatforms = Set(game.platformPlayed)
+                                        isEditingPlatforms = true
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: game.platformPlayed.isEmpty ? "plus" : "pencil")
+                                                .font(.system(size: 11))
+                                            Text(game.platformPlayed.isEmpty ? "Add" : "Edit")
+                                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        }
+                                        .foregroundColor(.primaryBlue)
+                                    }
+                                }
+                            }
+                            
+                            if isEditingPlatforms {
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible())
+                                ], spacing: 10) {
+                                    ForEach(GameLogView.allPlatforms, id: \.self) { platform in
+                                        PlatformButton(
+                                            platform: platform,
+                                            isSelected: editedPlatforms.contains(platform)
+                                        ) {
+                                            if editedPlatforms.contains(platform) {
+                                                editedPlatforms.remove(platform)
+                                            } else {
+                                                editedPlatforms.insert(platform)
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                HStack(spacing: 10) {
+                                    TextField("Other platform...", text: $customPlatform)
+                                        .font(.system(size: 14, design: .rounded))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                        .background(Color.lightGray)
+                                        .cornerRadius(8)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.silver, lineWidth: 1)
+                                        )
+                                    
+                                    Button {
+                                        let trimmed = customPlatform.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        guard !trimmed.isEmpty else { return }
+                                        editedPlatforms.insert(trimmed)
+                                        customPlatform = ""
+                                    } label: {
+                                        Text("Add")
+                                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.silver : Color.primaryBlue)
+                                            .cornerRadius(8)
+                                    }
+                                    .disabled(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                                
+                                // Show custom selections not in the standard list
+                                let customSelections = editedPlatforms.filter { !GameLogView.allPlatforms.contains($0) }
+                                if !customSelections.isEmpty {
+                                    FlowLayout(spacing: 8) {
+                                        ForEach(Array(customSelections).sorted(), id: \.self) { platform in
+                                            HStack(spacing: 4) {
+                                                Text(platform)
+                                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                                Button {
+                                                    editedPlatforms.remove(platform)
+                                                } label: {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .font(.system(size: 12))
+                                                }
+                                            }
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.primaryBlue)
+                                            .cornerRadius(16)
+                                        }
+                                    }
+                                }
+                                
+                                HStack(spacing: 12) {
+                                    Button {
+                                        isEditingPlatforms = false
+                                        customPlatform = ""
+                                    } label: {
+                                        Text("Cancel")
+                                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                                            .foregroundColor(.grayText)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                    }
+                                    
+                                    Button {
+                                        Task { await savePlatforms() }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            if isSavingPlatforms {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            } else {
+                                                Text("Save Platforms")
+                                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                            }
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color.primaryBlue)
+                                        .cornerRadius(8)
+                                    }
+                                    .disabled(isSavingPlatforms)
+                                }
+                            } else if !game.platformPlayed.isEmpty {
+                                Text(game.platformPlayed.joined(separator: ", "))
+                                    .font(.system(size: 16, design: .rounded))
+                                    .foregroundColor(.slate)
+                            } else {
+                                Text("No platforms added. Tap Add to set them!")
+                                    .font(.system(size: 14, design: .rounded))
+                                    .foregroundColor(.grayText)
+                                    .italic()
+                            }
                         }
                         
                         if let year = game.gameReleaseDate?.prefix(4) {
@@ -399,7 +521,7 @@ struct GameDetailSheet: View {
                             } else if let notes = game.notes, !notes.isEmpty {
                                 SpoilerTextView(notes, font: .system(size: 16, design: .rounded), color: .slate)
                             } else {
-                                Text("No notes yet — tap Add to write a review!")
+                                Text("No notes yet. Tap Add to write a review!")
                                     .font(.system(size: 14, design: .rounded))
                                     .foregroundColor(.grayText)
                                     .italic()
@@ -702,6 +824,29 @@ struct GameDetailSheet: View {
             isRemoving = false
         }
     }
+    
+    // MARK: - Save Platforms
+        private func savePlatforms() async {
+            isSavingPlatforms = true
+            
+            do {
+                try await supabase.client
+                    .from("user_games")
+                    .update(["platform_played": Array(editedPlatforms)])
+                    .eq("id", value: game.id)
+                    .execute()
+                
+                print("✅ Platforms saved")
+                isEditingPlatforms = false
+                customPlatform = ""
+                dismiss()
+                
+            } catch {
+                print("❌ Error saving platforms: \(error)")
+            }
+            
+            isSavingPlatforms = false
+        }
     
     // MARK: - Save Notes
     private func saveNotes() async {

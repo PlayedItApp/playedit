@@ -16,7 +16,7 @@ class RAWGService {
         let results = try await performSearch(query: query)
         
         // If we got few results and query might be missing punctuation, try variations
-        if results.count < 5 {
+        if results.count < 20 {
             let variations = generateQueryVariations(query)
             for variation in variations where variation != query.lowercased() {
                 let moreResults = try await performSearch(query: variation)
@@ -128,6 +128,17 @@ class RAWGService {
             }
         }
         
+        // Try adding hyphens between single characters (e.g., "za" → "z-a", "pokemon za" → "pokemon z-a")
+        let words = lower.split(separator: " ").map { String($0) }
+        for (i, word) in words.enumerated() {
+            if word.count == 2 {
+                let hyphenated = "\(word.first!)-\(word.last!)"
+                var newWords = words
+                newWords[i] = hyphenated
+                variations.append(newWords.joined(separator: " "))
+            }
+        }
+        
         return variations
     }
 
@@ -165,15 +176,41 @@ private func relevanceScore(game: Game, name: String, query: String, queryWords:
             }
         }
         
-        // Bonus for each query word found in title
-        for word in queryWords {
-            let normalizedWord = word.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
-            if normalizedName.contains(normalizedWord) {
-                score += 50
+    // Bonus for each query word found in title
+    for word in queryWords {
+        let normalizedWord = word.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
+        if normalizedName.contains(normalizedWord) {
+            score += 50
+        }
+    }
+    
+    // === Ordered query words bonus ===
+    let nameWords = normalizedName.split(separator: " ").map { String($0) }
+    let queryWordArray = normalizedQuery.split(separator: " ").map { String($0) }
+    if queryWordArray.count >= 2 {
+        var nameIndex = 0
+        var matchedAll = true
+        for qWord in queryWordArray {
+            var found = false
+            while nameIndex < nameWords.count {
+                if nameWords[nameIndex].contains(qWord) {
+                    nameIndex += 1
+                    found = true
+                    break
+                }
+                nameIndex += 1
+            }
+            if !found {
+                matchedAll = false
+                break
             }
         }
-        
-        // === Popularity boost (0-300 points) ===
+        if matchedAll {
+            score += 400
+        }
+    }
+    
+    // === Popularity boost (0-300 points) ===
         let addedCount = game.added ?? 0
         if addedCount > 50000 {
             score += 300
@@ -267,6 +304,7 @@ private func relevanceScore(game: Game, name: String, query: String, queryWords:
             .replacingOccurrences(of: "'", with: "")
             .replacingOccurrences(of: "\u{2019}", with: "")
             .replacingOccurrences(of: ":", with: " ")
+            .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: "  ", with: " ")
             .lowercased()
             .trimmingCharacters(in: .whitespaces)

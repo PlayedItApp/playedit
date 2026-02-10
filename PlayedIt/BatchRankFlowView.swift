@@ -144,7 +144,7 @@ struct BatchRankFlowView: View {
             }
             .onChange(of: showCurrentGame) { _, isShowing in
                 if !isShowing {
-                    // GameLogView was dismissed — move to next game
+                    // GameLogView was dismissed - move to next game
                     advanceToNext()
                 }
             }

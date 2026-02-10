@@ -99,6 +99,17 @@ serve(async (req) => {
       });
     }
 
+    // Step 3: Restore the original email after linking
+    if (currentEmail && currentEmail !== appleEmail) {
+      const { error: restoreError } = await adminClient.auth.admin.updateUserById(
+        user.id,
+        { email: currentEmail, email_confirm: true }
+      );
+      if (restoreError) {
+        console.error("Failed to restore email:", restoreError.message);
+      }
+    }
+
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },

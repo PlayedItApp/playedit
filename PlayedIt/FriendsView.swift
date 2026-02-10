@@ -508,6 +508,9 @@ struct FriendProfileView: View {
     @State private var showCompareView = false
     @State private var showMatchInfo = false
     @State private var showBatchRank = false
+    @State private var showRemoveFriendConfirm = false
+    @State private var isRemovingFriend = false
+    @Environment(\.dismiss) private var dismiss
     
     // Computed taste match
     private var sharedGames: [(mine: UserGame, theirs: UserGame)] {
@@ -594,7 +597,8 @@ struct FriendProfileView: View {
         let theirThreshold = max(5, Int(Double(friendGames.count) * 0.25))
         let myBottomHalf = myGames.count / 2
         
-        return sharedGames.filter { $0.theirs.rankPosition <= theirThreshold && $0.mine.rankPosition > myBottomHalf }
+        let disagreementIds = Set(disagreements.map { $0.mine.id })
+        return sharedGames.filter { $0.theirs.rankPosition <= theirThreshold && $0.mine.rankPosition > myBottomHalf && !disagreementIds.contains($0.mine.id) }
             .sorted { $0.theirs.rankPosition < $1.theirs.rankPosition }
     }
     
@@ -665,6 +669,33 @@ struct FriendProfileView: View {
         }
         .navigationTitle(friend.username)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button(role: .destructive) {
+                        showRemoveFriendConfirm = true
+                    } label: {
+                        Label("Remove Friend", systemImage: "person.badge.minus")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16))
+                        .foregroundColor(.primaryBlue)
+                }
+                .confirmationDialog(
+                    "Remove \(friend.username)?",
+                    isPresented: $showRemoveFriendConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Remove Friend", role: .destructive) {
+                        Task { await removeFriend() }
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("They won't be notified. You'll need to send a new request to be friends again.")
+                }
+            }
+        }
         .sheet(isPresented: $showCompareView) {
             CompareListsView(
                 myGames: myGames,
@@ -718,7 +749,7 @@ struct FriendProfileView: View {
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(.slate)
             
-            Text("\(friendGames.count) games ranked")
+                Text("\(friendGames.count) games ranked")
                 .font(.subheadline)
                 .foregroundColor(.grayText)
         }
@@ -760,6 +791,13 @@ struct FriendProfileView: View {
             Text("Based on \(sharedGames.count) \(sharedGames.count == 1 ? "game" : "games") you've both ranked")
                 .font(.caption)
                 .foregroundColor(.grayText)
+            
+            if sharedGames.count < 5 {
+                Text("Rank more games in common for a more accurate match!")
+                    .font(.caption)
+                    .foregroundColor(.accentOrange)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity)
@@ -811,12 +849,21 @@ struct FriendProfileView: View {
             """
         } else {
             let n = sharedGames.count
+                        
+            // Use relative ranks (same as matchPercentage calculation)
+            let myOrder = sharedGames.indices.sorted { sharedGames[$0].mine.rankPosition < sharedGames[$1].mine.rankPosition }
+            var myRelativeRanks = Array(repeating: 0, count: n)
+            for (rank, idx) in myOrder.enumerated() { myRelativeRanks[idx] = rank + 1 }
+            
+            let theirOrder = sharedGames.indices.sorted { sharedGames[$0].theirs.rankPosition < sharedGames[$1].theirs.rankPosition }
+            var theirRelativeRanks = Array(repeating: 0, count: n)
+            for (rank, idx) in theirOrder.enumerated() { theirRelativeRanks[idx] = rank + 1 }
+            
             var sumDSquared = 0
-            for pair in sharedGames {
-                let d = pair.mine.rankPosition - pair.theirs.rankPosition
+            for i in sharedGames.indices {
+                let d = myRelativeRanks[i] - theirRelativeRanks[i]
                 sumDSquared += d * d
             }
-            
             return """
             Spearman's rank correlation coefficient:
             
@@ -992,6 +1039,23 @@ struct FriendProfileView: View {
                     .padding(.horizontal, 16)
                 }
             }
+        }
+    }
+    
+    // MARK: - Remove Friend
+    private func removeFriend() async {
+        isRemovingFriend = true
+        do {
+            try await supabase.client
+                .from("friendships")
+                .delete()
+                .eq("id", value: friend.friendshipId)
+                .execute()
+            
+            dismiss()
+        } catch {
+            print("❌ Error removing friend: \(error)")
+            isRemovingFriend = false
         }
     }
     
