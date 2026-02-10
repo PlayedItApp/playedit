@@ -832,7 +832,7 @@ struct FeedGameDetailSheet: View {
                 let id: String
                 let game_id: Int
                 let user_id: String
-                let rank_position: Int
+                let rank_position: Int?
                 let platform_played: [String]
                 let notes: String?
                 let logged_at: String?
@@ -859,7 +859,7 @@ struct FeedGameDetailSheet: View {
                 id: row.id,
                 gameId: row.game_id,
                 userId: row.user_id,
-                rankPosition: row.rank_position,
+                rankPosition: row.rank_position ?? 0,
                 platformPlayed: row.platform_played,
                 notes: row.notes,
                 loggedAt: row.logged_at,
@@ -919,6 +919,7 @@ struct FeedGameDetailSheet: View {
                 .from("user_games")
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
@@ -928,7 +929,7 @@ struct FeedGameDetailSheet: View {
                     id: r.id,
                     gameId: r.game_id,
                     userId: r.user_id,
-                    rankPosition: r.rank_position,
+                    rankPosition: r.rank_position ?? 0,
                     platformPlayed: r.platform_played,
                     notes: r.notes,
                     loggedAt: r.logged_at,

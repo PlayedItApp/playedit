@@ -1093,6 +1093,7 @@ struct FriendProfileView: View {
                 .from("user_games")
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: friend.userId)
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
@@ -1118,6 +1119,7 @@ struct FriendProfileView: View {
                 .from("user_games")
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value

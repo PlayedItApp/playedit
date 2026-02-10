@@ -665,6 +665,7 @@ struct GameDetailSheet: View {
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: userId.uuidString)
                 .neq("game_id", value: game.gameId)
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
@@ -716,6 +717,7 @@ struct GameDetailSheet: View {
                 .from("user_games")
                 .select("id, rank_position")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .gt("rank_position", value: rank)
                 .execute()
                 .value
@@ -733,6 +735,7 @@ struct GameDetailSheet: View {
                 .from("user_games")
                 .select("id, rank_position")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .gte("rank_position", value: newPosition)
                 .order("rank_position", ascending: false)
                 .execute()
@@ -812,12 +815,13 @@ struct GameDetailSheet: View {
             }
             
             let gamesToShift: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .gt("rank_position", value: rank)
-                .execute()
-                .value
+        .from("user_games")
+        .select("id, rank_position")
+        .eq("user_id", value: userId.uuidString)
+        .not("rank_position", operator: .is, value: "null")
+        .gt("rank_position", value: rank)
+        .execute()
+        .value
             
             for g in gamesToShift {
                 try await supabase.client

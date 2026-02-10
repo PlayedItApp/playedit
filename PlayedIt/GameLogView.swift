@@ -232,9 +232,9 @@ struct GameLogView: View {
                         newGame: game,
                         existingGames: existingUserGames,
                         onComplete: { position in
-                            dismiss()
                             Task {
                                 await saveUserGame(gameId: gameId, position: position)
+                                dismiss()
                             }
                         }
                     )
@@ -286,6 +286,7 @@ struct GameLogView: View {
                 .select("id, rank_position")
                 .eq("user_id", value: userId.uuidString)
                 .eq("game_id", value: gameRecord.id)
+                .not("rank_position", operator: .is, value: "null")
                 .execute()
                 .value
             
@@ -375,6 +376,7 @@ struct GameLogView: View {
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: userId.uuidString)
                 .neq("game_id", value: gameId)
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
@@ -445,10 +447,10 @@ struct GameLogView: View {
                     .from("user_games")
                     .select("id, rank_position")
                     .eq("user_id", value: userId.uuidString)
+                    .not("rank_position", operator: .is, value: "null")
                     .gt("rank_position", value: existing.rank_position)
                     .execute()
                     .value
-                
                 for game in gamesToShiftUp {
                     try await supabase.client
                         .from("user_games")
@@ -471,6 +473,7 @@ struct GameLogView: View {
                 .from("user_games")
                 .select("id, rank_position")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .gte("rank_position", value: position)
                 .order("rank_position", ascending: false)
                 .execute()

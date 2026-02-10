@@ -408,6 +408,7 @@ struct GameDetailFromFriendView: View {
                 .select("user_id, rank_position, game_id, canonical_game_id")
                 .in("user_id", values: allUserIds)
                 .or("game_id.eq.\(targetGameId),canonical_game_id.eq.\(targetCanonicalId)")
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value

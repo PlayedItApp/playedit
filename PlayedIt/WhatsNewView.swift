@@ -3,59 +3,61 @@ import SwiftUI
 // MARK: - WhatsNew Manager
 
 struct WhatsNewManager {
-    static let currentVersion = "1.1.0"
+    static let currentVersion = "1.2.3"
     
     static let features: [WhatsNewFeature] = [
         WhatsNewFeature(
-            icon: "bookmark.fill",
-            title: "Want to Play List",
-            description: "Bookmark games from friends' rankings and build your own wishlist."
-        ),
-        WhatsNewFeature(
             icon: "apple.logo",
             title: "Sign in with Apple",
-            description: "Sign in with Apple, reset your password, and use password managers. You can also link an existing account to your Apple ID."
+            description: "Fast, no-password login. Already have an email account? Link your Apple ID and use either one."
+        ),
+        WhatsNewFeature(
+            icon: "bookmark.fill",
+            title: "To Be Played List",
+            description: "Finally, a place for your backlog. Save games you want to play and stop forgetting that recommendation your friend gave you three months ago."
+        ),
+        WhatsNewFeature(
+            icon: "bell.badge",
+            title: "Revamped Notifications",
+            description: "Notifications actually do things now. Tap one and it takes you right to the comment or post that triggered it."
+        ),
+        WhatsNewFeature(
+            icon: "magnifyingglass",
+            title: "Smarter Search & Fixed Taste Matching",
+            description: "Search now handles DLC, special editions, characters like é, and hyphens. Plus, taste match percentages and game comparisons are actually accurate now. 🔥"
         ),
         WhatsNewFeature(
             icon: "newspaper",
-            title: "Richer Feed",
-            description: "Tap any game in the feed to see the full review, rank it yourself, and see how friends ranked it."
-        ),
-        WhatsNewFeature(
-            icon: "person.circle",
-            title: "Better Profiles",
-            description: "Re-rank, remove, or add notes to games right from your profile. Plus a search button to log new games."
-        ),
-        WhatsNewFeature(
-            icon: "person.2",
-            title: "Friends List Upgrades",
-            description: "Add games directly from a friend's list, one at a time or all at once. Profile pics now show everywhere."
-        ),
-        WhatsNewFeature(
-            icon: "bubble.left.and.bubble.right",
-            title: "Comments & Notifications",
-            description: "Edit or delete your comments, manage comments on your posts, and tap notifications to jump straight there."
-        ),
-        WhatsNewFeature(
-            icon: "eye.slash",
-            title: "Spoiler Tags",
-            description: "Wrap text in ||double pipes|| to hide spoilers in all text fields. Tap to reveal."
+            title: "Game Detail View",
+            description: "Tap any game in the feed or on someone's profile to see the full picture: rank, notes, platforms, the works."
         )
     ]
     
     static let minorImprovements: [String] = [
-        "Renamed Home page to Feed",
-        "Choose which page shows when you open the app",
+        "Reset your password with the new forgot password flow",
+        "Edit platforms and notes after ranking without re-ranking",
         "Platform selection is now optional when ranking",
-        "Added custom platform option for when the API gets it wrong",
-        "Add a review or notes after ranking without re-ranking",
-        "Show profile pictures on comments, friends list, and feed",
-        "Edit or delete your own comments",
+        "Remove games from your list (rankings adjust automatically)",
+        "Add all games from a friend's list at once",
+        "Remove friends (please don't unfriend us, we'll be sad)",
+        "Edit or delete your comments",
         "Delete other users' comments on your own posts",
-        "Tapping a notification brings you to that comment, friend request, etc.",
-        "Fixed search for special characters (é, ü, etc.)",
-        "Fixed search results for games with multiple editions/DLCs",
-        "Corrected taste match percentage math"
+        "Profile pics now show up in the feed, comments, and friends list",
+        "Search for new games right from your profile page",
+        "Choose which page shows when you open the app",
+        "Add a custom platform when yours isn't listed",
+        "Spoiler tags: wrap text in ||double pipes|| to hide spoilers. Tap to reveal",
+        "Renamed Home to Feed. Tap your profile icon in the feed to jump to your profile",
+        "New version toast so you know what's changed"
+    ]
+    
+    static let bugFixes: [String] = [
+        "Wrong password error no longer haunts the forgot password screen",
+        "Tapping whitespace on a profile no longer opens random game details",
+        "Game art taps in rankings work consistently now",
+        "Game sheet no longer dismisses itself on your profile after editing",
+        "Removing a friend actually removes them from the list without needing a refresh",
+        "Notifications now poll every 30 seconds instead of waiting for you to leave the feed"
     ]
     
     private static let key = "lastSeenWhatsNewVersion"
@@ -100,6 +102,7 @@ struct WhatsNewView: View {
             // Features & improvements
             ScrollView {
                 VStack(spacing: 20) {
+                    // Major features
                     ForEach(WhatsNewManager.features) { feature in
                         HStack(spacing: 16) {
                             Image(systemName: feature.icon)
@@ -133,6 +136,30 @@ struct WhatsNewView: View {
                         
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(WhatsNewManager.minorImprovements, id: \.self) { item in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text("•")
+                                        .foregroundColor(.accentOrange)
+                                        .font(.system(size: 15, weight: .semibold))
+                                    Text(item)
+                                        .font(.system(size: 14, design: .rounded))
+                                        .foregroundColor(.grayText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                    
+                    // Bug fixes section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Bug Fixes 🛠️")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(.slate)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 8)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(WhatsNewManager.bugFixes, id: \.self) { item in
                                 HStack(alignment: .top, spacing: 8) {
                                     Text("•")
                                         .foregroundColor(.accentOrange)

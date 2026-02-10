@@ -3,6 +3,7 @@ import Supabase
 
 struct ResetRankingsView: View {
     let games: [UserGame]
+    var resuming: Bool = false
     let onComplete: () -> Void
     
     @Environment(\.dismiss) var dismiss
@@ -73,8 +74,8 @@ struct ResetRankingsView: View {
                         }
                     }
                     
-                    if isComparing && !comparisonHistory.isEmpty {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        if isComparing && !(comparisonHistory.isEmpty && gameHistory.isEmpty) {
                             Button {
                                 undoLastComparison()
                             } label: {
@@ -82,6 +83,23 @@ struct ResetRankingsView: View {
                             }
                             .foregroundColor(.primaryBlue)
                         }
+                    }
+                }
+            }
+            .onAppear {
+                if resuming {
+                    let ranked = games.filter { $0.rankPosition > 0 }.sorted { $0.rankPosition < $1.rankPosition }
+                    let unranked = games.filter { $0.rankPosition == 0 }.shuffled()
+                    
+                    rankedSoFar = ranked
+                    shuffledGames = ranked + unranked
+                    currentGameIndex = ranked.count
+                    showIntro = false
+                    
+                    if currentGameIndex < shuffledGames.count {
+                        startComparisonForCurrentGame()
+                    } else {
+                        isComplete = true
                     }
                 }
             }
@@ -257,7 +275,7 @@ struct ResetRankingsView: View {
         VStack(spacing: 12) {
             // Progress
             VStack(spacing: 4) {
-                Text("Ranking game \(currentGameIndex + 1) of \(shuffledGames.count)")
+                Text("Ranking game \(min(currentGameIndex + 1, shuffledGames.count)) of \(shuffledGames.count)")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundColor(.grayText)
                 
@@ -308,9 +326,23 @@ struct ResetRankingsView: View {
         
         comparisonHistory = []
         
-        if rankedSoFar.isEmpty {
-            // First game, no comparison needed
-            Task { await placeGame(shuffledGames[currentGameIndex], at: 1) }
+        if rankedSoFar.isEmpty && currentGameIndex == 0 {
+            // First two games — show head-to-head, winner gets #1, loser gets #2
+            guard shuffledGames.count >= 2 else {
+                // Only 1 game total, just place it
+                Task { await placeGame(shuffledGames[0], at: 1) }
+                return
+            }
+            
+            currentOpponent = shuffledGames[1]
+            comparisonCount = 0
+            isComparing = true
+            showCards = false
+            selectedSide = nil
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                showCards = true
+            }
             return
         }
         
@@ -349,6 +381,27 @@ struct ResetRankingsView: View {
         impactFeedback.impactOccurred()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // Special case: first matchup (game 0 vs game 1)
+            if rankedSoFar.isEmpty && currentGameIndex == 0 {
+                isComparing = false
+                currentOpponent = nil
+                
+                let winner: UserGame
+                let loser: UserGame
+                if side == "left" {
+                    winner = shuffledGames[0]
+                    loser = shuffledGames[1]
+                } else {
+                    winner = shuffledGames[1]
+                    loser = shuffledGames[0]
+                }
+                
+                Task {
+                    await placeFirstTwo(winner: winner, loser: loser)
+                }
+                return
+            }
+            
             comparisonHistory.append(ComparisonState(
                 lowIndex: lowIndex,
                 highIndex: highIndex,
@@ -365,6 +418,57 @@ struct ResetRankingsView: View {
             nextComparison()
         }
     }
+    
+    private func placeFirstTwo(winner: UserGame, loser: UserGame) async {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            do {
+                // Place winner at #1
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": 1])
+                    .eq("id", value: winner.id)
+                    .execute()
+                
+                // Place loser at #2
+                try await supabase.client
+                    .from("user_games")
+                    .update(["rank_position": 2])
+                    .eq("id", value: loser.id)
+                    .execute()
+                
+                print("✅ First matchup: \(winner.gameTitle) at #1, \(loser.gameTitle) at #2")
+                
+                // Update local state
+                var rankedWinner = winner
+                rankedWinner.rankPosition = 1
+                var rankedLoser = loser
+                rankedLoser.rankPosition = 2
+                
+                rankedSoFar = [rankedWinner, rankedLoser]
+                
+                // Save snapshot so we can undo back to this matchup
+                gameHistory.append(GameSnapshot(
+                    gameIndex: 0,
+                    rankedSoFar: [],
+                    lastPlacedPosition: 1
+                ))
+                
+                // Skip to game index 2 (both 0 and 1 are placed)
+                currentGameIndex = 2
+                
+                if currentGameIndex >= shuffledGames.count {
+                    await postFeedEntry()
+                    isComplete = true
+                } else {
+                    startComparisonForCurrentGame()
+                }
+                
+            } catch {
+                print("❌ Error placing first two games: \(error)")
+                errorMessage = "Something went wrong. Try again?"
+            }
+        }
     
     private func undoLastComparison() {
         // If we have comparison history within the current game, undo that
@@ -389,9 +493,13 @@ struct ResetRankingsView: View {
         do {
             // 1. Remove the rank from the game we just placed
             let placedGame = shuffledGames[snapshot.gameIndex]
+            struct NullRank: Encodable {
+                let rank_position: String? = nil
+            }
+            
             try await supabase.client
                 .from("user_games")
-                .update(["rank_position": NSNull()])
+                .update(NullRank())
                 .eq("id", value: placedGame.id)
                 .execute()
             
@@ -423,7 +531,28 @@ struct ResetRankingsView: View {
             currentGameIndex = snapshot.gameIndex
             comparisonHistory = []
             
-            // 4. Restart comparisons for this game
+            // 4. If undoing back to the first matchup, also unrank game 1
+            if snapshot.gameIndex == 0 && snapshot.rankedSoFar.isEmpty {
+                // Unrank both games from the first matchup
+                let game0 = shuffledGames[0]
+                let game1 = shuffledGames[1]
+                
+                try await supabase.client
+                    .from("user_games")
+                    .update(NullRank())
+                    .eq("id", value: game1.id)
+                    .execute()
+                
+                try await supabase.client
+                    .from("user_games")
+                    .update(NullRank())
+                    .eq("id", value: game0.id)
+                    .execute()
+                
+                print("✅ Undid first matchup, back to game 1 vs game 2")
+            }
+            
+            // 5. Restart comparisons for this game
             startComparisonForCurrentGame()
             
             print("✅ Undid placement of \(placedGame.gameTitle), back to game \(snapshot.gameIndex + 1)")
@@ -468,12 +597,14 @@ struct ResetRankingsView: View {
     private func placeGame(_ game: UserGame, at position: Int) async {
         guard let userId = supabase.currentUser?.id else { return }
         
-        // Save snapshot for game-level undo
-        gameHistory.append(GameSnapshot(
-            gameIndex: currentGameIndex,
-            rankedSoFar: rankedSoFar,
-            lastPlacedPosition: position
-        ))
+        // Save snapshot for game-level undo (skip first game — no comparison was made)
+        if currentGameIndex > 0 {
+            gameHistory.append(GameSnapshot(
+                gameIndex: currentGameIndex,
+                rankedSoFar: rankedSoFar,
+                lastPlacedPosition: position
+            ))
+        }
         
         do {
             struct GameToShift: Decodable {
@@ -485,6 +616,7 @@ struct ResetRankingsView: View {
                 .from("user_games")
                 .select("id, rank_position")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .gte("rank_position", value: position)
                 .order("rank_position", ascending: false)
                 .execute()

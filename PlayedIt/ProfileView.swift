@@ -25,6 +25,8 @@ struct ProfileView: View {
     @State private var selectedListTab = 0
     @State private var showResetRankings = false
     @State private var showResetFlow = false
+    @State private var hasUnrankedGames = false
+    @State private var unrankedCount = 0
     
     var body: some View {
         NavigationStack {
@@ -157,6 +159,34 @@ struct ProfileView: View {
                             if isLoadingGames {
                                 ProgressView()
                                     .padding(.top, 20)
+                            } else if rankedGames.isEmpty && hasUnrankedGames {
+                                VStack(spacing: 12) {
+                                    Text("🔄")
+                                        .font(.system(size: 40))
+                                    
+                                    Text("Rankings reset in progress")
+                                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.slate)
+                                    
+                                    Text("You started a reset but didn't finish. Pick up where you left off!")
+                                        .font(.system(size: 15, design: .rounded))
+                                        .foregroundColor(.grayText)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 40)
+                                    
+                                    Button {
+                                        Task { await loadUnrankedAndResume() }
+                                    } label: {
+                                        Text("Continue Re-ranking")
+                                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                            .padding(.horizontal, 24)
+                                            .padding(.vertical, 10)
+                                    }
+                                    .buttonStyle(PrimaryButtonStyle())
+                                    .padding(.top, 4)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 20)
                             } else if rankedGames.isEmpty {
                                 VStack(spacing: 8) {
                                     Text("No games ranked yet")
@@ -169,6 +199,41 @@ struct ProfileView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 20)
                             } else {
+                                if hasUnrankedGames {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "arrow.counterclockwise")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.accentOrange)
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Re-ranking in progress")
+                                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.slate)
+                                            Text("\(rankedGames.count) ranked, \(unrankedCount) to go")
+                                                .font(.system(size: 12, design: .rounded))
+                                                .foregroundColor(.grayText)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Button {
+                                            Task { await loadUnrankedAndResume() }
+                                        } label: {
+                                            Text("Continue")
+                                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 6)
+                                                .background(Color.accentOrange)
+                                                .cornerRadius(8)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(Color.accentOrange.opacity(0.08))
+                                    .cornerRadius(12)
+                                    .padding(.horizontal, 20)
+                                }
+                                
                                 ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
                                     RankedGameRow(rank: index + 1, game: game) {
                                         Task { await fetchRankedGames() }
@@ -198,8 +263,10 @@ struct ProfileView: View {
             } message: {
                 Text("This will reset all your rankings and take you through the comparison flow again from the top. Your games, notes, and platforms stay. Just the order gets wiped. This can't be undone!")
             }
-            .fullScreenCover(isPresented: $showResetFlow) {
-                ResetRankingsView(games: rankedGames) {
+            .fullScreenCover(isPresented: $showResetFlow, onDismiss: {
+                Task { await fetchRankedGames() }
+            }) {
+                ResetRankingsView(games: rankedGames, resuming: hasUnrankedGames) {
                     Task { await fetchRankedGames() }
                 }
             }
@@ -374,6 +441,7 @@ struct ProfileView: View {
                 .from("user_games")
                 .select("*, games(title, cover_url, release_date)")
                 .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
@@ -398,7 +466,75 @@ struct ProfileView: View {
             print("❌ Error fetching ranked games: \(error)")
         }
         
+        // Check if user has unranked games (mid-reset)
+        if let userId = supabase.currentUser?.id {
+            do {
+                let totalCount: Int = try await supabase.client
+                    .from("user_games")
+                    .select("*", head: true, count: .exact)
+                    .eq("user_id", value: userId.uuidString)
+                    .execute()
+                    .count ?? 0
+                
+                unrankedCount = totalCount - rankedGames.count
+                hasUnrankedGames = unrankedCount > 0
+                print("🔍 Ranked: \(rankedGames.count), Total: \(totalCount), hasUnranked: \(hasUnrankedGames)")
+            } catch {
+                print("❌ Error checking unranked games: \(error)")
+            }
+        }
+        
         isLoadingGames = false
+    }
+    private func loadUnrankedAndResume() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            struct UserGameRow: Decodable {
+                let id: String
+                let game_id: Int
+                let user_id: String
+                let rank_position: Int?
+                let platform_played: [String]
+                let notes: String?
+                let logged_at: String?
+                let games: GameDetails
+                
+                struct GameDetails: Decodable {
+                    let title: String
+                    let cover_url: String?
+                    let release_date: String?
+                }
+            }
+            
+            let rows: [UserGameRow] = try await supabase.client
+                .from("user_games")
+                .select("*, games(title, cover_url, release_date)")
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .value
+            
+            rankedGames = rows.map { row in
+                UserGame(
+                    id: row.id,
+                    gameId: row.game_id,
+                    userId: row.user_id,
+                    rankPosition: row.rank_position ?? 0,
+                    platformPlayed: row.platform_played,
+                    notes: row.notes,
+                    loggedAt: row.logged_at,
+                    canonicalGameId: nil,
+                    gameTitle: row.games.title,
+                    gameCoverURL: row.games.cover_url,
+                    gameReleaseDate: row.games.release_date
+                )
+            }
+            
+            showResetFlow = true
+            
+        } catch {
+            print("❌ Error loading unranked games: \(error)")
+        }
     }
     private func saveUsername() async {
         guard let userId = supabase.currentUser?.id else { return }
