@@ -103,28 +103,33 @@ struct WhatsNewView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     // Major features
-                    ForEach(WhatsNewManager.features) { feature in
-                        HStack(spacing: 16) {
-                            Image(systemName: feature.icon)
-                                .font(.system(size: 22))
-                                .foregroundColor(.accentOrange)
-                                .frame(width: 44, height: 44)
-                                .background(Color.accentOrange.opacity(0.12))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(feature.title)
-                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.slate)
+                        ForEach(WhatsNewManager.features) { feature in
+                            HStack(alignment: .top, spacing: 0) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color.accentOrange.opacity(0.12))
+                                        .frame(width: 44, height: 44)
+                                    
+                                    Image(systemName: feature.icon)
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.accentOrange)
+                                }
+                                .frame(width: 60, alignment: .leading)
                                 
-                                Text(feature.description)
-                                    .font(.system(size: 15, design: .rounded))
-                                    .foregroundColor(.grayText)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(feature.title)
+                                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.slate)
+                                    
+                                    Text(feature.description)
+                                        .font(.system(size: 15, design: .rounded))
+                                        .foregroundColor(.grayText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            .padding(.horizontal, 24)
                         }
-                        .padding(.horizontal, 24)
-                    }
                     
                     // Minor improvements section
                     VStack(alignment: .leading, spacing: 12) {

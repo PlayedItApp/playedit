@@ -17,15 +17,10 @@ struct GameLogView: View {
     @State private var existingUserGame: ExistingUserGame? = nil
     @State private var showReRankAlert = false
     
-    // Platform options based on what the game supports
-    var availablePlatforms: [String] {
-        game.platforms.isEmpty ? Self.allPlatforms : game.platforms
-    }
-    
     static let allPlatforms = [
         "PC", "PlayStation 5", "PlayStation 4", "PlayStation 3",
         "Xbox Series S/X", "Xbox One", "Xbox 360",
-        "Nintendo Switch", "Wii U", "Wii", "Nintendo 3DS",
+        "Nintendo Switch", "Nintendo 64", "Wii U", "Wii", "Nintendo 3DS",
         "iOS", "Android", "macOS", "Linux"
     ]
     
@@ -83,7 +78,7 @@ struct GameLogView: View {
                             GridItem(.flexible()),
                             GridItem(.flexible())
                         ], spacing: 10) {
-                            ForEach(availablePlatforms, id: \.self) { platform in
+                            ForEach(Self.allPlatforms, id: \.self) { platform in
                                 PlatformButton(
                                     platform: platform,
                                     isSelected: selectedPlatforms.contains(platform)
@@ -128,7 +123,7 @@ struct GameLogView: View {
                         }
                         
                         // Show custom selections that aren't in the grid
-                        let customSelections = selectedPlatforms.filter { !availablePlatforms.contains($0) }
+                        let customSelections = selectedPlatforms.filter { !Self.allPlatforms.contains($0) }
                         if !customSelections.isEmpty {
                             FlowLayout(spacing: 8) {
                                 ForEach(Array(customSelections).sorted(), id: \.self) { platform in

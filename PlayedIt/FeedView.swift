@@ -28,6 +28,16 @@ struct FeedView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        showGameSearch = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primaryBlue)
+                    }
+                }
+                
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
                         showNotifications = true
                     } label: {
                         ZStack(alignment: .topTrailing) {
@@ -42,16 +52,6 @@ struct FeedView: View {
                                     .offset(x: 2, y: -2)
                             }
                         }
-                    }
-                }
-                
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showGameSearch = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.primaryBlue)
                     }
                 }
             }
@@ -662,20 +662,23 @@ struct ActivityFeedRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
-                // Avatar
-                if let avatarURL = item.avatarURL, let url = URL(string: avatarURL) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                // Avatar - tap to view profile
+                NavigationLink(destination: item.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: item.userId, friendshipId: "", username: item.username, userId: item.userId, avatarURL: item.avatarURL)))) {
+                    if let avatarURL = item.avatarURL, let url = URL(string: avatarURL) {
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            avatarPlaceholder
+                        }
+                        .frame(width: 40, height: 40)
+                        .clipShape(Circle())
+                    } else {
                         avatarPlaceholder
                     }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                } else {
-                    avatarPlaceholder
                 }
+                .buttonStyle(.plain)
                 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
@@ -913,7 +916,7 @@ struct FeedGameDetailSheet: View {
                 userId: profile.id,
                 avatarURL: profile.avatar_url
             )
-            
+             
             // 3. Fetch my games
             let myRows: [UserGameRow] = try await supabase.client
                 .from("user_games")

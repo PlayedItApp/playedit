@@ -256,7 +256,7 @@ struct GameDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 20) {
                     // Cover art
                     AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
                         image
