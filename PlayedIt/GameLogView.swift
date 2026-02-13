@@ -108,6 +108,11 @@ struct GameLogView: View {
                             Button {
                                 let trimmed = customPlatform.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !trimmed.isEmpty else { return }
+                                let result = ContentModerator.shared.checkUsername(trimmed)
+                                if !result.allowed {
+                                    errorMessage = "Platform name contains inappropriate language."
+                                    return
+                                }
                                 selectedPlatforms.insert(trimmed)
                                 customPlatform = ""
                             } label: {
@@ -310,6 +315,17 @@ struct GameLogView: View {
         
         isLoading = true
         errorMessage = nil
+        
+        // Moderate game notes if provided
+        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedNotes.isEmpty {
+            let result = await ModerationService.shared.moderateGameNote(trimmedNotes)
+            if !result.allowed {
+                errorMessage = result.reason
+                isLoading = false
+                return
+            }
+        }
         
         do {
             struct GameInsert: Encodable {

@@ -463,6 +463,7 @@ struct FeedItemRow: View {
     @State private var showGameDetail = false
     @State private var toastMessage = ""
     @State private var showToast = false
+    @State private var showReportSheet = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -616,6 +617,20 @@ struct FeedItemRow: View {
                         )
                     }
                 }
+                // Report (only on friends' posts)
+                if item.userId.lowercased() != (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") {
+                    Menu {
+                        Button(role: .destructive) {
+                            showReportSheet = true
+                        } label: {
+                            Label("Report", systemImage: "flag")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 14))
+                            .foregroundColor(.grayText)
+                    }
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -623,8 +638,14 @@ struct FeedItemRow: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        .sheet(isPresented: $showGameDetail) {
-            FeedGameDetailSheet(item: item)
+        .sheet(isPresented: $showReportSheet) {
+            ReportView(
+                contentType: .note,
+                contentId: UUID(uuidString: item.userGameId),
+                contentText: nil,
+                reportedUserId: UUID(uuidString: item.userId) ?? UUID()
+            )
+            .presentationDetents([.large])
         }
     }
     

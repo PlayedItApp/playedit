@@ -9,6 +9,7 @@ struct SignUpView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var isAnimating = false
+    @State private var moderationError: String?
     
     var passwordsMatch: Bool {
         !password.isEmpty && password == confirmPassword
@@ -124,7 +125,7 @@ struct SignUpView: View {
                     .animation(.easeOut(duration: 0.5).delay(0.1), value: isAnimating)
                     
                     // Error Message
-                    if let error = supabase.errorMessage {
+                    if let error = moderationError ?? supabase.errorMessage {
                         HStack {
                             Image(systemName: "exclamationmark.circle.fill")
                                 .foregroundColor(.error)
@@ -140,6 +141,15 @@ struct SignUpView: View {
                     VStack(spacing: 12) {
                         Button {
                             Task {
+                                moderationError = nil
+                                
+                                // Check username moderation
+                                let result = await ModerationService.shared.moderateUsername(username)
+                                if !result.allowed {
+                                    moderationError = result.reason
+                                    return
+                                }
+                                
                                 let success = await supabase.signUp(
                                     email: email,
                                     password: password,

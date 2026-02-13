@@ -14,6 +14,8 @@ struct CommentsSheet: View {
     @FocusState private var isInputFocused: Bool
     @State private var editingComment: FeedComment? = nil
     @State private var editText = ""
+    @State private var moderationError: String?
+    @State private var hiddenCommentIds: Set<String> = []
 
     private var isPostOwner: Bool {
         feedItem.userId.lowercased() == (supabase.currentUser?.id.uuidString ?? "").lowercased()
@@ -103,6 +105,13 @@ struct CommentsSheet: View {
                                     },
                                     onDelete: {
                                         deleteComment(comment)
+                                    },
+                                    isReported: hiddenCommentIds.contains(comment.id),
+                                    onReport: {
+                                        print("🚩 Hiding comment \(comment.id)")
+                                        _ = withAnimation {
+                                            hiddenCommentIds.insert(comment.id)
+                                        }
                                     }
                                 )
                             }
@@ -118,6 +127,27 @@ struct CommentsSheet: View {
                     SpoilerHint()
                         .padding(.horizontal)
                         .padding(.top, 4)
+                    if let moderationError = moderationError {
+                        HStack {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.error)
+                            Text(moderationError)
+                                .font(.caption)
+                                .foregroundColor(.error)
+                            Spacer()
+                            Button {
+                                self.moderationError = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.grayText)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                    }
+                    
                     if editingComment != nil {
                         HStack {
                             Text("Editing comment")
@@ -244,8 +274,16 @@ struct CommentsSheet: View {
         guard !content.isEmpty else { return }
         
         isSending = true
+        moderationError = nil
         
         Task {
+            // Check comment moderation
+            let result = await ModerationService.shared.moderateComment(content)
+            if !result.allowed {
+                moderationError = result.reason
+                isSending = false
+                return
+            }
             do {
                 struct CommentInsert: Encodable {
                     let feed_post_id: String
@@ -294,13 +332,21 @@ struct CommentsSheet: View {
         }
     
     private func saveEdit() {
-            guard let comment = editingComment else { return }
-            let content = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !content.isEmpty else { return }
-            
-            isSending = true
-            
-            Task {
+        guard let comment = editingComment else { return }
+        let content = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return }
+        
+        isSending = true
+        moderationError = nil
+        
+        Task {
+            // Check comment moderation
+            let result = await ModerationService.shared.moderateComment(content)
+            if !result.allowed {
+                moderationError = result.reason
+                isSending = false
+                return
+            }
                 do {
                     try await supabase.client
                         .from("feed_comments")
@@ -339,8 +385,12 @@ struct CommentRowView: View {
     let isPostOwner: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
+    var isReported: Bool = false
+    var onReport: (() -> Void)? = nil
     
     @State private var showDeleteConfirm = false
+    @State private var showReportSheet = false
+    @State private var reportSubmitted = false
     
     // Can delete if: it's your own comment OR you own the post
     private var canDelete: Bool {
@@ -390,40 +440,79 @@ struct CommentRowView: View {
                     
                     Spacer()
                     
-                    if comment.isOwn || isPostOwner {
-                        Menu {
-                            if comment.isOwn {
-                                Button {
-                                    onEdit()
-                                } label: {
-                                    Label("Edit", systemImage: "pencil")
-                                }
+                    Menu {
+                        if comment.isOwn {
+                            Button {
+                                onEdit()
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
                             }
-                            
+                        }
+                        
+                        if comment.isOwn || isPostOwner {
                             Button(role: .destructive) {
                                 showDeleteConfirm = true
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.caption)
-                                .foregroundColor(.grayText)
-                                .padding(4)
                         }
-                        .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                            Button("Delete", role: .destructive) {
-                                onDelete()
+                        
+                        if !comment.isOwn {
+                            Button(role: .destructive) {
+                                print("🚩 Report tapped, setting showReportSheet = true")
+                                showReportSheet = true
+                            } label: {
+                                Label("Report", systemImage: "flag")
                             }
-                            Button("Cancel", role: .cancel) {}
                         }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.caption)
+                            .foregroundColor(.grayText)
+                            .padding(4)
+                    }
+                    .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                        Button("Delete", role: .destructive) {
+                            onDelete()
+                        }
+                        Button("Cancel", role: .cancel) {}
                     }
                 }
                 
-                SpoilerTextView(comment.content)
-                    .font(.subheadline)
-                    .foregroundColor(.slate)
+                if isReported {
+                    Text("You reported this comment")
+                        .font(.system(size: 13, design: .rounded))
+                        .foregroundColor(.grayText)
+                        .italic()
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .background(Color.lightGray)
+                        .cornerRadius(8)
+                } else {
+                    SpoilerTextView(comment.content)
+                        .font(.subheadline)
+                        .foregroundColor(.slate)
+                }
             }
+        }
+        .onChange(of: showReportSheet) { _, newValue in
+            print("🚩 showReportSheet changed to \(newValue)")
+        }
+        .sheet(isPresented: $showReportSheet, onDismiss: {
+            if reportSubmitted {
+                print("🚩 Report submitted, hiding comment")
+                onReport?()
+                reportSubmitted = false
+            }
+        }) {
+            ReportView(
+                contentType: .comment,
+                contentId: UUID(uuidString: comment.id),
+                contentText: comment.content,
+                reportedUserId: UUID(uuidString: comment.userId) ?? UUID(),
+                didSubmit: $reportSubmitted
+            )
+            .presentationDetents([.large])
         }
     }
     

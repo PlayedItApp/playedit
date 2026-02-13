@@ -14,6 +14,7 @@ struct GameDetailFromFriendView: View {
     @State private var isLoadingFriendRankings = true
     @State private var showLogGame = false
     @State private var metacriticScore: Int? = nil
+    @State private var showReportSheet = false
     
     // Check if current user has this game ranked
     private var iHaveThisGame: Bool {
@@ -44,13 +45,36 @@ struct GameDetailFromFriendView: View {
         }
         .navigationTitle(userGame.gameTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if userGame.userId.lowercased() != (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
+                    Menu {
+                        Button(role: .destructive) {
+                            showReportSheet = true
+                        } label: {
+                            Label("Report", systemImage: "flag")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(.primaryBlue)
+                    }
+                }
+            }
+        }
         .task {
             resolveMyGame()
             await fetchMetacriticScore()
             await fetchFriendRankings()
         }
-        .sheet(isPresented: $showLogGame) {
-            GameLogView(game: userGame.toGame())
+        .sheet(isPresented: $showReportSheet) {
+            ReportView(
+                contentType: .note,
+                contentId: UUID(uuidString: userGame.id),
+                contentText: userGame.notes,
+                reportedUserId: UUID(uuidString: userGame.userId) ?? UUID()
+            )
+            .presentationDetents([.large])
         }
     }
     

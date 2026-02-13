@@ -1,6 +1,10 @@
 import SwiftUI
 import Supabase
 
+private nonisolated struct ResetParams: Encodable, Sendable {
+    let p_user_id: String
+}
+
 struct ResetRankingsView: View {
     let games: [UserGame]
     var resuming: Bool = false
@@ -420,8 +424,7 @@ struct ResetRankingsView: View {
     }
     
     private func placeFirstTwo(winner: UserGame, loser: UserGame) async {
-            guard let userId = supabase.currentUser?.id else { return }
-            
+        guard let _ = supabase.currentUser?.id else { return }
             do {
                 // Place winner at #1
                 try await supabase.client
@@ -569,7 +572,7 @@ struct ResetRankingsView: View {
         isResetting = true
         
         do {
-            try await supabase.client.rpc("reset_user_rankings", params: ["p_user_id": userId.uuidString])
+            try await supabase.client.rpc("reset_user_rankings", params: ResetParams(p_user_id: userId.uuidString))
                 .execute()
             
             print("✅ All rank positions wiped")

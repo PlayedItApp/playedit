@@ -132,7 +132,7 @@ struct ProfileView: View {
                             if let message = message {
                                 Text(message)
                                     .font(.caption)
-                                    .foregroundColor(.success)
+                                    .foregroundColor(message.contains("saved") ? .success : .error)
                             }
                         }
                         
@@ -548,6 +548,14 @@ struct ProfileView: View {
         isSaving = true
         message = nil
         
+        // Check username moderation
+        let moderationResult = await ModerationService.shared.moderateUsername(username)
+        if !moderationResult.allowed {
+            message = moderationResult.reason
+            isSaving = false
+            return
+        }
+        
         do {
             try await supabase.client
                 .from("users")
@@ -575,6 +583,14 @@ struct ProfileView: View {
         isUploadingPhoto = true
         
         guard let userId = supabase.currentUser?.id else {
+            isUploadingPhoto = false
+            return
+        }
+        
+        // Check image for sensitive content
+        let photoResult = await PhotoModerator.shared.checkImage(image)
+        if !photoResult.allowed {
+            message = photoResult.reason
             isUploadingPhoto = false
             return
         }

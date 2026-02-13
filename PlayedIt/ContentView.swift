@@ -252,6 +252,7 @@ struct GameDetailSheet: View {
     @State private var displayedNotes: String? = nil
     @State private var displayedPlatforms: [String] = []
     @State private var hasInitialized = false
+    @State private var notesError: String?
     
     var body: some View {
         NavigationStack {
@@ -489,6 +490,17 @@ struct GameDetailSheet: View {
                                     )
                                 
                                 SpoilerHint()
+                                                                
+                                if let notesError = notesError {
+                                    HStack {
+                                        Image(systemName: "exclamationmark.circle.fill")
+                                            .font(.caption)
+                                            .foregroundColor(.error)
+                                        Text(notesError)
+                                            .font(.caption)
+                                            .foregroundColor(.error)
+                                    }
+                                }
                                 
                                 HStack(spacing: 12) {
                                     Button {
@@ -866,10 +878,20 @@ struct GameDetailSheet: View {
     // MARK: - Save Notes
     private func saveNotes() async {
         isSavingNotes = true
+        notesError = nil
+        
+        let trimmed = editedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !trimmed.isEmpty {
+            let result = await ModerationService.shared.moderateGameNote(trimmed)
+            if !result.allowed {
+                notesError = result.reason
+                isSavingNotes = false
+                return
+            }
+        }
         
         do {
-            let trimmed = editedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-            
             try await supabase.client
                 .from("user_games")
                 .update(["notes": trimmed])

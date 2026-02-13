@@ -10,6 +10,7 @@ struct FriendsView: View {
     @State private var searchUsername = ""
     @State private var searchError: String?
     @State private var searchSuccess: String?
+    @State private var sentRequests: [Friend] = []
     
     var body: some View {
         NavigationStack {
@@ -64,8 +65,28 @@ struct FriendsView: View {
                     }
                 }
                 
+                // Sent requests
+                if !sentRequests.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Sent Requests")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundColor(.grayText)
+                            .padding(.horizontal, 16)
+                        
+                        ForEach(sentRequests) { friend in
+                            NavigationLink(destination: FriendProfileView(friend: friend)) {
+                                SentRequestRow(friend: friend) {
+                                    Task { await cancelFriendRequest(friend) }
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+                
                 // Friends list
-                if friends.isEmpty && pendingRequests.isEmpty {
+                if friends.isEmpty && pendingRequests.isEmpty && sentRequests.isEmpty {
                     VStack(spacing: 16) {
                         Spacer().frame(height: 60)
                         
@@ -205,6 +226,7 @@ struct FriendsView: View {
             
             var acceptedFriends: [Friend] = []
             var pending: [Friend] = []
+            var sent: [Friend] = []
             
             for friendship in friendships {
                 let friendUserId = friendship.user_id.lowercased() == userId.uuidString.lowercased() ? friendship.friend_id : friendship.user_id
@@ -236,7 +258,8 @@ struct FriendsView: View {
                         friendshipId: friendship.id,
                         username: userInfo.username ?? userInfo.email ?? "Unknown",
                         userId: friendUserId,
-                        avatarURL: userInfo.avatar_url
+                        avatarURL: userInfo.avatar_url,
+                        status: friendship.status
                     )
                     
                     if friendship.status == "accepted" {
@@ -244,6 +267,9 @@ struct FriendsView: View {
                     } else if friendship.status == "pending" && isIncoming {
                         pending.append(friend)
                         print("🔍 Added to pending requests")
+                    } else if friendship.status == "pending" && !isIncoming {
+                        sent.append(friend)
+                        print("🔍 Added to sent requests")
                     }
                 } catch {
                     print("❌ Error fetching user info for \(friendUserId): \(error)")
@@ -252,6 +278,7 @@ struct FriendsView: View {
             
             friends = acceptedFriends
             pendingRequests = pending
+            sentRequests = sent
             isLoading = false
             
             print("🔍 Final: \(friends.count) friends, \(pendingRequests.count) pending")
@@ -310,6 +337,7 @@ struct FriendsView: View {
             
             searchSuccess = "Friend request sent to \(searchUsername)!"
             searchUsername = ""
+            await fetchFriends()
             
         } catch {
             print("❌ Error sending friend request: \(error)")
@@ -346,6 +374,21 @@ struct FriendsView: View {
             print("❌ Error declining friend: \(error)")
         }
     }
+    
+    private func cancelFriendRequest(_ friend: Friend) async {
+            do {
+                try await supabase.client
+                    .from("friendships")
+                    .delete()
+                    .eq("id", value: friend.friendshipId)
+                    .execute()
+                
+                await fetchFriends()
+                
+            } catch {
+                print("❌ Error cancelling friend request: \(error)")
+            }
+        }
 }
 
 // MARK: - Friend Model
@@ -355,13 +398,15 @@ struct Friend: Identifiable, Hashable {
     let username: String
     let userId: String
     let avatarURL: String?
+    let status: String
     
-    init(id: String, friendshipId: String, username: String, userId: String, avatarURL: String? = nil) {
+    init(id: String, friendshipId: String, username: String, userId: String, avatarURL: String? = nil, status: String = "accepted") {
         self.id = id
         self.friendshipId = friendshipId
         self.username = username
         self.userId = userId
         self.avatarURL = avatarURL
+        self.status = status
     }
 }
 
@@ -501,6 +546,69 @@ struct PendingRequestRow: View {
     }
 }
 
+// MARK: - Sent Request Row
+struct SentRequestRow: View {
+    let friend: Friend
+    let onCancel: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.primaryBlue.opacity(0.2))
+                            .overlay(
+                                Text(String(friend.username.prefix(1)).uppercased())
+                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.primaryBlue)
+                            )
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color.primaryBlue.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            Text(String(friend.username.prefix(1)).uppercased())
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                .foregroundColor(.primaryBlue)
+                        )
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(friend.username)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundColor(.slate)
+                
+                Text("Pending")
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundColor(.grayText)
+            }
+            
+            Spacer()
+            
+            Button(action: onCancel) {
+                Text("Cancel")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.grayText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.lightGray)
+                    .cornerRadius(8)
+            }
+        }
+        .padding(12)
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
+
 // MARK: - Friend Profile View
 struct FriendProfileView: View {
     let friend: Friend
@@ -513,6 +621,7 @@ struct FriendProfileView: View {
     @State private var showBatchRank = false
     @State private var showRemoveFriendConfirm = false
     @State private var isRemovingFriend = false
+    @State private var showReportSheet = false
     @Environment(\.dismiss) private var dismiss
     
     // Computed taste match
@@ -611,6 +720,28 @@ struct FriendProfileView: View {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
                     .padding(.top, 100)
+            } else if friend.status == "pending" {
+                VStack(spacing: 24) {
+                    profileHeader
+                    
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.silver)
+                        
+                        Text("Request pending")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .foregroundColor(.slate)
+                        
+                        Text("You'll be able to see \(friend.username)'s rankings and compare taste once they accept your request.")
+                            .font(.subheadline)
+                            .foregroundColor(.grayText)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+                    .padding(.top, 20)
+                }
+                .padding(.vertical, 16)
             } else {
                 VStack(spacing: 24) {
                     // Profile Header
@@ -674,16 +805,23 @@ struct FriendProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                if friend.status == "accepted" {
                 Menu {
                     Button(role: .destructive) {
                         showRemoveFriendConfirm = true
                     } label: {
                         Label("Remove Friend", systemImage: "person.badge.minus")
                     }
+                    
+                    Button(role: .destructive) {
+                        showReportSheet = true
+                    } label: {
+                        Label("Report", systemImage: "flag")
+                    }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 16))
-                        .foregroundColor(.primaryBlue)
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 16))
+                    .foregroundColor(.primaryBlue)
                 }
                 .confirmationDialog(
                     "Remove \(friend.username)?",
@@ -696,6 +834,7 @@ struct FriendProfileView: View {
                     Button("Cancel", role: .cancel) { }
                 } message: {
                     Text("They won't be notified. You'll need to send a new request to be friends again.")
+                }
                 }
             }
         }
@@ -712,6 +851,15 @@ struct FriendProfileView: View {
                 myGames: myGames,
                 friendName: friend.username
             )
+        }
+        .sheet(isPresented: $showReportSheet) {
+            ReportView(
+                contentType: .username,
+                contentId: nil,
+                contentText: friend.username,
+                reportedUserId: UUID(uuidString: friend.userId) ?? UUID()
+            )
+            .presentationDetents([.large])
         }
         .task {
             await loadData()
@@ -752,9 +900,11 @@ struct FriendProfileView: View {
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(.slate)
             
+            if friend.status != "pending" {
                 Text("\(friendGames.count) games ranked")
-                .font(.subheadline)
-                .foregroundColor(.grayText)
+                    .font(.subheadline)
+                    .foregroundColor(.grayText)
+            }
         }
         .padding(.top, 20)
     }
@@ -1065,6 +1215,12 @@ struct FriendProfileView: View {
     // MARK: - Load Data
     private func loadData() async {
         guard let userId = supabase.currentUser?.id else {
+            isLoading = false
+            return
+        }
+        
+        // Don't load game data for pending friends
+        if friend.status == "pending" {
             isLoading = false
             return
         }

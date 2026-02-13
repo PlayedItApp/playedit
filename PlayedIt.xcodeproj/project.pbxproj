@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01C5006F2F1D837D002110A2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 01C5006E2F1D837D002110A2 /* Supabase */; };
+		01D9B41B2F3EC193008282B6 /* SensitiveContentAnalysis.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01D9B41A2F3EC193008282B6 /* SensitiveContentAnalysis.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,6 +32,7 @@
 		01C5001C2F1D7DF0002110A2 /* PlayedIt.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlayedIt.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		01C5002B2F1D7DF1002110A2 /* PlayedItTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PlayedItTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		01C500352F1D7DF1002110A2 /* PlayedItUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PlayedItUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		01D9B41A2F3EC193008282B6 /* SensitiveContentAnalysis.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SensitiveContentAnalysis.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/SensitiveContentAnalysis.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -70,6 +72,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				01C5006F2F1D837D002110A2 /* Supabase in Frameworks */,
+				01D9B41B2F3EC193008282B6 /* SensitiveContentAnalysis.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -114,6 +117,7 @@
 		01C5006D2F1D837D002110A2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				01D9B41A2F3EC193008282B6 /* SensitiveContentAnalysis.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

@@ -15,5 +15,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSSensitiveContentAnalysisUsageDescription</key>
+	<string>PlayedIt checks profile photos to keep the community safe.</string>
 </dict>
 </plist>
