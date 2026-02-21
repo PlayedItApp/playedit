@@ -235,7 +235,7 @@ struct DeepLinkProfileView: View {
             isLoading = false
             
         } catch {
-            print("❌ Error looking up user: \(error)")
+            debugLog("❌ Error looking up user: \(error)")
             userNotFound = true
             isLoading = false
         }
@@ -265,7 +265,7 @@ struct DeepLinkProfileView: View {
             
             requestSent = true
         } catch {
-            print("❌ Error sending friend request: \(error)")
+            debugLog("❌ Error sending friend request: \(error)")
         }
         
         isSendingRequest = false

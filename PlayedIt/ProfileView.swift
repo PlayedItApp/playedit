@@ -402,23 +402,23 @@ struct ProfileView: View {
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
                 Task {
-                    print("📸 Photo selected, loading...")
+                    debugLog("📸 Photo selected, loading...")
                     do {
                         if let data = try await newValue.loadTransferable(type: Data.self) {
-                            print("📸 Data loaded: \(data.count) bytes")
+                            debugLog("📸 Data loaded: \(data.count) bytes")
                             if let uiImage = UIImage(data: data) {
-                                print("📸 Image created: \(uiImage.size)")
+                                debugLog("📸 Image created: \(uiImage.size)")
                                 await MainActor.run {
                                     selectedImage = uiImage
                                 }
                             } else {
-                                print("❌ Could not create UIImage from data")
+                                debugLog("❌ Could not create UIImage from data")
                             }
                         } else {
-                            print("❌ Data was nil")
+                            debugLog("❌ Data was nil")
                         }
                     } catch {
-                        print("❌ Error loading photo: \(error)")
+                        debugLog("❌ Error loading photo: \(error)")
                     }
                 }
             }
@@ -461,7 +461,7 @@ struct ProfileView: View {
             avatarURL = profile.avatar_url
             
         } catch {
-            print("❌ Error fetching profile: \(error)")
+            debugLog("❌ Error fetching profile: \(error)")
         }
     }
     
@@ -517,7 +517,7 @@ struct ProfileView: View {
             }
             
         } catch {
-            print("❌ Error fetching ranked games: \(error)")
+            debugLog("❌ Error fetching ranked games: \(error)")
         }
         
         // Check if user has unranked games (mid-reset)
@@ -532,9 +532,9 @@ struct ProfileView: View {
                 
                 unrankedCount = totalCount - rankedGames.count
                 hasUnrankedGames = unrankedCount > 0
-                print("🔍 Ranked: \(rankedGames.count), Total: \(totalCount), hasUnranked: \(hasUnrankedGames)")
+                debugLog("🔍 Ranked: \(rankedGames.count), Total: \(totalCount), hasUnranked: \(hasUnrankedGames)")
             } catch {
-                print("❌ Error checking unranked games: \(error)")
+                debugLog("❌ Error checking unranked games: \(error)")
             }
         }
         
@@ -589,7 +589,7 @@ struct ProfileView: View {
             showResetFlow = true
             
         } catch {
-            print("❌ Error loading unranked games: \(error)")
+            debugLog("❌ Error loading unranked games: \(error)")
         }
     }
     private func saveUsername() async {
@@ -628,7 +628,7 @@ struct ProfileView: View {
             }
             
         } catch {
-            print("❌ Error saving username: \(error)")
+            debugLog("❌ Error saving username: \(error)")
             message = "Couldn't save username"
         }
         
@@ -653,7 +653,7 @@ struct ProfileView: View {
         
         do {
             guard let compressedData = image.jpegData(compressionQuality: 0.7) else {
-                print("❌ Could not compress image")
+                debugLog("❌ Could not compress image")
                 isUploadingPhoto = false
                 return
             }
@@ -693,7 +693,7 @@ struct ProfileView: View {
             }
             
         } catch {
-            print("❌ Error uploading photo: \(error)")
+            debugLog("❌ Error uploading photo: \(error)")
         }
         
         isUploadingPhoto = false
@@ -721,7 +721,7 @@ struct ProfileView: View {
         }
         appleLinkDelegate = delegate
         controller.delegate = delegate
-        print("🍎 Performing Apple auth request...")
+        debugLog("🍎 Performing Apple auth request...")
         controller.performRequests()
     }
 
@@ -754,21 +754,21 @@ class AppleLinkDelegate: NSObject, ASAuthorizationControllerDelegate {
     }
     
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        print("🍎 Apple auth completed successfully")
+        debugLog("🍎 Apple auth completed successfully")
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
               let identityTokenData = appleIDCredential.identityToken,
               let idToken = String(data: identityTokenData, encoding: .utf8) else {
-            print("❌ Missing Apple credential data")
+            debugLog("❌ Missing Apple credential data")
             completion(false)
             return
         }
-        print("🍎 Got Apple ID token, calling Edge Function...")
+        debugLog("🍎 Got Apple ID token, calling Edge Function...")
         
         Task {
             let success = await SupabaseManager.shared.linkAppleID(idToken: idToken, nonce: nonce)
-            print("🍎 Edge Function result: \(success)")
+            debugLog("🍎 Edge Function result: \(success)")
             if let error = SupabaseManager.shared.errorMessage {
-                print("🍎 Error message: \(error)")
+                debugLog("🍎 Error message: \(error)")
             }
             await MainActor.run {
                 completion(success)
@@ -777,7 +777,7 @@ class AppleLinkDelegate: NSObject, ASAuthorizationControllerDelegate {
     }
     
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        print("❌ Apple linking failed: \(error)")
+        debugLog("❌ Apple linking failed: \(error)")
         completion(false)
     }
 }

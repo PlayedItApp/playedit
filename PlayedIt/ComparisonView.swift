@@ -527,7 +527,7 @@ struct ScaleButtonStyle: ButtonStyle {
         ),
         existingGames: [],
         onComplete: { position in
-            print("Final position: \(position)")
+            debugLog("Final position: \(position)")
         }
     )
 }

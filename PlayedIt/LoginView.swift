@@ -159,7 +159,7 @@ struct LoginView: View {
                                 case .success(let authorization):
                                     handleAppleSignIn(authorization)
                                 case .failure(let error):
-                                    print("❌ Apple sign in failed: \(error)")
+                                    debugLog("❌ Apple sign in failed: \(error)")
                                 }
                             }
                             .signInWithAppleButtonStyle(colorSchemeValue == .dark ? .white : .black)
@@ -212,7 +212,7 @@ struct LoginView: View {
               let identityTokenData = appleIDCredential.identityToken,
               let idToken = String(data: identityTokenData, encoding: .utf8),
               let nonce = currentNonce else {
-            print("❌ Missing Apple credential data")
+            debugLog("❌ Missing Apple credential data")
             return
         }
         

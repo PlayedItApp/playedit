@@ -582,7 +582,7 @@ struct OnboardingQuizView: View {
             step = .gameGrid
             
         } catch {
-            print("Error fetching onboarding games: \(error)")
+            debugLog("Error fetching onboarding games: \(error)")
             isLoadingGames = false
             step = .gameGrid
         }
@@ -590,7 +590,7 @@ struct OnboardingQuizView: View {
     
     private func startRanking() {
         gamesToRank = filteredGames.filter { selectedGameIds.contains($0.id) }
-        print("🎮 Starting ranking with \(gamesToRank.count) games")
+        debugLog("🎮 Starting ranking with \(gamesToRank.count) games")
         showRankingFlow = true
     }
 }

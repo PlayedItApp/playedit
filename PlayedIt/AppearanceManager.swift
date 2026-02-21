@@ -39,7 +39,7 @@ class AppearanceManager: ObservableObject {
                 .eq("id", value: userId.uuidString)
                 .execute()
         } catch {
-            print("⚠️ Failed to sync appearance mode: \(error)")
+            debugLog("⚠️ Failed to sync appearance mode: \(error)")
         }
     }
     
@@ -53,7 +53,7 @@ class AppearanceManager: ObservableObject {
                 .eq("id", value: userId.uuidString)
                 .execute()
         } catch {
-            print("⚠️ Failed to sync resolved appearance: \(error)")
+            debugLog("⚠️ Failed to sync resolved appearance: \(error)")
         }
     }
 }

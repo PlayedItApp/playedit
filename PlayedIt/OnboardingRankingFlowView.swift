@@ -117,9 +117,9 @@ struct OnboardingRankingFlowView: View {
     // MARK: - Process Current Game
     
     private func processCurrentGame() async {
-        print("🎯 processCurrentGame: index=\(currentIndex), total=\(games.count)")
+        debugLog("🎯 processCurrentGame: index=\(currentIndex), total=\(games.count)")
         guard let game = currentGame else {
-            print("🎯 No more games, calling onComplete")
+            debugLog("🎯 No more games, calling onComplete")
             onComplete()
             return
         }
@@ -161,7 +161,7 @@ struct OnboardingRankingFlowView: View {
                     .upsert(gameInsert, onConflict: "rawg_id")
                     .execute()
             } catch {
-                print("⚠️ Game upsert failed, trying to fetch existing: \(error)")
+                debugLog("⚠️ Game upsert failed, trying to fetch existing: \(error)")
                 // Game might already exist, that's fine — we'll fetch it below
             }
             
@@ -174,7 +174,7 @@ struct OnboardingRankingFlowView: View {
                     
                     // If game doesn't exist in DB, fetch from RAWG and insert
                     if gameRecords.isEmpty {
-                        print("🔍 Game not in DB, fetching from RAWG: \(game.title) (rawg_id: \(game.rawgId))")
+                        debugLog("🔍 Game not in DB, fetching from RAWG: \(game.title) (rawg_id: \(game.rawgId))")
                         let rawgGame = try await RAWGService.shared.getGameDetails(id: game.rawgId)
                         
                         struct GameInsertFallback: Encodable {
@@ -210,7 +210,7 @@ struct OnboardingRankingFlowView: View {
                     }
                     
                     guard let gameRecord = gameRecords.first else {
-                        print("⚠️ Still can't find game after RAWG fetch, skipping: \(game.title)")
+                        debugLog("⚠️ Still can't find game after RAWG fetch, skipping: \(game.title)")
                         isSaving = false
                         try? await Task.sleep(nanoseconds: 300_000_000)
                         await moveToNext()
@@ -278,7 +278,7 @@ struct OnboardingRankingFlowView: View {
             }
             
         } catch {
-            print("❌ Error processing game: \(error)")
+            debugLog("❌ Error processing game: \(error)")
             errorMessage = "Something went wrong. Skipping..."
             isSaving = false
             
@@ -346,10 +346,10 @@ struct OnboardingRankingFlowView: View {
                 .insert(insert)
                 .execute()
             
-            print("✅ Onboarding: \(currentGame?.title ?? "Unknown") ranked at #\(position)")
+            debugLog("✅ Onboarding: \(currentGame?.title ?? "Unknown") ranked at #\(position)")
             
         } catch {
-            print("❌ Error saving user game during onboarding: \(error)")
+            debugLog("❌ Error saving user game during onboarding: \(error)")
         }
     }
     
@@ -359,7 +359,7 @@ struct OnboardingRankingFlowView: View {
     private func moveToNext() async {
         showComparison = false
         currentIndex += 1
-        print("🎯 moveToNext: now at index \(currentIndex) of \(games.count)")
+        debugLog("🎯 moveToNext: now at index \(currentIndex) of \(games.count)")
         
         if currentIndex >= games.count {
             // All done!

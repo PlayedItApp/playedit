@@ -50,11 +50,11 @@ class SupabaseManager: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        print("📝 Starting signup for email: \(email), username: \(username)")
+        debugLog("📝 Starting signup for email: \(email), username: \(username)")
         
         do {
             // Create auth user with username in metadata
-            print("📝 Calling Supabase auth.signUp...")
+            debugLog("📝 Calling Supabase auth.signUp...")
             let authResponse = try await client.auth.signUp(
                 email: email,
                 password: password,
@@ -64,19 +64,19 @@ class SupabaseManager: ObservableObject {
             if let session = authResponse.session {
                 self.currentUser = session.user
                 self.isAuthenticated = true
-                print("✅ Auth user created with session, ID: \(session.user.id)")
+                debugLog("✅ Auth user created with session, ID: \(session.user.id)")
             } else {
                 // Email confirmation required
                 self.needsEmailConfirmation = true
                 self.pendingEmail = email
-                print("📧 Auth user created, awaiting email confirmation")
+                debugLog("📧 Auth user created, awaiting email confirmation")
             }
             isLoading = false
             return true
             
         } catch {
-            print("❌ Signup error: \(error)")
-            print("❌ Error details: \(error.localizedDescription)")
+            debugLog("❌ Signup error: \(error)")
+            debugLog("❌ Error details: \(error.localizedDescription)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -128,8 +128,8 @@ class SupabaseManager: ObservableObject {
             return true
             
         } catch {
-            print("❌ Sign in error: \(error)")
-            print("❌ Error details: \(error.localizedDescription)")
+            debugLog("❌ Sign in error: \(error)")
+            debugLog("❌ Error details: \(error.localizedDescription)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -239,7 +239,7 @@ class SupabaseManager: ObservableObject {
             isLoading = false
             return true
         } catch {
-            print("❌ Apple sign in error: \(error)")
+            debugLog("❌ Apple sign in error: \(error)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -313,7 +313,7 @@ class SupabaseManager: ObservableObject {
                 return false
             }
         } catch {
-            print("❌ Link Apple ID error: \(error)")
+            debugLog("❌ Link Apple ID error: \(error)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -326,7 +326,7 @@ class SupabaseManager: ObservableObject {
             let identities = try await client.auth.userIdentities()
             return identities.contains { $0.provider == "apple" }
         } catch {
-            print("❌ Error fetching identities: \(error)")
+            debugLog("❌ Error fetching identities: \(error)")
             return false
         }
     }

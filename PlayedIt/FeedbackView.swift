@@ -261,7 +261,7 @@ struct FeedbackView: View {
             showSuccess = true
             
         } catch {
-            print("❌ Error submitting feedback: \(error)")
+            debugLog("❌ Error submitting feedback: \(error)")
             errorMessage = "Couldn't send feedback. Try again?"
         }
         
@@ -319,7 +319,7 @@ struct FeedbackView: View {
             
             return publicURL.absoluteString
         } catch {
-            print("❌ Error uploading screenshot: \(error)")
+            debugLog("❌ Error uploading screenshot: \(error)")
             return nil
         }
     }

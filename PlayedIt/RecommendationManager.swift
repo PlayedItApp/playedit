@@ -90,7 +90,7 @@ class RecommendationManager: ObservableObject {
             
             return recs
         } catch {
-            print("❌ Error fetching recommendations: \(error)")
+            debugLog("❌ Error fetching recommendations: \(error)")
             return []
         }
     }
@@ -123,11 +123,11 @@ class RecommendationManager: ObservableObject {
             return
         }
         
-        print("🎯 Building recommendations. Slots to fill: \(slotsToFill)")
-        print("🎯 Excluded game IDs: \(excludedGameIds.count)")
-        print("🎯 Context: \(context.myGames.count) games, \(context.friends.count) friends")
+        debugLog("🎯 Building recommendations. Slots to fill: \(slotsToFill)")
+        debugLog("🎯 Excluded game IDs: \(excludedGameIds.count)")
+        debugLog("🎯 Context: \(context.myGames.count) games, \(context.friends.count) friends")
         for friend in context.friends {
-            print("   🤝 \(friend.username): \(friend.tasteMatch)% taste match, \(friend.games.count) games")
+            debugLog("   🤝 \(friend.username): \(friend.tasteMatch)% taste match, \(friend.games.count) games")
         }
         
         // 4. Gather candidates from all sources
@@ -145,7 +145,7 @@ class RecommendationManager: ObservableObject {
         let rawgCandidates = await gatherRAWGCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })))
         candidates.append(contentsOf: rawgCandidates)
         
-        print("🎯 Friend candidates: \(friendCandidates.count), Genre candidates: \(genreCandidates.count), RAWG candidates: \(rawgCandidates.count)")
+        debugLog("🎯 Friend candidates: \(friendCandidates.count), Genre candidates: \(genreCandidates.count), RAWG candidates: \(rawgCandidates.count)")
         
         // 5. Score all candidates through PredictionEngine
         var scoredCandidates: [(candidate: (gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?), prediction: GamePrediction)] = []
@@ -164,9 +164,9 @@ class RecommendationManager: ObservableObject {
             }
         }
         
-        print("🎯 Total scored candidates: \(scoredCandidates.count)")
+        debugLog("🎯 Total scored candidates: \(scoredCandidates.count)")
         for sc in scoredCandidates.sorted(by: { $0.prediction.predictedPercentile > $1.prediction.predictedPercentile }).prefix(15) {
-            print("   🔮 \(sc.candidate.title): \(Int(sc.prediction.predictedPercentile))% [\(sc.candidate.source)]")
+            debugLog("   🔮 \(sc.candidate.title): \(Int(sc.prediction.predictedPercentile))% [\(sc.candidate.source)]")
         }
         
         // 6. Only show "You'll love this" tier (65%+)
@@ -205,7 +205,7 @@ class RecommendationManager: ObservableObject {
                     ))
                     .execute()
             } catch {
-                print("⚠️ Error inserting recommendation for \(c.title): \(error)")
+                debugLog("⚠️ Error inserting recommendation for \(c.title): \(error)")
             }
         }
         
@@ -253,7 +253,7 @@ class RecommendationManager: ObservableObject {
             excluded.formUnion(dismissed.map { $0.game_id })
             
         } catch {
-            print("⚠️ Error building exclusion set: \(error)")
+            debugLog("⚠️ Error building exclusion set: \(error)")
         }
         
         return excluded
@@ -396,7 +396,7 @@ class RecommendationManager: ObservableObject {
                 if candidates.count >= 20 { break }
             }
         } catch {
-            print("⚠️ Error fetching genre candidates: \(error)")
+            debugLog("⚠️ Error fetching genre candidates: \(error)")
         }
         
         return candidates
@@ -428,7 +428,7 @@ class RecommendationManager: ObservableObject {
         let excludedRawgIds = Set(context.myGames.map { $0.rawgId })
         
         // Use RAWG discover endpoint — fetch top-rated games in user's preferred genres
-        print("🔍 RAWG discover genres: \(topGenres)")
+        debugLog("🔍 RAWG discover genres: \(topGenres)")
         
         do {
             let results = try await RAWGService.shared.discoverGames(genres: Array(topGenres.prefix(2)))
@@ -459,9 +459,9 @@ class RecommendationManager: ObservableObject {
                 ))
             }
             
-            print("🔍 RAWG discover found: \(candidates.count) candidates")
+            debugLog("🔍 RAWG discover found: \(candidates.count) candidates")
         } catch {
-            print("⚠️ RAWG discover failed: \(error)")
+            debugLog("⚠️ RAWG discover failed: \(error)")
         }
         
         return candidates
@@ -515,7 +515,7 @@ class RecommendationManager: ObservableObject {
             return inserted.id
             
         } catch {
-            print("⚠️ Error ensuring game in table: \(error)")
+            debugLog("⚠️ Error ensuring game in table: \(error)")
             return nil
         }
     }
@@ -590,7 +590,7 @@ class RecommendationManager: ObservableObject {
                     sourceFriendTotalGames: friendTotal
                 ))
             } catch {
-                print("⚠️ Error building display for game \(rec.gameId): \(error)")
+                debugLog("⚠️ Error building display for game \(rec.gameId): \(error)")
             }
         }
         
@@ -627,7 +627,7 @@ class RecommendationManager: ObservableObject {
             recommendations.removeAll { $0.id == recommendationId }
             return true
         } catch {
-            print("❌ Error dismissing recommendation: \(error)")
+            debugLog("❌ Error dismissing recommendation: \(error)")
             return false
         }
     }
@@ -654,7 +654,7 @@ class RecommendationManager: ObservableObject {
             recommendations.removeAll { $0.id == recommendationId }
             return true
         } catch {
-            print("❌ Error marking recommendation as want to play: \(error)")
+            debugLog("❌ Error marking recommendation as want to play: \(error)")
             return false
         }
     }
@@ -695,7 +695,7 @@ class RecommendationManager: ObservableObject {
             recommendations.removeAll { $0.id == recommendationId }
             return true
         } catch {
-            print("❌ Error marking recommendation as ranked: \(error)")
+            debugLog("❌ Error marking recommendation as ranked: \(error)")
             return false
         }
     }
@@ -745,7 +745,7 @@ class RecommendationManager: ObservableObject {
                 .eq("id", value: String(rec.id))
                 .execute()
             
-            print("✅ Updated recommendation outcome: predicted=\(Int(rec.predicted_percentile))%, actual=\(Int(actualPercentile))%, accuracy=\(Int(accuracy))")
+            debugLog("✅ Updated recommendation outcome: predicted=\(Int(rec.predicted_percentile))%, actual=\(Int(actualPercentile))%, accuracy=\(Int(accuracy))")
             
         } catch {
             // Not an error if no recommendation exists for this game

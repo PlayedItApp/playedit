@@ -183,6 +183,26 @@ function checkWithLeadingBoundary(
   return { allowed: true };
 }
 
+function containsBlockedSubstring(
+  text: string,
+  blockedWords: string[],
+  errorMessage: string
+): ModerationResult {
+  const normalized = normalizeText(text);
+
+  for (const blocked of blockedWords) {
+    if (normalized.includes(blocked) && !isWhitelisted(blocked, normalized)) {
+      return {
+        allowed: false,
+        reason: errorMessage,
+        flaggedWord: blocked,
+      };
+    }
+  }
+
+  return { allowed: true };
+}
+
 function checkText(
   text: string,
   context: "username" | "comment" | "note"
@@ -191,14 +211,21 @@ function checkText(
     return { allowed: true };
   }
 
-  // For usernames: block all profanity + slurs + insults with leading boundary
-  // For comments/notes: block slurs + targeted insults with leading boundary
-  const blockedList = context === "username" ? ALL_BLOCKED : [...ALWAYS_BLOCKED, ...TARGETED_INSULTS];
-  const errorMessage = context === "username"
-    ? "This username contains inappropriate language. Please choose a different one."
-    : "Your message contains language that isn't allowed. Please revise and try again.";
+  // For usernames: substring match (single token, whitelist handles Scunthorpe)
+  if (context === "username") {
+    return containsBlockedSubstring(
+      text,
+      ALL_BLOCKED,
+      "This username contains inappropriate language. Please choose a different one."
+    );
+  }
 
-  return checkWithLeadingBoundary(text, blockedList, errorMessage);
+  // For comments/notes: leading boundary match for slurs + targeted insults
+  return checkWithLeadingBoundary(
+    text,
+    [...ALWAYS_BLOCKED, ...TARGETED_INSULTS],
+    "Your message contains language that isn't allowed. Please revise and try again."
+  );
 }
 
 function checkUsername(username: string): ModerationResult {

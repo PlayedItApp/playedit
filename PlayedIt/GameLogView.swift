@@ -295,7 +295,7 @@ struct GameLogView: View {
                 showReRankAlert = true
             }
         } catch {
-            print("Failed to check existing game: \(error)")
+            debugLog("Failed to check existing game: \(error)")
         }
     }
     
@@ -397,10 +397,10 @@ struct GameLogView: View {
                             .update(["description": desc])
                             .eq("rawg_id", value: game.rawgId)
                             .execute()
-                        print("📖 Cached description for \(game.title)")
+                        debugLog("📖 Cached description for \(game.title)")
                     }
                 } catch {
-                    print("⚠️ Background description cache failed: \(error)")
+                    debugLog("⚠️ Background description cache failed: \(error)")
                 }
             }
             
@@ -462,7 +462,7 @@ struct GameLogView: View {
             }
             
         } catch {
-            print("❌ Error saving game: \(error)")
+            debugLog("❌ Error saving game: \(error)")
             
             let errorString = String(describing: error)
             if errorString.contains("duplicate") || errorString.contains("unique") {
@@ -511,7 +511,7 @@ struct GameLogView: View {
                         .execute()
                 }
                 
-                print("✅ Deleted old entry at position \(existing.rank_position)")
+                debugLog("✅ Deleted old entry at position \(existing.rank_position)")
                 existingUserGame = nil
             }
             
@@ -541,7 +541,7 @@ struct GameLogView: View {
             
             // Resolve canonical game ID
             let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
-            print("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
+            debugLog("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
             
             // Insert the new entry
             struct UserGameInsert: Encodable {
@@ -566,10 +566,10 @@ struct GameLogView: View {
                 .insert(userGameInsert)
                 .execute()
             
-            print("✅ Game logged at position \(position)")
+            debugLog("✅ Game logged at position \(position)")
             
         } catch {
-            print("❌ Error saving user game: \(error)")
+            debugLog("❌ Error saving user game: \(error)")
         }
     }
 }

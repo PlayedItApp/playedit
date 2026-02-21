@@ -11,11 +11,18 @@ Deno.serve(async (req) => {
       },
     });
   }
+  
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json",
+  };
 
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   }
 
@@ -25,7 +32,7 @@ Deno.serve(async (req) => {
     if (!email) {
       return new Response(JSON.stringify({ error: "Email is required" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
@@ -36,21 +43,25 @@ Deno.serve(async (req) => {
     );
 
     // Check if user exists (don't reveal this to the client for security)
-    const { data: users } = await supabase.auth.admin.listUsers();
-    const userExists = users?.users?.some(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+    const { data: { users } } = await supabase.auth.admin.listUsers({
+      filter: `email.eq.${email.toLowerCase()}`,
+      page: 1,
+      perPage: 1,
+    });
+    const userExists = users && users.length > 0;
 
     // Always return success even if user doesn't exist (prevent email enumeration)
     if (!userExists) {
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
     // Generate 6-digit code
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const array = new Uint32Array(1);
+	crypto.getRandomValues(array);
+	const code = String(100000 + (array[0] % 900000));
 
     // Delete any existing codes for this email
     await supabase
@@ -115,7 +126,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   } catch (error) {
     console.error("Error:", error);
@@ -123,7 +134,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Something went wrong. Try again?" }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       }
     );
   }

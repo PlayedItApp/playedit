@@ -421,7 +421,7 @@ class PredictionEngine {
         if let gt = genreTagScore { blended += gt * genreTagWeight }
         if let mc = metacriticScore { blended += mc * metacriticWeight }
         
-        print("🧮 Blend: friend=\(friendResult?.percentile ?? -1), genreTag=\(genreTagScore ?? -1), metacritic=\(metacriticScore ?? -1), blended=\(blended)")
+        debugLog("🧮 Blend: friend=\(friendResult?.percentile ?? -1), genreTag=\(genreTagScore ?? -1), metacritic=\(metacriticScore ?? -1), blended=\(blended)")
         // Genre drag: if friends love it but genre/tag affinity doesn't match, limit friend influence
         if let fr = friendResult, !fr.signals.isEmpty {
             if let gt = genreTagScore {
@@ -604,7 +604,7 @@ class PredictionEngine {
             return PredictionContext(myGames: myGames, friends: friends)
             
         } catch {
-            print("❌ Error building prediction context: \(error)")
+            debugLog("❌ Error building prediction context: \(error)")
             return nil
         }
     }
@@ -626,9 +626,9 @@ class PredictionEngine {
         }
         
         guard !shared.isEmpty else { return 0 }
-        print("📊 Taste match: \(shared.count) shared games, myGames=\(myGames.count), friendGames=\(friendGames.count)")
+        debugLog("📊 Taste match: \(shared.count) shared games, myGames=\(myGames.count), friendGames=\(friendGames.count)")
         for s in shared {
-            print("   📊 myRank=\(s.myRank), theirRank=\(s.theirRank)")
+            debugLog("   📊 myRank=\(s.myRank), theirRank=\(s.theirRank)")
         }
         
         if shared.count == 1 {

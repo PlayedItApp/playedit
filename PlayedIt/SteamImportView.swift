@@ -516,7 +516,7 @@ struct SteamImportView: View {
             existingRawgIds = Set(rows.compactMap { $0.games?.rawg_id })
             existingGameTitles = Set(rows.compactMap { $0.games?.title.lowercased() })
         } catch {
-            print("❌ Error fetching existing games: \(error)")
+            debugLog("❌ Error fetching existing games: \(error)")
         }
     }
     
@@ -661,7 +661,7 @@ struct SteamImportView: View {
                 )
             }
         } catch {
-            print("❌ Error refreshing games: \(error)")
+            debugLog("❌ Error refreshing games: \(error)")
         }
     }
     
@@ -754,10 +754,10 @@ struct SteamImportView: View {
                 ))
                 .execute()
             
-            print("✅ Imported \(game.displayTitle) at position \(position)")
+            debugLog("✅ Imported \(game.displayTitle) at position \(position)")
             
         } catch {
-            print("❌ Error saving imported game: \(error)")
+            debugLog("❌ Error saving imported game: \(error)")
         }
     }
 }

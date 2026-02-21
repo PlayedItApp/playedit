@@ -234,7 +234,7 @@ class SteamService {
             
             return row.steam_id
         } catch {
-            print("❌ Error checking Steam ID: \(error)")
+            debugLog("❌ Error checking Steam ID: \(error)")
             return nil
         }
     }
@@ -251,7 +251,7 @@ class SteamService {
                 .execute()
             return true
         } catch {
-            print("❌ Error disconnecting Steam: \(error)")
+            debugLog("❌ Error disconnecting Steam: \(error)")
             return false
         }
     }

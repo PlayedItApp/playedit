@@ -22,10 +22,7 @@ final class ModerationService {
     private let edgeFunctionURL: String
     
     private init() {
-        // Pull from your existing config — adapt this to match your setup
-        // e.g., if you store supabaseURL in a Config or environment variable
-        let supabaseURL = "https://jpxunrunsklooaypkouh.supabase.co"
-        self.edgeFunctionURL = "\(supabaseURL)/functions/v1/moderate-text"
+        self.edgeFunctionURL = "\(Config.supabaseURL)/functions/v1/moderate-text"
     }
     
     // MARK: - Server-Side Text Check
@@ -56,7 +53,7 @@ final class ModerationService {
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
                 // Server error — fall back to allowing (client-side already filtered)
-                print("[ModerationService] Server returned non-200, falling back to allow")
+                debugLog("[ModerationService] Server returned non-200, falling back to allow")
                 return .ok
             }
             
@@ -69,7 +66,7 @@ final class ModerationService {
             
         } catch {
             // Network error — fall back to allowing (client-side already filtered)
-            print("[ModerationService] Network error: \(error.localizedDescription), falling back to allow")
+            debugLog("[ModerationService] Network error: \(error.localizedDescription), falling back to allow")
             return .ok
         }
     }

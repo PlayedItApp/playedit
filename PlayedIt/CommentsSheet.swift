@@ -275,7 +275,7 @@ struct CommentsSheet: View {
             isLoading = false
             
         } catch {
-            print("❌ Error fetching comments: \(error)")
+            debugLog("❌ Error fetching comments: \(error)")
             isLoading = false
         }
     }
@@ -319,7 +319,7 @@ struct CommentsSheet: View {
                 await fetchComments()
                 
             } catch {
-                print("❌ Error sending comment: \(error)")
+                debugLog("❌ Error sending comment: \(error)")
             }
             
             isSending = false
@@ -338,7 +338,7 @@ struct CommentsSheet: View {
                     await fetchComments()
                     
                 } catch {
-                    print("❌ Error deleting comment: \(error)")
+                    debugLog("❌ Error deleting comment: \(error)")
                 }
             }
         }
@@ -372,7 +372,7 @@ struct CommentsSheet: View {
                     editText = ""
                     
                 } catch {
-                    print("❌ Error editing comment: \(error)")
+                    debugLog("❌ Error editing comment: \(error)")
                 }
                 
                 isSending = false

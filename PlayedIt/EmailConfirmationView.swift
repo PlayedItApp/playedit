@@ -97,10 +97,10 @@ struct EmailConfirmationView: View {
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             if let httpResponse = response as? HTTPURLResponse {
-                print("🔄 Resend response: \(httpResponse.statusCode)")
+                debugLog("🔄 Resend response: \(httpResponse.statusCode)")
             }
         } catch {
-            print("❌ Error resending: \(error)")
+            debugLog("❌ Error resending: \(error)")
         }
         
         // Start cooldown

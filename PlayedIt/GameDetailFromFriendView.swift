@@ -425,7 +425,7 @@ struct GameDetailFromFriendView: View {
             let game = try await RAWGService.shared.getGameDetails(id: result.rawg_id)
             gameDescription = game.gameDescription
         } catch {
-            print("⚠️ Could not fetch game description: \(error)")
+            debugLog("⚠️ Could not fetch game description: \(error)")
         }
     }
     
@@ -454,7 +454,7 @@ struct GameDetailFromFriendView: View {
                 metacriticScore = score
             }
         } catch {
-            print("⚠️ Could not fetch metacritic score: \(error)")
+            debugLog("⚠️ Could not fetch metacritic score: \(error)")
         }
     }
     
@@ -564,7 +564,7 @@ struct GameDetailFromFriendView: View {
             }
             
         } catch {
-            print("❌ Error fetching friend rankings: \(error)")
+            debugLog("❌ Error fetching friend rankings: \(error)")
         }
         
         isLoadingFriendRankings = false
@@ -659,7 +659,7 @@ struct GameDetailFromFriendView: View {
             
             prediction = PredictionEngine.shared.predict(game: target, context: context)
         } catch {
-            print("⚠️ Could not fetch prediction data: \(error)")
+            debugLog("⚠️ Could not fetch prediction data: \(error)")
         }
     }
 
@@ -713,7 +713,7 @@ struct GameDetailFromFriendView: View {
                 )
             }
         } catch {
-            print("❌ Error refreshing my game: \(error)")
+            debugLog("❌ Error refreshing my game: \(error)")
         }
     }
 }

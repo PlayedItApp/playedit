@@ -440,7 +440,7 @@ struct ResetRankingsView: View {
                     .eq("id", value: loser.id)
                     .execute()
                 
-                print("✅ First matchup: \(winner.gameTitle) at #1, \(loser.gameTitle) at #2")
+                debugLog("✅ First matchup: \(winner.gameTitle) at #1, \(loser.gameTitle) at #2")
                 
                 // Update local state
                 var rankedWinner = winner
@@ -468,7 +468,7 @@ struct ResetRankingsView: View {
                 }
                 
             } catch {
-                print("❌ Error placing first two games: \(error)")
+                debugLog("❌ Error placing first two games: \(error)")
                 errorMessage = "Something went wrong. Try again?"
             }
         }
@@ -552,16 +552,16 @@ struct ResetRankingsView: View {
                     .eq("id", value: game0.id)
                     .execute()
                 
-                print("✅ Undid first matchup, back to game 1 vs game 2")
+                debugLog("✅ Undid first matchup, back to game 1 vs game 2")
             }
             
             // 5. Restart comparisons for this game
             startComparisonForCurrentGame()
             
-            print("✅ Undid placement of \(placedGame.gameTitle), back to game \(snapshot.gameIndex + 1)")
+            debugLog("✅ Undid placement of \(placedGame.gameTitle), back to game \(snapshot.gameIndex + 1)")
             
         } catch {
-            print("❌ Error undoing game placement: \(error)")
+            debugLog("❌ Error undoing game placement: \(error)")
         }
     }
     
@@ -575,7 +575,7 @@ struct ResetRankingsView: View {
             try await supabase.client.rpc("reset_user_rankings", params: ResetParams(p_user_id: userId.uuidString))
                 .execute()
             
-            print("✅ All rank positions wiped")
+            debugLog("✅ All rank positions wiped")
             
             shuffledGames = games.shuffled()
             rankedSoFar = []
@@ -589,7 +589,7 @@ struct ResetRankingsView: View {
             }
             
         } catch {
-            print("❌ Error resetting ranks: \(error)")
+            debugLog("❌ Error resetting ranks: \(error)")
             errorMessage = "Couldn't reset rankings. Try again?"
             isResetting = false
         }
@@ -639,7 +639,7 @@ struct ResetRankingsView: View {
                 .eq("id", value: game.id)
                 .execute()
             
-            print("✅ Placed \(game.gameTitle) at #\(position)")
+            debugLog("✅ Placed \(game.gameTitle) at #\(position)")
             
             // Update local state
             var updatedGame = game
@@ -667,7 +667,7 @@ struct ResetRankingsView: View {
             }
             
         } catch {
-            print("❌ Error placing game: \(error)")
+            debugLog("❌ Error placing game: \(error)")
             errorMessage = "Something went wrong. Try again?"
         }
     }
@@ -714,9 +714,9 @@ struct ResetRankingsView: View {
                 ))
                 .execute()
             
-            print("✅ Posted reset rankings feed entry")
+            debugLog("✅ Posted reset rankings feed entry")
         } catch {
-            print("❌ Error posting feed entry: \(error)")
+            debugLog("❌ Error posting feed entry: \(error)")
         }
     }
 }

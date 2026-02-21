@@ -11,28 +11,33 @@ Deno.serve(async (req) => {
       },
     });
   }
-
+  
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json",
+  };
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   }
-
   try {
     const { email, code, new_password } = await req.json();
 
     if (!email || !code || !new_password) {
       return new Response(
         JSON.stringify({ error: "Email, code, and new password are required" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     if (new_password.length < 6) {
       return new Response(
         JSON.stringify({ error: "Password must be at least 6 characters" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -54,7 +59,7 @@ Deno.serve(async (req) => {
     if (lookupError || !resetRecord) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired code. Try requesting a new one." }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -65,15 +70,18 @@ Deno.serve(async (req) => {
       .eq("id", resetRecord.id);
 
     // Find the user by email
-    const { data: users } = await supabase.auth.admin.listUsers();
-    const user = users?.users?.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    );
+    const { data: { users }, error: listError } = await supabase.auth.admin.listUsers({
+      filter: `email.eq.${email.toLowerCase()}`,
+      page: 1,
+      perPage: 1,
+    });
 
-    if (!user) {
+    const user = users?.[0];
+
+    if (listError || !user) {
       return new Response(
         JSON.stringify({ error: "User not found" }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        { status: 404, headers: corsHeaders }
       );
     }
 
@@ -87,7 +95,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   } catch (error) {
     console.error("Error:", error);
@@ -95,7 +103,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Something went wrong. Try again?" }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       }
     );
   }

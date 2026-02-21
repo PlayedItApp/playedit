@@ -42,7 +42,7 @@ class RAWGService {
         let encodedQuery = cleanedQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cleanedQuery
         let urlString = "\(baseURL)/games?key=\(apiKey)&search=\(encodedQuery)&search_precise=true&page_size=40&exclude_additions=true"
         
-        print("🔍 Searching for: \(cleanedQuery)")
+        debugLog("🔍 Searching for: \(cleanedQuery)")
         
         guard let url = URL(string: urlString) else {
             throw RAWGError.invalidURL
@@ -82,7 +82,7 @@ class RAWGService {
         for game in sortedGames.prefix(5) {
             let name = game.title.lowercased()
             let score = relevanceScore(game: game, name: name, query: queryLower, queryWords: queryWords)
-            print("📊 \(game.title) | added: \(game.added ?? 0) | metacritic: \(game.metacriticScore ?? 0) | score: \(score)")
+            debugLog("📊 \(game.title) | added: \(game.added ?? 0) | metacritic: \(game.metacriticScore ?? 0) | score: \(score)")
         }
         
         return Array(sortedGames.prefix(20))
@@ -381,7 +381,7 @@ class RAWGService {
             let decoded = try JSONDecoder().decode(RAWGSearchResponse.self, from: data)
             return decoded.results.first?.id
         } catch {
-            print("⚠️ Could not fetch parent game for \(gameId): \(error)")
+            debugLog("⚠️ Could not fetch parent game for \(gameId): \(error)")
             return nil
         }
     }

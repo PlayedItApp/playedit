@@ -78,7 +78,7 @@ class WantToPlayManager: ObservableObject {
             
             myWantToPlayIds = Set(rows.map { $0.game_id })
         } catch {
-            print("❌ Error fetching want to play IDs: \(error)")
+            debugLog("❌ Error fetching want to play IDs: \(error)")
         }
     }
     
@@ -111,10 +111,10 @@ class WantToPlayManager: ObservableObject {
                 .execute()
             
             myWantToPlayIds.insert(localGameId)
-            print("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
+            debugLog("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
             return true
         } catch {
-            print("❌ Error adding to want to play: \(error)")
+            debugLog("❌ Error adding to want to play: \(error)")
             return false
         }
     }
@@ -177,11 +177,11 @@ class WantToPlayManager: ObservableObject {
                 .execute()
                 .value
             
-            print("📦 Created new games row for RAWG ID \(rawgOrLocalId): local ID \(inserted.id)")
+            debugLog("📦 Created new games row for RAWG ID \(rawgOrLocalId): local ID \(inserted.id)")
             return inserted.id
             
         } catch {
-            print("⚠️ resolveLocalGameId failed, using original ID: \(error)")
+            debugLog("⚠️ resolveLocalGameId failed, using original ID: \(error)")
             return rawgOrLocalId
         }
     }
@@ -241,7 +241,7 @@ class WantToPlayManager: ObservableObject {
             myWantToPlayIds.remove(gameId)
             return true
         } catch {
-            print("❌ Error removing from want to play: \(error)")
+            debugLog("❌ Error removing from want to play: \(error)")
             return false
         }
     }
@@ -261,7 +261,7 @@ class WantToPlayManager: ObservableObject {
             
             return games
         } catch {
-            print("❌ Error fetching want to play list: \(error)")
+            debugLog("❌ Error fetching want to play list: \(error)")
             return []
         }
     }
@@ -282,7 +282,7 @@ class WantToPlayManager: ObservableObject {
             
             return games
         } catch {
-            print("❌ Error fetching ranked want to play: \(error)")
+            debugLog("❌ Error fetching ranked want to play: \(error)")
             return []
         }
     }
@@ -303,7 +303,7 @@ class WantToPlayManager: ObservableObject {
             
             return games
         } catch {
-            print("❌ Error fetching unranked want to play: \(error)")
+            debugLog("❌ Error fetching unranked want to play: \(error)")
             return []
         }
     }
@@ -346,10 +346,10 @@ class WantToPlayManager: ObservableObject {
                 .eq("id", value: gameId)
                 .execute()
             
-            print("✅ Placed game at position \(position)")
+            debugLog("✅ Placed game at position \(position)")
             return true
         } catch {
-            print("❌ Error placing game: \(error)")
+            debugLog("❌ Error placing game: \(error)")
             return false
         }
     }
@@ -420,7 +420,7 @@ class WantToPlayManager: ObservableObject {
             
             return true
         } catch {
-            print("❌ Error moving game: \(error)")
+            debugLog("❌ Error moving game: \(error)")
             return false
         }
     }
@@ -437,10 +437,10 @@ class WantToPlayManager: ObservableObject {
                 ])
                 .execute()
             
-            print("✅ Unranked game")
+            debugLog("✅ Unranked game")
             return true
         } catch {
-            print("❌ Error unranking game: \(error)")
+            debugLog("❌ Error unranking game: \(error)")
             return false
         }
     }
@@ -454,10 +454,10 @@ class WantToPlayManager: ObservableObject {
                 .rpc("reset_want_to_play_rankings", params: ["p_user_id": userId.uuidString])
                 .execute()
             
-            print("✅ Reset all want to play rankings")
+            debugLog("✅ Reset all want to play rankings")
             return true
         } catch {
-            print("❌ Error resetting rankings: \(error)")
+            debugLog("❌ Error resetting rankings: \(error)")
             return false
         }
     }
@@ -476,7 +476,7 @@ class WantToPlayManager: ObservableObject {
             
             return games
         } catch {
-            print("❌ Error fetching friend's want to play: \(error)")
+            debugLog("❌ Error fetching friend's want to play: \(error)")
             return []
         }
     }

@@ -198,7 +198,7 @@ struct FeedView: View {
                 await fetchFeed()
                 
             } catch {
-                print("❌ Error toggling like: \(error)")
+                debugLog("❌ Error toggling like: \(error)")
             }
         }
     }
@@ -229,7 +229,7 @@ struct FeedView: View {
                 await fetchFeed()
                 
             } catch {
-                print("❌ Error toggling group like: \(error)")
+                debugLog("❌ Error toggling group like: \(error)")
             }
         }
     }
@@ -260,7 +260,7 @@ struct FeedView: View {
                     await fetchFeed()
                     
                 } catch {
-                    print("❌ Error toggling activity like: \(error)")
+                    debugLog("❌ Error toggling activity like: \(error)")
                 }
             }
         }
@@ -496,7 +496,7 @@ struct FeedView: View {
             isLoading = false
             
         } catch {
-            print("❌ Error fetching feed: \(error)")
+            debugLog("❌ Error fetching feed: \(error)")
             isLoading = false
         }
     }
@@ -516,7 +516,7 @@ struct FeedView: View {
             unreadNotificationCount = count
             
         } catch {
-            print("❌ Error fetching unread count: \(error)")
+            debugLog("❌ Error fetching unread count: \(error)")
         }
     }
 }
@@ -1152,7 +1152,7 @@ struct FeedGameDetailSheet: View {
             }
             
         } catch {
-            print("❌ Error loading feed game detail: \(error)")
+            debugLog("❌ Error loading feed game detail: \(error)")
         }
         
         isLoading = false
@@ -1218,7 +1218,7 @@ struct BookmarkButton: View {
             let rankedIds = Set(response.compactMap { $0.games?.rawg_id })
             isRanked = rankedIds.contains(gameId)
         } catch {
-            print("❌ Error checking ranked status: \(error)")
+            debugLog("❌ Error checking ranked status: \(error)")
         }
     }
 }
@@ -1543,7 +1543,7 @@ struct GroupedFeedRow: View {
             } catch {
                 localLikeOverrides[item.feedPostId] = currentlyLiked
                 localLikeCountOverrides[item.feedPostId] = currentCount
-                print("❌ Error toggling child like: \(error)")
+                debugLog("❌ Error toggling child like: \(error)")
             }
         }
     }

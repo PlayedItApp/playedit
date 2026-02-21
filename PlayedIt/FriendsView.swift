@@ -215,10 +215,10 @@ struct FriendsView: View {
         
         // Check if we have a valid session
         let session = try? await supabase.client.auth.session
-        print("🔍 Session exists: \(session != nil), token prefix: \(String(session?.accessToken.prefix(20) ?? "nil"))")
+        debugLog("🔍 Session exists: \(session != nil), token prefix: \(String(session?.accessToken.prefix(20) ?? "nil"))")
         
-        print("🔍 Current user ID: \(userId.uuidString)")
-        print("🔍 Query filter: user_id.eq.\(userId.uuidString.lowercased()),friend_id.eq.\(userId.uuidString.lowercased())")
+        debugLog("🔍 Current user ID: \(userId.uuidString)")
+        debugLog("🔍 Query filter: user_id.eq.\(userId.uuidString.lowercased()),friend_id.eq.\(userId.uuidString.lowercased())")
 
         
         do {
@@ -236,9 +236,9 @@ struct FriendsView: View {
                 .execute()
                 .value
             
-            print("🔍 Found \(friendships.count) friendships")
+            debugLog("🔍 Found \(friendships.count) friendships")
             for f in friendships {
-                print("   - id: \(f.id), user_id: \(f.user_id), friend_id: \(f.friend_id), status: \(f.status)")
+                debugLog("   - id: \(f.id), user_id: \(f.user_id), friend_id: \(f.friend_id), status: \(f.status)")
             }
             
             var acceptedFriends: [Friend] = []
@@ -249,7 +249,7 @@ struct FriendsView: View {
                 let friendUserId = friendship.user_id.lowercased() == userId.uuidString.lowercased() ? friendship.friend_id : friendship.user_id
                 let isIncoming = friendship.friend_id.lowercased() == userId.uuidString.lowercased()
                 
-                print("🔍 Processing friendship: friendUserId=\(friendUserId), isIncoming=\(isIncoming)")
+                debugLog("🔍 Processing friendship: friendUserId=\(friendUserId), isIncoming=\(isIncoming)")
                 
                 // Fetch friend's user info
                 struct UserInfo: Decodable {
@@ -268,7 +268,7 @@ struct FriendsView: View {
                         .execute()
                         .value
                     
-                    print("🔍 Found user: \(userInfo.username ?? "no username")")
+                    debugLog("🔍 Found user: \(userInfo.username ?? "no username")")
                     
                     let friend = Friend(
                         id: friendship.id,
@@ -283,13 +283,13 @@ struct FriendsView: View {
                         acceptedFriends.append(friend)
                     } else if friendship.status == "pending" && isIncoming {
                         pending.append(friend)
-                        print("🔍 Added to pending requests")
+                        debugLog("🔍 Added to pending requests")
                     } else if friendship.status == "pending" && !isIncoming {
                         sent.append(friend)
-                        print("🔍 Added to sent requests")
+                        debugLog("🔍 Added to sent requests")
                     }
                 } catch {
-                    print("❌ Error fetching user info for \(friendUserId): \(error)")
+                    debugLog("❌ Error fetching user info for \(friendUserId): \(error)")
                 }
             }
             
@@ -298,10 +298,10 @@ struct FriendsView: View {
             sentRequests = sent
             isLoading = false
             
-            print("🔍 Final: \(friends.count) friends, \(pendingRequests.count) pending")
+            debugLog("🔍 Final: \(friends.count) friends, \(pendingRequests.count) pending")
             
         } catch {
-            print("❌ Error fetching friends: \(error)")
+            debugLog("❌ Error fetching friends: \(error)")
             isLoading = false
         }
     }
@@ -357,7 +357,7 @@ struct FriendsView: View {
             await fetchFriends()
             
         } catch {
-            print("❌ Error sending friend request: \(error)")
+            debugLog("❌ Error sending friend request: \(error)")
             searchError = "Couldn't send request. Maybe you're already friends?"
         }
     }
@@ -373,7 +373,7 @@ struct FriendsView: View {
             await fetchFriends()
             
         } catch {
-            print("❌ Error accepting friend: \(error)")
+            debugLog("❌ Error accepting friend: \(error)")
         }
     }
     
@@ -388,7 +388,7 @@ struct FriendsView: View {
             await fetchFriends()
             
         } catch {
-            print("❌ Error declining friend: \(error)")
+            debugLog("❌ Error declining friend: \(error)")
         }
     }
     
@@ -403,7 +403,7 @@ struct FriendsView: View {
                 await fetchFriends()
                 
             } catch {
-                print("❌ Error cancelling friend request: \(error)")
+                debugLog("❌ Error cancelling friend request: \(error)")
             }
         }
 }
@@ -1318,7 +1318,7 @@ struct FriendProfileView: View {
             
             dismiss()
         } catch {
-            print("❌ Error removing friend: \(error)")
+            debugLog("❌ Error removing friend: \(error)")
             isRemovingFriend = false
         }
     }
@@ -1415,7 +1415,7 @@ struct FriendProfileView: View {
             friendWantToPlay = await WantToPlayManager.shared.fetchFriendList(friendId: friend.userId)
             
         } catch {
-            print("❌ Error loading friend data: \(error)")
+            debugLog("❌ Error loading friend data: \(error)")
         }
     }
 }
@@ -1604,7 +1604,7 @@ struct FriendWantToPlayDetailSheet: View {
                     .execute()
             }
         } catch {
-            print("⚠️ Could not fetch game details: \(error)")
+            debugLog("⚠️ Could not fetch game details: \(error)")
         }
     }
     

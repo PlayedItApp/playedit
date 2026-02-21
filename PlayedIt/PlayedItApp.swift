@@ -64,7 +64,7 @@ struct PlayedItApp: App {
     }
     
     private func handleDeepLink(_ url: URL) {
-        print("🔗 Deep link received: \(url)")
+        debugLog("🔗 Deep link received: \(url)")
         guard url.scheme == "playedit" else { return }
         
         // Handle auth callback (email confirmation auto-login)
@@ -72,9 +72,9 @@ struct PlayedItApp: App {
             Task {
                 do {
                     let session = try await SupabaseManager.shared.client.auth.session(from: url)
-                    print("✅ Auto-logged in from email confirmation: \(session.user.email ?? "unknown")")
+                    debugLog("✅ Auto-logged in from email confirmation: \(session.user.email ?? "unknown")")
                 } catch {
-                    print("❌ Auto-login from confirmation failed: \(error)")
+                    debugLog("❌ Auto-login from confirmation failed: \(error)")
                 }
             }
             return

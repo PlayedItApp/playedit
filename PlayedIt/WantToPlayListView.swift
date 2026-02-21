@@ -295,7 +295,7 @@ struct WantToPlayListView: View {
                             await loadGames()
                         }
                     }, onRank: {
-                        print("🎯 Ranking: \(game.gameTitle), against \(rankedGames.map { $0.gameTitle })")
+                        debugLog("🎯 Ranking: \(game.gameTitle), against \(rankedGames.map { $0.gameTitle })")
                         if rankedGames.isEmpty {
                             // First game - just place at #1, no sheet
                             Task {
@@ -360,16 +360,16 @@ struct WantToPlayListView: View {
                 
                 if let pred = PredictionEngine.shared.predict(game: target, context: context) {
                     predictions[game.id] = pred
-                    print("🔮 \(game.gameTitle): percentile=\(Int(pred.predictedPercentile))%, confidence=\(pred.confidenceLabel), tiers=\(pred.tiersUsed), summary=\(pred.summaryText)")
+                    debugLog("🔮 \(game.gameTitle): percentile=\(Int(pred.predictedPercentile))%, confidence=\(pred.confidenceLabel), tiers=\(pred.tiersUsed), summary=\(pred.summaryText)")
                     for signal in pred.friendSignals {
-                        print("   👤 \(signal.friendName): ranked at \(Int(signal.friendRankPercentile))th percentile, taste match: \(signal.tasteMatch)%")
+                        debugLog("   👤 \(signal.friendName): ranked at \(Int(signal.friendRankPercentile))th percentile, taste match: \(signal.tasteMatch)%")
                     }
                     if let genre = pred.topGenreAffinity {
-                        print("   🎮 Genre affinity: \(Int(genre))%")
+                        debugLog("   🎮 Genre affinity: \(Int(genre))%")
                     }
                 }
             } catch {
-                print("⚠️ Prediction fetch failed for \(game.gameTitle): \(error)")
+                debugLog("⚠️ Prediction fetch failed for \(game.gameTitle): \(error)")
             }
         }
     }
@@ -1670,7 +1670,7 @@ struct FirstTwoComparisonView: View {
         }
         
         private func fetchGameDetails() async {
-        print("🔍 WTP Detail: fetching gameId=\(game.gameId), title=\(game.gameTitle)")
+        debugLog("🔍 WTP Detail: fetching gameId=\(game.gameId), title=\(game.gameTitle)")
         do {
                 struct GameInfo: Decodable {
                     let rawg_id: Int
@@ -1686,7 +1686,7 @@ struct FirstTwoComparisonView: View {
                 .value
             
             guard let info = infos.first else {
-                print("⚠️ No games row found for rawg_id \(game.gameId)")
+                debugLog("⚠️ No games row found for rawg_id \(game.gameId)")
                 return
             }
                 
@@ -1703,7 +1703,7 @@ struct FirstTwoComparisonView: View {
                     .execute()
             }
             } catch {
-                print("⚠️ Could not fetch game details: \(error)")
+                debugLog("⚠️ Could not fetch game details: \(error)")
             }
         }
         
@@ -1720,7 +1720,7 @@ struct FirstTwoComparisonView: View {
                     .value
                 sourceFriendName = info.username
             } catch {
-                print("⚠️ Could not fetch source friend: \(error)")
+                debugLog("⚠️ Could not fetch source friend: \(error)")
             }
         }
         

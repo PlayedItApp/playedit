@@ -138,7 +138,7 @@ struct GameSearchView: View {
         do {
             games = try await RAWGService.shared.searchGames(query: searchText)
         } catch {
-            print("Search error: \(error)")
+            debugLog("Search error: \(error)")
             games = []
         }
         
@@ -147,7 +147,7 @@ struct GameSearchView: View {
     
     private func fetchRankedGameIds() async {
         guard let userId = SupabaseManager.shared.currentUser?.id else {
-            print("❌ No user ID found")
+            debugLog("❌ No user ID found")
             return
         }
         
@@ -161,9 +161,9 @@ struct GameSearchView: View {
                 .value
             
             rankedGameIds = Set(response.compactMap { $0.games?.rawg_id })
-            print("✅ Fetched ranked RAWG IDs: \(rankedGameIds)")
+            debugLog("✅ Fetched ranked RAWG IDs: \(rankedGameIds)")
         } catch {
-            print("❌ Failed to fetch ranked game IDs: \(error)")
+            debugLog("❌ Failed to fetch ranked game IDs: \(error)")
         }
     }
 }
@@ -285,7 +285,7 @@ struct GameSearchRow: View {
     }
     
     private func addToWantToPlay() async {
-        print("🔥 addToWantToPlay called with gameId: \(game.id), title: \(game.title), currentIds: \(wantToPlayManager.myWantToPlayIds)")
+        debugLog("🔥 addToWantToPlay called with gameId: \(game.id), title: \(game.title), currentIds: \(wantToPlayManager.myWantToPlayIds)")
             let success = await wantToPlayManager.addGame(
             gameId: game.id,
             gameTitle: game.title,
@@ -293,7 +293,7 @@ struct GameSearchRow: View {
             source: "search"
         )
         if success {
-            print("🔍 After add - gameId: \(game.id), contains: \(wantToPlayManager.myWantToPlayIds.contains(game.id)), allIds: \(wantToPlayManager.myWantToPlayIds)")
+            debugLog("🔍 After add - gameId: \(game.id), contains: \(wantToPlayManager.myWantToPlayIds.contains(game.id)), allIds: \(wantToPlayManager.myWantToPlayIds)")
             toastMessage = "Saved to Want to Play!"
             withAnimation { showToast = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

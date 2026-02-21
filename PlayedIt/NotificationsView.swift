@@ -159,7 +159,7 @@ struct NotificationsView: View {
             isLoading = false
             
         } catch {
-            print("❌ Error fetching notifications: \(error)")
+            debugLog("❌ Error fetching notifications: \(error)")
             isLoading = false
         }
     }
@@ -192,7 +192,7 @@ struct NotificationsView: View {
                 }
                 
             } catch {
-                print("❌ Error marking notification as read: \(error)")
+                debugLog("❌ Error marking notification as read: \(error)")
             }
         }
     }
@@ -226,7 +226,7 @@ struct NotificationsView: View {
                 }
                 
             } catch {
-                print("❌ Error marking all as read: \(error)")
+                debugLog("❌ Error marking all as read: \(error)")
             }
         }
     }

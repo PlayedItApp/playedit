@@ -70,7 +70,7 @@ struct ContentView: View {
     
 private func checkOnboardingStatus() async {
     guard let userId = supabase.currentUser?.id else {
-        print("⚠️ checkOnboardingStatus: no current user")
+        debugLog("⚠️ checkOnboardingStatus: no current user")
         return
     }
     
@@ -79,7 +79,7 @@ private func checkOnboardingStatus() async {
         return
     }
     
-    print("🔍 checkOnboardingStatus: checking for user \(userId)")
+    debugLog("🔍 checkOnboardingStatus: checking for user \(userId)")
         
         do {
             let count: Int = try await supabase.client
@@ -91,7 +91,7 @@ private func checkOnboardingStatus() async {
             
             needsOnboarding = count == 0
         } catch {
-            print("❌ Error checking onboarding status: \(error)")
+            debugLog("❌ Error checking onboarding status: \(error)")
             needsOnboarding = false
         }
     }
@@ -168,7 +168,7 @@ struct MainTabView: View {
             }
         }
         .onAppear {
-            print("🎯 MainTabView onAppear: forceProfileTab=\(forceProfileTab), startTab=\(startTab)")
+            debugLog("🎯 MainTabView onAppear: forceProfileTab=\(forceProfileTab), startTab=\(startTab)")
             selectedTab = forceProfileTab ? 2 : startTab
         }
         .onChange(of: forceProfileTab) { _, force in
@@ -210,7 +210,7 @@ struct MainTabView: View {
             }.count
             
         } catch {
-            print("❌ Error fetching pending count: \(error)")
+            debugLog("❌ Error fetching pending count: \(error)")
         }
     }
     
@@ -227,10 +227,10 @@ struct MainTabView: View {
                 .count ?? 0
             
             unreadNotificationCount = count
-                print("🔔 MainTab unread count: \(count) for user: \(userId.uuidString)")
+                debugLog("🔔 MainTab unread count: \(count) for user: \(userId.uuidString)")
                 
             } catch {
-            print("❌ Error fetching notification count: \(error)")
+            debugLog("❌ Error fetching notification count: \(error)")
         }
     }
 }
@@ -747,7 +747,7 @@ struct GameDetailSheet: View {
                             .execute()
                     }
                 } catch {
-                    print("⚠️ Could not fetch game description: \(error)")
+                    debugLog("⚠️ Could not fetch game description: \(error)")
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -835,7 +835,7 @@ struct GameDetailSheet: View {
             showComparison = true
             
         } catch {
-            print("❌ Error loading games for re-rank: \(error)")
+            debugLog("❌ Error loading games for re-rank: \(error)")
             isLoadingReRank = false
         }
     }
@@ -920,10 +920,10 @@ struct GameDetailSheet: View {
                 .insert(insert)
                 .execute()
             
-            print("✅ Re-ranked from #\(rank) → #\(newPosition)")
+            debugLog("✅ Re-ranked from #\(rank) → #\(newPosition)")
             
         } catch {
-            print("❌ Error saving re-ranked game: \(error)")
+            debugLog("❌ Error saving re-ranked game: \(error)")
         }
     }
     
@@ -976,11 +976,11 @@ struct GameDetailSheet: View {
                     .execute()
             }
             
-            print("✅ Removed \(game.gameTitle) from rankings")
+            debugLog("✅ Removed \(game.gameTitle) from rankings")
             dismiss()
             
         } catch {
-            print("❌ Error removing game: \(error)")
+            debugLog("❌ Error removing game: \(error)")
             isRemoving = false
         }
     }
@@ -996,13 +996,13 @@ struct GameDetailSheet: View {
                     .eq("id", value: game.id)
                     .execute()
                 
-                print("✅ Platforms saved")
+                debugLog("✅ Platforms saved")
                 displayedPlatforms = Array(editedPlatforms)
                 isEditingPlatforms = false
                 customPlatform = ""
                 
             } catch {
-                print("❌ Error saving platforms: \(error)")
+                debugLog("❌ Error saving platforms: \(error)")
             }
             
             isSavingPlatforms = false
@@ -1032,12 +1032,12 @@ struct GameDetailSheet: View {
                
                 .execute()
             
-            print("✅ Notes saved")
+            debugLog("✅ Notes saved")
             displayedNotes = trimmed
             isEditingNotes = false
             
         } catch {
-            print("❌ Error saving notes: \(error)")
+            debugLog("❌ Error saving notes: \(error)")
         }
         
         isSavingNotes = false
