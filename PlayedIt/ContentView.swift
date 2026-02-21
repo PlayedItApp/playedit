@@ -5,13 +5,37 @@ import Combine
 struct ContentView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @State private var isCheckingAuth = true
+    @State private var needsOnboarding = false
+    @State private var isOnboardingComplete = false
+    @State private var showProductTour = false
+    @State private var tourAnchors: [String: CGRect] = [:]
+    @State private var forceProfile = false
     
     var body: some View {
         Group {
             if isCheckingAuth {
                 SplashView()
             } else if supabase.isAuthenticated {
-                MainTabView()
+                if needsOnboarding && !isOnboardingComplete {
+                    OnboardingQuizView(isOnboardingComplete: $isOnboardingComplete, onSkip: {
+                        if let userId = supabase.currentUser?.id {
+                            UserDefaults.standard.set(true, forKey: "onboarding_complete_\(userId)")
+                        }
+                        needsOnboarding = false
+                        forceProfile = true
+                    })
+                } else {
+                    MainTabView(forceProfileTab: showProductTour || forceProfile)
+                    .overlay(
+                        Group {
+                            if showProductTour {
+                                ProductTourOverlay(anchors: tourAnchors, onDismiss: {
+                                    showProductTour = false
+                                })
+                            }
+                        }
+                    )
+                }
             } else {
                 LoginView()
             }
@@ -21,6 +45,54 @@ struct ContentView: View {
         .task {
             await supabase.checkSession()
             isCheckingAuth = false
+            
+            if supabase.isAuthenticated {
+                await checkOnboardingStatus()
+            }
+        }
+        .onChange(of: supabase.isAuthenticated) { _, isAuth in
+            if isAuth {
+                Task { await checkOnboardingStatus() }
+            }
+        }
+        .onChange(of: isOnboardingComplete) { _, complete in
+            if complete {
+                if let userId = supabase.currentUser?.id {
+                    UserDefaults.standard.set(true, forKey: "onboarding_complete_\(userId)")
+                }
+                needsOnboarding = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showProductTour = true
+                }
+            }
+        }
+    }
+    
+private func checkOnboardingStatus() async {
+    guard let userId = supabase.currentUser?.id else {
+        print("⚠️ checkOnboardingStatus: no current user")
+        return
+    }
+    
+    if UserDefaults.standard.bool(forKey: "onboarding_complete_\(userId)") {
+        needsOnboarding = false
+        return
+    }
+    
+    print("🔍 checkOnboardingStatus: checking for user \(userId)")
+        
+        do {
+            let count: Int = try await supabase.client
+                .from("user_games")
+                .select("*", head: true, count: .exact)
+                .eq("user_id", value: userId.uuidString)
+                .execute()
+                .count ?? 0
+            
+            needsOnboarding = count == 0
+        } catch {
+            print("❌ Error checking onboarding status: \(error)")
+            needsOnboarding = false
         }
     }
 }
@@ -37,22 +109,23 @@ struct SplashView: View {
             
             HStack(spacing: 0) {
                 Text("played")
-                    .font(.largeTitle)
-                    .foregroundColor(.slate)
-                Text("it")
-                    .font(.largeTitle)
+                    .font(Font.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.adaptiveSlate)
+                    Text("it")
+                        .font(Font.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundColor(.accentOrange)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
+        .background(Color.cardBackground) 
     }
 }
 
 // MARK: - Main Tab View
 struct MainTabView: View {
+    var forceProfileTab: Bool = false
     @AppStorage("startTab") private var startTab = 0
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int = 0
     @State private var pendingRequestCount = 0
     @State private var unreadNotificationCount = 0
     @State private var showWhatsNew = false
@@ -94,8 +167,16 @@ struct MainTabView: View {
                 }
             }
         }
+        .onAppear {
+            print("🎯 MainTabView onAppear: forceProfileTab=\(forceProfileTab), startTab=\(startTab)")
+            selectedTab = forceProfileTab ? 2 : startTab
+        }
+        .onChange(of: forceProfileTab) { _, force in
+            if force {
+                selectedTab = 2
+            }
+        }
         .task {
-            selectedTab = startTab
             await fetchPendingCount()
             await fetchUnreadNotificationCount()
             await WantToPlayManager.shared.refreshMyIds()
@@ -177,10 +258,10 @@ struct RankedGameRow: View {
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle()
-                        .fill(Color.lightGray)
+                        .fill(Color.secondaryBackground)
                         .overlay(
                             Image(systemName: "gamecontroller")
-                                .foregroundColor(.silver)
+                                .foregroundStyle(Color.adaptiveSilver)
                         )
                 }
                 .frame(width: 50, height: 67)
@@ -190,13 +271,13 @@ struct RankedGameRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(game.gameTitle)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .lineLimit(2)
                     
                     if let year = game.gameReleaseDate?.prefix(4) {
                         Text(String(year))
                             .font(.caption)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                 }
                 
@@ -204,13 +285,16 @@ struct RankedGameRow: View {
                 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.silver)
-            }
-            .padding(12)
-            .contentShape(Rectangle())
-            .background(Color.white)
+                    .foregroundStyle(Color.adaptiveGray)
+                        }
+                        .padding(12)
+                        .contentShape(Rectangle())
+            .background(Color.cardBackground)
             .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.adaptiveDivider, lineWidth: 0.5)
+            )
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail, onDismiss: {
@@ -224,7 +308,7 @@ struct RankedGameRow: View {
         switch rank {
         case 1: return .accentOrange
         case 2...3: return .primaryBlue
-        default: return .slate
+        default: return .adaptiveGray
         }
     }
 }
@@ -253,11 +337,12 @@ struct GameDetailSheet: View {
     @State private var displayedPlatforms: [String] = []
     @State private var hasInitialized = false
     @State private var notesError: String?
+    @State private var gameDescription: String? = nil
     
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(spacing: 20) {
                     // Cover art
                     AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
                         image
@@ -265,11 +350,11 @@ struct GameDetailSheet: View {
                             .aspectRatio(contentMode: .fill)
                     } placeholder: {
                         Rectangle()
-                            .fill(Color.lightGray)
+                            .fill(Color.secondaryBackground)
                             .overlay(
                                 Image(systemName: "gamecontroller")
                                     .font(.system(size: 40))
-                                    .foregroundColor(.silver)
+                                    .foregroundStyle(Color.adaptiveSilver)
                             )
                     }
                     .frame(width: 150, height: 200)
@@ -281,7 +366,7 @@ struct GameDetailSheet: View {
                     VStack(spacing: 8) {
                         Text(game.gameTitle)
                             .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                             .multilineTextAlignment(.center)
                         
                         Text("Ranked #\(rank)")
@@ -292,13 +377,19 @@ struct GameDetailSheet: View {
                     Divider()
                         .padding(.horizontal, 40)
                     
+                    // Game description
+                    if let desc = gameDescription, !desc.isEmpty {
+                        GameDescriptionView(text: desc)
+                            .padding(.horizontal, 24)
+                    }
+                    
                     // Details
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Label("Played on", systemImage: "gamecontroller")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                                 
                                 Spacer()
                                 
@@ -342,11 +433,11 @@ struct GameDetailSheet: View {
                                         .font(.system(size: 14, design: .rounded))
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 10)
-                                        .background(Color.lightGray)
+                                        .background(Color.secondaryBackground)
                                         .cornerRadius(8)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.silver, lineWidth: 1)
+                                                .stroke(Color.adaptiveSilver, lineWidth: 1)
                                         )
                                     
                                     Button {
@@ -360,7 +451,7 @@ struct GameDetailSheet: View {
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 10)
-                                            .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.silver : Color.primaryBlue)
+                                            .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.adaptiveSilver : Color.primaryBlue)
                                             .cornerRadius(8)
                                     }
                                     .disabled(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -397,7 +488,7 @@ struct GameDetailSheet: View {
                                     } label: {
                                         Text("Cancel")
                                             .font(.system(size: 14, weight: .medium, design: .rounded))
-                                            .foregroundColor(.grayText)
+                                            .foregroundStyle(Color.adaptiveGray)
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 8)
                                     }
@@ -425,11 +516,11 @@ struct GameDetailSheet: View {
                             } else if !displayedPlatforms.isEmpty {
                                 Text(displayedPlatforms.joined(separator: ", "))
                                     .font(.system(size: 16, design: .rounded))
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                             } else {
                                 Text("No platforms added. Tap Add to set them!")
                                     .font(.system(size: 14, design: .rounded))
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                                     .italic()
                             }
                         }
@@ -447,7 +538,7 @@ struct GameDetailSheet: View {
                             HStack {
                                 Label("Notes", systemImage: "note.text")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                                 
                                 Spacer()
                                 
@@ -471,17 +562,17 @@ struct GameDetailSheet: View {
                                 TextEditor(text: $editedNotes)
                                     .frame(minHeight: 100)
                                     .padding(12)
-                                    .background(Color.lightGray)
+                                    .background(Color.secondaryBackground)
                                     .cornerRadius(12)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(Color.silver, lineWidth: 1)
+                                            .stroke(Color.adaptiveSilver, lineWidth: 1)
                                     )
                                     .overlay(
                                         Group {
                                             if editedNotes.isEmpty {
                                                 Text("Favorite moments? Hot takes? (optional)")
-                                                    .foregroundColor(.grayText)
+                                                    .foregroundStyle(Color.adaptiveGray)
                                                     .padding(.leading, 16)
                                                     .padding(.top, 20)
                                             }
@@ -509,7 +600,7 @@ struct GameDetailSheet: View {
                                     } label: {
                                         Text("Cancel")
                                             .font(.system(size: 14, weight: .medium, design: .rounded))
-                                            .foregroundColor(.grayText)
+                                            .foregroundStyle(Color.adaptiveGray)
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 8)
                                     }
@@ -539,7 +630,7 @@ struct GameDetailSheet: View {
                             } else {
                                 Text("No notes yet. Tap Add to write a review!")
                                     .font(.system(size: 14, design: .rounded))
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                                     .italic()
                             }
                         }
@@ -619,6 +710,46 @@ struct GameDetailSheet: View {
                     hasInitialized = true
                 }
             }
+            .task {
+                do {
+                    struct GameInfo: Decodable {
+                        let rawg_id: Int
+                        let description: String?
+                    }
+                    let results: [GameInfo] = try await SupabaseManager.shared.client
+                        .from("games")
+                        .select("rawg_id, description")
+                        .eq("rawg_id", value: game.gameRawgId ?? game.gameId)
+                        .limit(1)
+                        .execute()
+                        .value
+                    
+                    guard let result = results.first else {
+                        // Game not in cache, fetch directly from RAWG
+                        let details = try await RAWGService.shared.getGameDetails(id: game.gameId)
+                        gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+                        return
+                    }
+                    
+                    if let cached = result.description, !cached.isEmpty {
+                        gameDescription = cached
+                        return
+                    }
+                    
+                    let details = try await RAWGService.shared.getGameDetails(id: result.rawg_id)
+                    gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+                    
+                    if let desc = gameDescription, !desc.isEmpty {
+                        _ = try? await SupabaseManager.shared.client
+                            .from("games")
+                            .update(["description": desc])
+                            .eq("rawg_id", value: result.rawg_id)
+                            .execute()
+                    }
+                } catch {
+                    print("⚠️ Could not fetch game description: \(error)")
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -627,7 +758,7 @@ struct GameDetailSheet: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                     }
                 }
             }
@@ -669,12 +800,13 @@ struct GameDetailSheet: View {
                     let title: String
                     let cover_url: String?
                     let release_date: String?
+                    let rawg_id: Int?
                 }
             }
             
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .neq("game_id", value: game.gameId)
                 .not("rank_position", operator: .is, value: "null")
@@ -694,7 +826,8 @@ struct GameDetailSheet: View {
                     canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
                 )
             }
             
@@ -762,7 +895,7 @@ struct GameDetailSheet: View {
             }
             
             // Resolve canonical game ID
-            let canonicalId = await RAWGService.shared.getParentGameId(for: game.gameId) ?? game.gameId
+            let canonicalId = await RAWGService.shared.getParentGameId(for: game.gameRawgId ?? game.gameId) ?? (game.gameRawgId ?? game.gameId)
             
             // 4. Insert at new position
             struct UserGameInsert: Encodable {
@@ -926,13 +1059,13 @@ struct DetailRow: View {
             
             Text(label)
                 .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
             
             Spacer()
             
             Text(value)
                 .font(.system(size: 16, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
         }
     }
 }

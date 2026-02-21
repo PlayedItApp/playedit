@@ -10,13 +10,22 @@ struct GameSearchView: View {
     @State private var rankedGameIds: Set<Int> = []
     @Environment(\.dismiss) var dismiss
     
+    private var rawgAttribution: some View {
+        Link(destination: URL(string: "https://rawg.io")!) {
+            Text("Game data powered by RAWG")
+                .font(.system(size: 12, weight: .regular, design: .rounded))
+                .foregroundStyle(Color.adaptiveGray)
+        }
+        .padding(.bottom, 12)
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Search Bar
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                     
                     TextField("What did you play?", text: $searchText)
                         .autocorrectionDisabled()
@@ -31,13 +40,17 @@ struct GameSearchView: View {
                             hasSearched = false
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                     }
                 }
                 .padding(12)
-                .background(Color.lightGray)
+                .background(Color.secondaryBackground)
                 .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.adaptiveDivider, lineWidth: 0.5)
+                )
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 
@@ -52,23 +65,25 @@ struct GameSearchView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "gamecontroller")
                             .font(.system(size: 48))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                         Text("No games found. Try a different search?")
                             .font(.body)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                     Spacer()
+                    rawgAttribution
                 } else if games.isEmpty {
                     Spacer()
                     VStack(spacing: 12) {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 48))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                         Text("Search for a game to get started")
                             .font(.body)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                     Spacer()
+                    rawgAttribution
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -79,6 +94,8 @@ struct GameSearchView: View {
                             }
                         }
                         .padding(16)
+
+                        rawgAttribution
                     }
                 }
             }
@@ -170,10 +187,10 @@ struct GameSearchRow: View {
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle()
-                        .fill(Color.lightGray)
+                        .fill(Color.secondaryBackground)
                         .overlay(
                             Image(systemName: "gamecontroller")
-                                .foregroundColor(.silver)
+                                .foregroundStyle(Color.adaptiveSilver)
                         )
                 }
                 .frame(width: 60, height: 80)
@@ -184,20 +201,20 @@ struct GameSearchRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(game.title)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     
                     if let year = game.releaseDate?.prefix(4) {
                         Text(String(year))
                             .font(.caption)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                     
                     if !game.platforms.isEmpty {
                         Text(game.platforms.prefix(3).joined(separator: " • "))
                             .font(.caption)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .lineLimit(1)
                     }
                 }
@@ -231,7 +248,7 @@ struct GameSearchRow: View {
                         } label: {
                             Image(systemName: "bookmark")
                                 .font(.system(size: 16))
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                         .buttonStyle(.plain)
                     }
@@ -239,13 +256,16 @@ struct GameSearchRow: View {
                 
                 // Chevron
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.silver)
+                    .foregroundStyle(Color.adaptiveSilver)
                     .font(.system(size: 14, weight: .semibold))
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color.cardBackground) 
             .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.adaptiveDivider, lineWidth: 0.5)
+            )
             .overlay(
                 Group {
                     if showToast {
@@ -265,13 +285,15 @@ struct GameSearchRow: View {
     }
     
     private func addToWantToPlay() async {
-        let success = await wantToPlayManager.addGame(
+        print("🔥 addToWantToPlay called with gameId: \(game.id), title: \(game.title), currentIds: \(wantToPlayManager.myWantToPlayIds)")
+            let success = await wantToPlayManager.addGame(
             gameId: game.id,
             gameTitle: game.title,
             gameCoverUrl: game.coverURL,
             source: "search"
         )
         if success {
+            print("🔍 After add - gameId: \(game.id), contains: \(wantToPlayManager.myWantToPlayIds.contains(game.id)), allIds: \(wantToPlayManager.myWantToPlayIds)")
             toastMessage = "Saved to Want to Play!"
             withAnimation { showToast = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

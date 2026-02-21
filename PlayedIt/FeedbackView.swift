@@ -36,7 +36,7 @@ struct FeedbackView: View {
                 // Header
                 Text("Found a bug? Have an idea? We're all ears.")
                     .font(.subheadline)
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                     .padding(.top, 8)
                 
                 // Feedback Type Picker
@@ -44,7 +44,7 @@ struct FeedbackView: View {
                     Text("Type")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                     
                     Picker("Feedback Type", selection: $feedbackType) {
                         ForEach(FeedbackType.allCases, id: \.self) { type in
@@ -59,21 +59,21 @@ struct FeedbackView: View {
                     Text(descriptionLabel)
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                     
                     TextEditor(text: $description)
                         .frame(minHeight: 120)
                         .padding(8)
-                        .background(Color.lightGray)
+                        .background(Color.secondaryBackground)
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.silver, lineWidth: 1)
+                                .stroke(Color.adaptiveSilver, lineWidth: 1)
                         )
                     
                     Text(descriptionPlaceholder)
                         .font(.caption)
-                        .foregroundColor(.silver)
+                        .foregroundStyle(Color.adaptiveSilver)
                 }
                 
                 // Steps to reproduce (bug only)
@@ -82,21 +82,21 @@ struct FeedbackView: View {
                         Text("Steps to reproduce (optional)")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         TextEditor(text: $stepsToReproduce)
                             .frame(minHeight: 80)
                             .padding(8)
-                            .background(Color.lightGray)
+                            .background(Color.secondaryBackground)
                             .cornerRadius(8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.silver, lineWidth: 1)
+                                    .stroke(Color.adaptiveSilver, lineWidth: 1)
                             )
                         
                         Text("1. I tapped on... 2. Then I...")
                             .font(.caption)
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                     }
                 }
                 
@@ -105,7 +105,7 @@ struct FeedbackView: View {
                     Text("Screenshot (optional)")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                     
                     if let preview = screenshotPreview {
                         ZStack(alignment: .topTrailing) {
@@ -137,7 +137,7 @@ struct FeedbackView: View {
                             .foregroundColor(.primaryBlue)
                             .padding(.vertical, 12)
                             .frame(maxWidth: .infinity)
-                            .background(Color.lightGray)
+                            .background(Color.secondaryBackground)
                             .cornerRadius(8)
                         }
                     }

@@ -4,19 +4,35 @@ struct SignUpView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @Environment(\.dismiss) var dismiss
     
+    var initialEmail: String = ""
+    var initialUsername: String = ""
+    var onDismissEmail: ((String) -> Void)?
+    
     @State private var email = ""
     @State private var username = ""
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var isAnimating = false
     @State private var moderationError: String?
+    @State private var showEmailConfirmation = false
     
     var passwordsMatch: Bool {
         !password.isEmpty && password == confirmPassword
     }
     
+    private var hasMinLength: Bool { password.count >= 6 }
+    private var hasUppercase: Bool { password.rangeOfCharacter(from: .uppercaseLetters) != nil }
+    private var hasLowercase: Bool { password.rangeOfCharacter(from: .lowercaseLetters) != nil }
+    private var hasNumberOrSpecial: Bool {
+        password.rangeOfCharacter(from: .decimalDigits) != nil ||
+        password.rangeOfCharacter(from: CharacterSet(charactersIn: "!@#$%^&*()_+-=[]{}|;':\",./<>?")) != nil
+    }
+    private var passwordMeetsRequirements: Bool {
+        hasMinLength && hasUppercase && hasLowercase && hasNumberOrSpecial
+    }
+
     var isFormValid: Bool {
-        !email.isEmpty && !username.isEmpty && !password.isEmpty && password.count >= 8
+        !email.isEmpty && !username.isEmpty && !password.isEmpty && passwordMeetsRequirements
     }
     /*
     var isFormValid: Bool {
@@ -36,13 +52,13 @@ struct SignUpView: View {
                     // Header
                     VStack(spacing: 12) {
                         Text("Let's build your gaming history!")
-                            .font(.title1)
-                            .foregroundColor(.slate)
+                            .font(Font.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
                             .multilineTextAlignment(.center)
                         
                         Text("Rank games you've played and see how your taste stacks up against friends.")
                             .font(.body)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .multilineTextAlignment(.center)
                     }
                     .padding(.horizontal, 24)
@@ -56,7 +72,7 @@ struct SignUpView: View {
                             Text("Username")
                                 .font(.callout)
                                 .fontWeight(.medium)
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("coolplayer42", text: $username)
                                 .textInputAutocapitalization(.never)
@@ -65,7 +81,7 @@ struct SignUpView: View {
                             
                             Text("This is how friends will find you")
                                 .font(.caption)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                         
                         // Email
@@ -73,7 +89,7 @@ struct SignUpView: View {
                             Text("Email")
                                 .font(.callout)
                                 .fontWeight(.medium)
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("your@email.com", text: $email)
                                 .textInputAutocapitalization(.never)
@@ -88,36 +104,22 @@ struct SignUpView: View {
                             Text("Password")
                                 .font(.callout)
                                 .fontWeight(.medium)
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
-                            SecureField("At least 8 characters", text: $password)
-                                .textContentType(.password)
-                                .playedItTextField()
-                        }
-                        /*
-                        // Confirm Password
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Confirm Password")
-                                .font(.callout)
-                                .fontWeight(.medium)
-                                .foregroundColor(.slate)
-                            
-                            SecureField("Type it again", text: $confirmPassword)
+                            SecureField("At least 6 characters", text: $password)
                                 .textContentType(.password)
                                 .playedItTextField()
                             
-                            // Password match indicator
-                            if !confirmPassword.isEmpty {
-                                HStack(spacing: 4) {
-                                    Image(systemName: passwordsMatch ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                        .foregroundColor(passwordsMatch ? .success : .error)
-                                    Text(passwordsMatch ? "Passwords match!" : "Passwords don't match")
-                                        .font(.caption)
-                                        .foregroundColor(passwordsMatch ? .success : .error)
+                            // Password Requirements
+                            if !password.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    PasswordRequirementRow(label: "At least 6 characters", isMet: hasMinLength)
+                                    PasswordRequirementRow(label: "One uppercase letter", isMet: hasUppercase)
+                                    PasswordRequirementRow(label: "One lowercase letter", isMet: hasLowercase)
+                                    PasswordRequirementRow(label: "One number or special character", isMet: hasNumberOrSpecial)
                                 }
                             }
                         }
-                         */
                     }
                     .padding(.horizontal, 24)
                     .opacity(isAnimating ? 1.0 : 0.0)
@@ -156,7 +158,11 @@ struct SignUpView: View {
                                     username: username
                                 )
                                 if success {
-                                    dismiss()
+                                    if supabase.needsEmailConfirmation {
+                                        showEmailConfirmation = true
+                                    } else {
+                                        dismiss()
+                                    }
                                 }
                             }
                         } label: {
@@ -172,6 +178,7 @@ struct SignUpView: View {
                         .opacity(isFormValid ? 1.0 : 0.6)
                         
                         Button {
+                            onDismissEmail?(email)
                             dismiss()
                         } label: {
                             Text("Already have an account? Sign in")
@@ -189,10 +196,14 @@ struct SignUpView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $showEmailConfirmation) {
+            EmailConfirmationView(email: email)
+        }
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
+                    onDismissEmail?(email)
                     dismiss()
                 } label: {
                     HStack(spacing: 4) {
@@ -205,6 +216,12 @@ struct SignUpView: View {
             }
         }
         .onAppear {
+            if email.isEmpty && !initialEmail.isEmpty {
+                email = initialEmail
+            }
+            if username.isEmpty && !initialUsername.isEmpty {
+                username = initialUsername
+            }
             withAnimation {
                 isAnimating = true
             }
@@ -212,8 +229,26 @@ struct SignUpView: View {
     }
 }
 
+struct PasswordRequirementRow: View {
+    let label: String
+    let isMet: Bool
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: isMet ? "checkmark.circle.fill" : "circle")
+                .font(.caption)
+                .foregroundColor(isMet ? .success : .silver)
+                .contentTransition(.interpolate)
+            Text(label)
+                .font(.caption)
+                .foregroundColor(isMet ? .success : .gray)
+                .contentTransition(.interpolate)
+        }
+    }
+}
+
 #Preview {
     NavigationStack {
-        SignUpView()
+        SignUpView(initialEmail: "", onDismissEmail: nil)
     }
 }

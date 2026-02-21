@@ -37,11 +37,11 @@ struct BatchRankSelectionView: View {
                         
                         Text("You've ranked them all!")
                             .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         Text("You've already ranked every game on \(friendName)'s list.")
                             .font(.subheadline)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                         
@@ -52,11 +52,11 @@ struct BatchRankSelectionView: View {
                     VStack(spacing: 4) {
                         Text("Pick games from \(friendName)'s list to rank")
                             .font(.system(size: 15, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                         
                         Text("\(unrankedGames.count) games you haven't ranked")
                             .font(.system(size: 13, design: .rounded))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                     }
                     .padding(.vertical, 12)
                     
@@ -89,7 +89,7 @@ struct BatchRankSelectionView: View {
                             HStack {
                                 Text("\(selectedGameIds.count) game\(selectedGameIds.count == 1 ? "" : "s") selected")
                                     .font(.system(size: 15, weight: .medium, design: .rounded))
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                 
                                 Spacer()
                                 
@@ -104,7 +104,7 @@ struct BatchRankSelectionView: View {
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
                         }
-                        .background(Color.white)
+                        .background(Color.cardBackground) 
                     }
                 }
             }
@@ -159,7 +159,7 @@ struct BatchGameRow: View {
                 // Checkbox
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(isSelected ? Color.primaryBlue : Color.silver, lineWidth: 2)
+                        .stroke(isSelected ? Color.primaryBlue : Color.adaptiveSilver, lineWidth: 2)
                         .frame(width: 24, height: 24)
                     
                     if isSelected {
@@ -181,7 +181,7 @@ struct BatchGameRow: View {
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle()
-                        .fill(Color.lightGray)
+                        .fill(Color.secondaryBackground)
                 }
                 .frame(width: 44, height: 59)
                 .cornerRadius(6)
@@ -191,12 +191,12 @@ struct BatchGameRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(game.gameTitle)
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .lineLimit(1)
                     
                     Text("#\(friendRank) on their list")
                         .font(.system(size: 13, design: .rounded))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                 }
                 
                 Spacer()

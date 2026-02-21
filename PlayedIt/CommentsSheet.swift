@@ -16,6 +16,7 @@ struct CommentsSheet: View {
     @State private var editText = ""
     @State private var moderationError: String?
     @State private var hiddenCommentIds: Set<String> = []
+    @State private var reportingComment: FeedComment? = nil
 
     private var isPostOwner: Bool {
         feedItem.userId.lowercased() == (supabase.currentUser?.id.uuidString ?? "").lowercased()
@@ -33,7 +34,7 @@ struct CommentsSheet: View {
                                 .aspectRatio(contentMode: .fill)
                         } placeholder: {
                             Rectangle()
-                                .fill(Color.lightGray)
+                                .fill(Color.secondaryBackground)
                         }
                         .frame(width: 40, height: 54)
                         .cornerRadius(4)
@@ -44,21 +45,26 @@ struct CommentsSheet: View {
                         if feedItem.gameTitle == "Reset Rankings" {
                             HStack(spacing: 4) {
                                 Text(feedItem.username)
-                                Text(feedItem.username)
                                 Image(systemName: "arrow.counterclockwise")
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundColor(.primaryBlue)
                                 Text("rebuilt their rankings")
                             }
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
+                        } else if feedItem.rankPosition == nil && feedItem.userGameId.isEmpty {
+                            // Batch post
+                            Text(feedItem.gameTitle)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.adaptiveSlate)
+                                .lineLimit(2)
                         } else {
                             Text("\(feedItem.username) ranked")
                                 .font(.caption)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                             Text(feedItem.gameTitle)
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                                 .lineLimit(1)
                             Text("at #\(feedItem.rankPosition ?? 0)")
                                 .font(.caption)
@@ -69,7 +75,7 @@ struct CommentsSheet: View {
                     Spacer()
                 }
                 .padding()
-                .background(Color.lightGray.opacity(0.5))
+                .background(Color.secondaryBackground.opacity(0.5))
                 
                 Divider()
                 
@@ -83,13 +89,13 @@ struct CommentsSheet: View {
                     VStack(spacing: 8) {
                         Image(systemName: "bubble.right")
                             .font(.system(size: 32))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                         Text("No comments yet")
                             .font(.subheadline)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                         Text("Be the first to comment!")
                             .font(.caption)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                     Spacer()
                 } else {
@@ -108,10 +114,7 @@ struct CommentsSheet: View {
                                     },
                                     isReported: hiddenCommentIds.contains(comment.id),
                                     onReport: {
-                                        print("🚩 Hiding comment \(comment.id)")
-                                        _ = withAnimation {
-                                            hiddenCommentIds.insert(comment.id)
-                                        }
+                                        reportingComment = comment
                                     }
                                 )
                             }
@@ -141,7 +144,7 @@ struct CommentsSheet: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                             }
                         }
                         .padding(.horizontal)
@@ -160,7 +163,7 @@ struct CommentsSheet: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                             }
                         }
                         .padding(.horizontal)
@@ -202,7 +205,7 @@ struct CommentsSheet: View {
                     }
                     .padding()
                 }
-                .background(Color.white)
+                .background(Color.cardBackground) 
             }
             .navigationTitle("Comments")
             .navigationBarTitleDisplayMode(.inline)
@@ -216,6 +219,15 @@ struct CommentsSheet: View {
             }
             .task {
                 await fetchComments()
+            }
+            .sheet(item: $reportingComment) { comment in
+                ReportView(
+                    contentType: .comment,
+                    contentId: UUID(uuidString: comment.id),
+                    contentText: comment.content,
+                    reportedUserId: UUID(uuidString: comment.userId) ?? UUID()
+                )
+                .presentationDetents([.large])
             }
         }
     }
@@ -389,8 +401,6 @@ struct CommentRowView: View {
     var onReport: (() -> Void)? = nil
     
     @State private var showDeleteConfirm = false
-    @State private var showReportSheet = false
-    @State private var reportSubmitted = false
     
     // Can delete if: it's your own comment OR you own the post
     private var canDelete: Bool {
@@ -432,11 +442,11 @@ struct CommentRowView: View {
                 HStack {
                     Text(comment.username)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                     
                     Text(timeAgo(from: comment.createdAt))
                         .font(.caption)
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                     
                     Spacer()
                     
@@ -459,8 +469,7 @@ struct CommentRowView: View {
                         
                         if !comment.isOwn {
                             Button(role: .destructive) {
-                                print("🚩 Report tapped, setting showReportSheet = true")
-                                showReportSheet = true
+                                onReport?()
                             } label: {
                                 Label("Report", systemImage: "flag")
                             }
@@ -468,7 +477,7 @@ struct CommentRowView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.caption)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .padding(4)
                     }
                     .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -482,37 +491,18 @@ struct CommentRowView: View {
                 if isReported {
                     Text("You reported this comment")
                         .font(.system(size: 13, design: .rounded))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                         .italic()
                         .padding(.vertical, 4)
                         .padding(.horizontal, 10)
-                        .background(Color.lightGray)
+                        .background(Color.secondaryBackground)
                         .cornerRadius(8)
                 } else {
                     SpoilerTextView(comment.content)
                         .font(.subheadline)
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                 }
             }
-        }
-        .onChange(of: showReportSheet) { _, newValue in
-            print("🚩 showReportSheet changed to \(newValue)")
-        }
-        .sheet(isPresented: $showReportSheet, onDismiss: {
-            if reportSubmitted {
-                print("🚩 Report submitted, hiding comment")
-                onReport?()
-                reportSubmitted = false
-            }
-        }) {
-            ReportView(
-                contentType: .comment,
-                contentId: UUID(uuidString: comment.id),
-                contentText: comment.content,
-                reportedUserId: UUID(uuidString: comment.userId) ?? UUID(),
-                didSubmit: $reportSubmitted
-            )
-            .presentationDetents([.large])
         }
     }
     
@@ -555,6 +545,7 @@ struct CommentRowView: View {
             gameCoverURL: nil,
             rankPosition: 1,
             loggedAt: nil,
+            batchSource: nil,
             likeCount: 5,
             commentCount: 3,
             isLikedByMe: true

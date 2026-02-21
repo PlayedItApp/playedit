@@ -21,12 +21,15 @@ struct ProfileView: View {
     @State private var currentNonce: String?
     @State private var appleLinkDelegate: AppleLinkDelegate?
     @AppStorage("startTab") private var startTab = 0
+    @EnvironmentObject var appearanceManager: AppearanceManager
     @State private var showGameSearch = false
     @State private var selectedListTab = 0
     @State private var showResetRankings = false
     @State private var showResetFlow = false
     @State private var hasUnrankedGames = false
     @State private var unrankedCount = 0
+    @State private var showSteamImport = false
+    @State private var hasSteamConnected = false
     
     var body: some View {
         NavigationStack {
@@ -114,11 +117,11 @@ struct ProfileView: View {
                             } else {
                                 Text(username.isEmpty ? "Set a username" : username)
                                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                                    .foregroundColor(username.isEmpty ? .grayText : .slate)
+                                    .foregroundStyle(username.isEmpty ? Color.adaptiveGray : Color.adaptiveSlate)
                                 
                                 Text("\(rankedGames.count) games ranked")
                                     .font(.subheadline)
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                                 
                                 Button {
                                     isEditing = true
@@ -126,7 +129,7 @@ struct ProfileView: View {
                                     Text("Edit Profile")
                                         .font(.caption)
                                 }
-                                .foregroundColor(.primaryBlue)
+                                .foregroundStyle(Color.adaptiveBlue)
                             }
                             
                             if let message = message {
@@ -142,6 +145,7 @@ struct ProfileView: View {
                     .padding(.top, 20)
                     
                     Divider()
+                        .overlay(Color.adaptiveDivider)
                         .padding(.horizontal, 20)
                     
                     // Tab Picker
@@ -166,11 +170,11 @@ struct ProfileView: View {
                                     
                                     Text("Rankings reset in progress")
                                         .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.slate)
+                                        .foregroundStyle(Color.adaptiveSlate)
                                     
                                     Text("You started a reset but didn't finish. Pick up where you left off!")
                                         .font(.system(size: 15, design: .rounded))
-                                        .foregroundColor(.grayText)
+                                        .foregroundStyle(Color.adaptiveGray)
                                         .multilineTextAlignment(.center)
                                         .padding(.horizontal, 40)
                                     
@@ -191,10 +195,10 @@ struct ProfileView: View {
                                 VStack(spacing: 8) {
                                     Text("No games ranked yet")
                                         .font(.body)
-                                        .foregroundColor(.grayText)
+                                        .foregroundStyle(Color.adaptiveGray)
                                     Text("Your list is waiting. What's the first game?")
                                         .font(.caption)
-                                        .foregroundColor(.silver)
+                                        .foregroundStyle(Color.adaptiveSilver)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 20)
@@ -208,10 +212,10 @@ struct ProfileView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Re-ranking in progress")
                                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                                .foregroundColor(.slate)
+                                                .foregroundStyle(Color.adaptiveSlate)
                                             Text("\(rankedGames.count) ranked, \(unrankedCount) to go")
                                                 .font(.system(size: 12, design: .rounded))
-                                                .foregroundColor(.grayText)
+                                                .foregroundStyle(Color.adaptiveGray)
                                         }
                                         
                                         Spacer()
@@ -240,6 +244,7 @@ struct ProfileView: View {
                                     }
                                 }
                                 .padding(.horizontal, 20)
+                                .tourAnchor("rankedList")
                             }
                         } else {
                             // Want to Play
@@ -254,6 +259,14 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showGameSearch) {
                 GameSearchView()
+            }
+            .fullScreenCover(isPresented: $showSteamImport, onDismiss: {
+                Task {
+                    await fetchRankedGames()
+                    hasSteamConnected = await SteamService.shared.getSteamId() != nil
+                }
+            }) {
+                SteamImportView()
             }
             .alert("Start fresh?", isPresented: $showResetRankings) {
                 Button("Yeah, let's start over", role: .destructive) {
@@ -278,17 +291,33 @@ struct ProfileView: View {
                         Image(systemName: "plus")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.primaryBlue)
+                            .tourAnchor("plusButton")
                     }
                 }
                 
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        Button {
+                            showSteamImport = true
+                        } label: {
+                            Label(hasSteamConnected ? "Import from Steam (Connected ✓)" : "Import from Steam", systemImage: "arrow.down.circle")
+                        }
+                        
                         if !hasAppleLinked {
                             Button {
                                 triggerAppleLinking()
                             } label: {
                                 Label("Link Apple ID", systemImage: "apple.logo")
                             }
+                        }
+                        Button {
+                            UIPasteboard.general.string = "https://playedit.app/profile/\(username)"
+                            message = "Profile link copied!"
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                message = nil
+                            }
+                        } label: {
+                            Label("Share Profile Link", systemImage: "link")
                         }
                         Menu {
                             Button { startTab = 0 } label: {
@@ -312,7 +341,28 @@ struct ProfileView: View {
                         } label: {
                             Label("Start Screen", systemImage: "house")
                         }
-                        
+                        Menu {
+                            Button { appearanceManager.appearanceMode = 0 } label: {
+                                HStack {
+                                    Text("System")
+                                    if appearanceManager.appearanceMode == 0 { Image(systemName: "checkmark") }
+                                }
+                            }
+                            Button { appearanceManager.appearanceMode = 1 } label: {
+                                HStack {
+                                    Text("Light")
+                                    if appearanceManager.appearanceMode == 1 { Image(systemName: "checkmark") }
+                                }
+                            }
+                            Button { appearanceManager.appearanceMode = 2 } label: {
+                                HStack {
+                                    Text("Dark")
+                                    if appearanceManager.appearanceMode == 2 { Image(systemName: "checkmark") }
+                                }
+                            }
+                        } label: {
+                            Label("Appearance", systemImage: "moon.circle")
+                        }
                         NavigationLink {
                             FeedbackView()
                         } label: {
@@ -338,6 +388,7 @@ struct ProfileView: View {
                         Image(systemName: "ellipsis.circle")
                             .font(.system(size: 16))
                             .foregroundColor(.primaryBlue)
+                            .tourAnchor("settingsButton")
                     }
                 }
             }
@@ -346,6 +397,7 @@ struct ProfileView: View {
             await fetchProfile()
             await fetchRankedGames()
             hasAppleLinked = await supabase.hasAppleIdentity()
+            hasSteamConnected = await SteamService.shared.getSteamId() != nil
         }
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
@@ -434,12 +486,13 @@ struct ProfileView: View {
                     let title: String
                     let cover_url: String?
                     let release_date: String?
+                    let rawg_id: Int?
                 }
             }
             
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -458,7 +511,8 @@ struct ProfileView: View {
                     canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
                 )
             }
             
@@ -504,12 +558,13 @@ struct ProfileView: View {
                     let title: String
                     let cover_url: String?
                     let release_date: String?
+                    let rawg_id: Int?
                 }
             }
             
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .execute()
                 .value
@@ -526,7 +581,8 @@ struct ProfileView: View {
                     canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
                 )
             }
             

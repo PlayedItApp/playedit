@@ -51,7 +51,7 @@ struct FriendsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Friend Requests")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .padding(.horizontal, 16)
                         
                         ForEach(pendingRequests) { friend in
@@ -70,7 +70,7 @@ struct FriendsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Sent Requests")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .padding(.horizontal, 16)
                         
                         ForEach(sentRequests) { friend in
@@ -92,15 +92,15 @@ struct FriendsView: View {
                         
                         Image(systemName: "person.2.slash")
                             .font(.system(size: 48))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                         
                         Text("No friends yet")
                             .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         Text("Add some friends and see how your taste compares!")
                             .font(.body)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                         
@@ -119,7 +119,7 @@ struct FriendsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your Friends")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .padding(.horizontal, 16)
                         
                         ForEach(friends) { friend in
@@ -148,12 +148,18 @@ struct FriendsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Enter username")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                     
                     TextField("username", text: $searchUsername)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
+                        .onChange(of: searchUsername) { _, newValue in
+                            if !newValue.isEmpty {
+                                searchError = nil
+                                searchSuccess = nil
+                            }
+                        }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -183,6 +189,11 @@ struct FriendsView: View {
                 
                 Spacer()
             }
+            .onAppear {
+                searchUsername = ""
+                searchError = nil
+                searchSuccess = nil
+            }
             .navigationTitle("Add Friend")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -202,7 +213,13 @@ struct FriendsView: View {
             return
         }
         
+        // Check if we have a valid session
+        let session = try? await supabase.client.auth.session
+        print("🔍 Session exists: \(session != nil), token prefix: \(String(session?.accessToken.prefix(20) ?? "nil"))")
+        
         print("🔍 Current user ID: \(userId.uuidString)")
+        print("🔍 Query filter: user_id.eq.\(userId.uuidString.lowercased()),friend_id.eq.\(userId.uuidString.lowercased())")
+
         
         do {
             struct FriendshipRow: Decodable {
@@ -215,7 +232,7 @@ struct FriendsView: View {
             let friendships: [FriendshipRow] = try await supabase.client
                 .from("friendships")
                 .select("*")
-                .or("user_id.eq.\(userId.uuidString),friend_id.eq.\(userId.uuidString)")
+                .or("user_id.eq.\(userId.uuidString.lowercased()),friend_id.eq.\(userId.uuidString.lowercased())")
                 .execute()
                 .value
             
@@ -305,7 +322,7 @@ struct FriendsView: View {
             let users: [UserSearch] = try await supabase.client
                 .from("users")
                 .select("id, username")
-                .eq("username", value: searchUsername)
+                .ilike("username", pattern: searchUsername)
                 .execute()
                 .value
             
@@ -314,7 +331,7 @@ struct FriendsView: View {
                 return
             }
             
-            if foundUser.id == userId.uuidString {
+            if foundUser.id.lowercased() == userId.uuidString.lowercased() {
                 searchError = "You can't add yourself as a friend!"
                 return
             }
@@ -445,16 +462,16 @@ struct FriendRow: View {
             
             Text(friend.username)
                 .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Spacer()
             
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.silver)
+                .foregroundStyle(Color.adaptiveSilver)
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
@@ -517,16 +534,16 @@ struct PendingRequestRow: View {
             
             Text(friend.username)
                 .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Spacer()
             
             Button(action: onDecline) {
                 Image(systemName: "xmark")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                     .frame(width: 32, height: 32)
-                    .background(Color.lightGray)
+                    .background(Color.secondaryBackground)
                     .cornerRadius(8)
             }
             
@@ -540,7 +557,7 @@ struct PendingRequestRow: View {
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
@@ -583,11 +600,11 @@ struct SentRequestRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(friend.username)
                     .font(.system(size: 16, weight: .medium, design: .rounded))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                 
                 Text("Pending")
                     .font(.system(size: 12, weight: .regular, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
             }
             
             Spacer()
@@ -595,15 +612,15 @@ struct SentRequestRow: View {
             Button(action: onCancel) {
                 Text("Cancel")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.lightGray)
+                    .background(Color.secondaryBackground)
                     .cornerRadius(8)
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
@@ -622,6 +639,9 @@ struct FriendProfileView: View {
     @State private var showRemoveFriendConfirm = false
     @State private var isRemovingFriend = false
     @State private var showReportSheet = false
+    @State private var selectedListTab = 0
+    @State private var friendWantToPlay: [WantToPlayGame] = []
+    @State private var selectedWTPGame: WantToPlayGame? = nil
     @Environment(\.dismiss) private var dismiss
     
     // Computed taste match
@@ -727,15 +747,15 @@ struct FriendProfileView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "clock.fill")
                             .font(.system(size: 32))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                         
                         Text("Request pending")
                             .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         Text("You'll be able to see \(friend.username)'s rankings and compare taste once they accept your request.")
                             .font(.subheadline)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
                     }
@@ -795,8 +815,19 @@ struct FriendProfileView: View {
                         theyLoveSection
                     }
                     
-                    // Friend's Full List
-                    friendListSection
+                    // List Picker
+                    Picker("List", selection: $selectedListTab) {
+                        Text("Ranked").tag(0)
+                        Text("Want to Play").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    
+                    if selectedListTab == 0 {
+                        friendListSection
+                    } else {
+                        friendWantToPlaySection
+                    }
                 }
                 .padding(.vertical, 16)
             }
@@ -898,12 +929,12 @@ struct FriendProfileView: View {
             
             Text(friend.username)
                 .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             if friend.status != "pending" {
                 Text("\(friendGames.count) games ranked")
                     .font(.subheadline)
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
             }
         }
         .padding(.top, 20)
@@ -917,14 +948,14 @@ struct FriendProfileView: View {
                 Spacer()
                 Text("Taste Match")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                 
                 Button {
                     showMatchInfo = true
                 } label: {
                     Image(systemName: "info.circle")
                         .font(.system(size: 14))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                 }
                 Spacer()
             }
@@ -937,13 +968,13 @@ struct FriendProfileView: View {
             // Label
             Text(matchLabel)
                 .font(.system(size: 16, weight: .medium, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
                 .multilineTextAlignment(.center)
             
             // Shared games count
             Text("Based on \(sharedGames.count) \(sharedGames.count == 1 ? "game" : "games") you've both ranked")
                 .font(.caption)
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
             
             if sharedGames.count < 5 {
                 Text("Rank more games in common for a more accurate match!")
@@ -954,7 +985,7 @@ struct FriendProfileView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity)
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
         .padding(.horizontal, 16)
@@ -1039,20 +1070,20 @@ struct FriendProfileView: View {
         VStack(spacing: 12) {
             Image(systemName: "gamecontroller.fill")
                 .font(.system(size: 32))
-                .foregroundColor(.silver)
+                .foregroundStyle(Color.adaptiveSilver)
             
             Text("No shared games yet")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Text("Rank some games \(friend.username) has played to see your taste match!")
                 .font(.subheadline)
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .multilineTextAlignment(.center)
         }
         .padding(24)
         .frame(maxWidth: .infinity)
-        .background(Color.lightGray)
+        .background(Color.secondaryBackground)
         .cornerRadius(16)
         .padding(.horizontal, 16)
     }
@@ -1135,14 +1166,14 @@ struct FriendProfileView: View {
             HStack(spacing: 6) {
                 Image(systemName: "hand.thumbsup.circle")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                 Text("\(friend.username) loved these, you... didn't")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color.slate.opacity(0.08))
+            .background(Color.adaptiveSlate.opacity(0.08))
             .cornerRadius(8)
             .padding(.horizontal, 16)
             
@@ -1165,18 +1196,98 @@ struct FriendProfileView: View {
         }
     }
     
+    // MARK: - Friend's Want to Play Section
+    private var friendWantToPlaySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(friend.username)'s Want to Play")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.adaptiveGray)
+                .padding(.horizontal, 16)
+            
+            if friendWantToPlay.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 32))
+                        .foregroundStyle(Color.adaptiveSilver)
+                    Text("\(friend.username) hasn't bookmarked any games yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.adaptiveGray)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 30)
+            } else {
+                let ranked = friendWantToPlay.filter { $0.sortPosition != nil }.sorted { ($0.sortPosition ?? 0) < ($1.sortPosition ?? 0) }
+                let unranked = friendWantToPlay.filter { $0.sortPosition == nil }
+                
+                if !ranked.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.primaryBlue)
+                        Text("Prioritized")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
+                        Text("(\(ranked.count))")
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    .padding(.horizontal, 16)
+                    
+                    ForEach(Array(ranked.enumerated()), id: \.element.id) { index, game in
+                        Button {
+                            selectedWTPGame = game
+                        } label: {
+                            FriendWantToPlayRow(game: game, position: index + 1)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                    }
+                }
+                
+                if !unranked.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.adaptiveGray)
+                        Text("Backlog")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
+                        Text("(\(unranked.count))")
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, ranked.isEmpty ? 0 : 8)
+                    
+                    ForEach(unranked) { game in
+                        Button {
+                            selectedWTPGame = game
+                        } label: {
+                            FriendWantToPlayRow(game: game, position: nil)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                    }
+                }
+            }
+        }
+        .sheet(item: $selectedWTPGame) { game in
+            FriendWantToPlayDetailSheet(game: game, friendName: friend.username)
+        }
+    }
+    
     // MARK: - Friend's List Section
     private var friendListSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("\(friend.username)'s Rankings")
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .padding(.horizontal, 16)
             
             if friendGames.isEmpty {
                 Text("\(friend.username) hasn't ranked any games yet. Peer pressure them? 😄")
                     .font(.subheadline)
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 20)
             } else {
@@ -1241,13 +1352,14 @@ struct FriendProfileView: View {
                     let title: String
                     let cover_url: String?
                     let release_date: String?
+                    let rawg_id: Int?
                 }
             }
             
             // Fetch friend's games with join
             let friendRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: friend.userId)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -1266,14 +1378,15 @@ struct FriendProfileView: View {
                     canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
                 )
             }
             
             // Fetch my games with join
             let myRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -1292,14 +1405,214 @@ struct FriendProfileView: View {
                     canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
                 )
             }
             
             isLoading = false
+                        
+            friendWantToPlay = await WantToPlayManager.shared.fetchFriendList(friendId: friend.userId)
             
         } catch {
             print("❌ Error loading friend data: \(error)")
+        }
+    }
+}
+
+// MARK: - Friend Want to Play Row
+struct FriendWantToPlayRow: View {
+    let game: WantToPlayGame
+    let position: Int?
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            if let pos = position {
+                Text("#\(pos)")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(pos <= 3 ? Color.primaryBlue : Color.adaptiveGray)
+                    .frame(width: 30, alignment: .leading)
+            }
+            
+            AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Rectangle()
+                    .fill(Color.secondaryBackground)
+                    .overlay(
+                        Image(systemName: "gamecontroller")
+                            .foregroundStyle(Color.adaptiveSilver)
+                            .font(.system(size: 12))
+                    )
+            }
+            .frame(width: 50, height: 67)
+            .cornerRadius(6)
+            .clipped()
+            
+            Text(game.gameTitle)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.adaptiveSlate)
+                .lineLimit(2)
+            
+            Spacer()
+            
+            BookmarkButton(
+                gameId: game.gameId,
+                gameTitle: game.gameTitle,
+                gameCoverUrl: game.gameCoverUrl,
+                source: "friend_wtp",
+                sourceFriendId: game.userId
+            )
+        }
+        .padding(12)
+        .background(Color.cardBackground) 
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - Friend Want to Play Detail Sheet
+struct FriendWantToPlayDetailSheet: View {
+    let game: WantToPlayGame
+    let friendName: String
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var gameDescription: String? = nil
+    @State private var metacriticScore: Int? = nil
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.secondaryBackground)
+                            .overlay(
+                                Image(systemName: "gamecontroller")
+                                    .font(.system(size: 40))
+                                    .foregroundStyle(Color.adaptiveSilver)
+                            )
+                    }
+                    .frame(width: 150, height: 200)
+                    .cornerRadius(12)
+                    .clipped()
+                    .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+                    
+                    Text(game.gameTitle)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.adaptiveSlate)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    
+                    if let position = game.sortPosition {
+                        Text("\(friendName)'s Priority #\(position)")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primaryBlue)
+                    } else {
+                        Text("In \(friendName)'s backlog")
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    
+                    if let score = metacriticScore, score > 0 {
+                        HStack(spacing: 4) {
+                            Text("Metacritic")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                            Text("\(score)")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(metacriticColor(score))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(metacriticColor(score).opacity(0.15))
+                                .cornerRadius(4)
+                        }
+                    }
+                    
+                    Divider().padding(.horizontal, 40)
+                    
+                    if let desc = gameDescription, !desc.isEmpty {
+                        GameDescriptionView(text: desc)
+                            .padding(.horizontal, 24)
+                    }
+                    
+                    // Bookmark CTA
+                    BookmarkButton(
+                        gameId: game.gameId,
+                        gameTitle: game.gameTitle,
+                        gameCoverUrl: game.gameCoverUrl,
+                        source: "friend_wtp",
+                        sourceFriendId: game.userId
+                    )
+                    .padding(.horizontal, 24)
+                    
+                    Spacer()
+                }
+                .padding(.top, 24)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Color.adaptiveSilver)
+                    }
+                }
+            }
+            .task {
+                await fetchGameDetails()
+            }
+        }
+    }
+    
+    private func fetchGameDetails() async {
+        do {
+            struct GameInfo: Decodable {
+                let rawg_id: Int
+                let metacritic_score: Int?
+                let description: String?
+            }
+            let infos: [GameInfo] = try await SupabaseManager.shared.client
+                .from("games")
+                .select("rawg_id, metacritic_score, description")
+                .eq("rawg_id", value: game.gameId)
+                .limit(1)
+                .execute()
+                .value
+            
+            guard let info = infos.first else { return }
+            metacriticScore = info.metacritic_score
+
+            if let cached = info.description, !cached.isEmpty {
+                gameDescription = cached
+                return
+            }
+            
+            let details = try await RAWGService.shared.getGameDetails(id: info.rawg_id)
+            gameDescription = details.gameDescriptionHtml ?? details.gameDescription
+
+            if let desc = gameDescription, !desc.isEmpty {
+                _ = try? await SupabaseManager.shared.client
+                    .from("games")
+                    .update(["description": desc])
+                    .eq("rawg_id", value: info.rawg_id)
+                    .execute()
+            }
+        } catch {
+            print("⚠️ Could not fetch game details: \(error)")
+        }
+    }
+    
+    private func metacriticColor(_ score: Int) -> Color {
+        switch score {
+        case 75...100: return .success
+        case 50...74: return .accentOrange
+        default: return .error
         }
     }
 }
@@ -1320,17 +1633,21 @@ struct ComparisonGameRow: View {
                     .aspectRatio(contentMode: .fill)
             } placeholder: {
                 Rectangle()
-                    .fill(Color.lightGray)
+                    .fill(Color.secondaryBackground)
             }
             .frame(width: 50, height: 67)
             .cornerRadius(6)
             .clipped()
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.adaptiveDivider, lineWidth: 0.5)
+            )
             
             // Game info
             VStack(alignment: .leading, spacing: 4) {
                 Text(game.gameTitle)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(1)
                 
                 HStack(spacing: 16) {
@@ -1351,15 +1668,15 @@ struct ComparisonGameRow: View {
             if diff > 0 {
                 Text(diff == 0 ? "=" : "±\(diff)")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundColor(diff >= 10 ? .accentOrange : .grayText)
+                    .foregroundStyle(diff >= 10 ? Color.accentOrange : Color.adaptiveGray)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(diff >= 10 ? Color.accentOrange.opacity(0.15) : Color.lightGray)
+                    .background(diff >= 10 ? Color.accentOrange.opacity(0.15) : Color.secondaryBackground)
                     .cornerRadius(6)
             }
         }
         .padding(12)
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
@@ -1385,17 +1702,21 @@ struct FriendGameRow: View {
                     .aspectRatio(contentMode: .fill)
             } placeholder: {
                 Rectangle()
-                    .fill(Color.lightGray)
+                    .fill(Color.secondaryBackground)
             }
             .frame(width: 50, height: 67)
-            .cornerRadius(6)
-            .clipped()
-            
-            // Game info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(game.gameTitle)
+                .cornerRadius(6)
+                .clipped()
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.adaptiveDivider, lineWidth: 0.5)
+                )
+                
+                // Game info
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(game.gameTitle)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(1)
                 
                 if let myRank = myRank {
@@ -1405,7 +1726,7 @@ struct FriendGameRow: View {
                 } else {
                     Text("Not in your list")
                         .font(.caption)
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                 }
             }
             
@@ -1430,7 +1751,7 @@ struct FriendGameRow: View {
         case 1: return .accentOrange
         case 2...3: return .primaryBlue
         case 4...10: return .teal
-        default: return .grayText
+        default: return .adaptiveGray
         }
     }
 }
@@ -1464,7 +1785,7 @@ struct CompareListsView: View {
                     
                     // Divider
                     Rectangle()
-                        .fill(Color.lightGray)
+                        .fill(Color.secondaryBackground)
                         .frame(width: 1)
                     
                     // Friend's list
@@ -1507,7 +1828,7 @@ struct SideBySideGameCell: View {
         HStack(spacing: 6) {
             Text("#\(game.rankPosition)")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .frame(width: 24)
             
             AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
@@ -1516,7 +1837,7 @@ struct SideBySideGameCell: View {
                     .aspectRatio(contentMode: .fill)
             } placeholder: {
                 Rectangle()
-                    .fill(Color.lightGray)
+                    .fill(Color.secondaryBackground)
             }
             .frame(width: 30, height: 40)
             .cornerRadius(4)
@@ -1528,7 +1849,7 @@ struct SideBySideGameCell: View {
             
             Text(game.gameTitle)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
                 .lineLimit(2)
             
             Spacer()

@@ -145,7 +145,7 @@ private struct WrappingHStack: View {
             if unrevealedCount > 0 {
                 Text("Tap to reveal spoilers")
                     .font(.system(size: 11, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                     .padding(.top, 2)
             }
         }
@@ -161,7 +161,7 @@ struct SpoilerHint: View {
             Text("Use ||spoiler text|| to hide spoilers")
                 .font(.system(size: 11, design: .rounded))
         }
-        .foregroundColor(.grayText)
+        .foregroundStyle(Color.adaptiveGray)
     }
 }
 

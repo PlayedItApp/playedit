@@ -45,7 +45,10 @@ struct WantToPlayGame: Identifiable, Codable {
                 genres: nil,
                 platforms: nil,
                 added: nil,
-                rating: nil
+                rating: nil,
+                descriptionRaw: nil,
+                descriptionHtml: nil,
+                tags: nil
             )
         )
     }
@@ -84,6 +87,8 @@ class WantToPlayManager: ObservableObject {
         guard let userId = supabase.currentUser?.id else { return false }
         
         do {
+            let localGameId = gameId
+            
             struct Insert: Encodable {
                 let user_id: String
                 let game_id: Int
@@ -97,7 +102,7 @@ class WantToPlayManager: ObservableObject {
                 .from("want_to_play")
                 .insert(Insert(
                     user_id: userId.uuidString,
-                    game_id: gameId,
+                    game_id: localGameId,
                     game_title: gameTitle,
                     game_cover_url: gameCoverUrl,
                     source: source,
@@ -105,12 +110,79 @@ class WantToPlayManager: ObservableObject {
                 ))
                 .execute()
             
-            myWantToPlayIds.insert(gameId)
-            print("✅ Added \(gameTitle) to Want to Play")
+            myWantToPlayIds.insert(localGameId)
+            print("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
             return true
         } catch {
             print("❌ Error adding to want to play: \(error)")
             return false
+        }
+    }
+    
+    // MARK: - Resolve Local Game ID
+    /// Given an ID that might be a RAWG ID or a local games table ID,
+    /// returns the local games table ID (creating the row if needed).
+    private func resolveLocalGameId(rawgOrLocalId: Int, title: String, coverUrl: String?) async -> Int {
+        do {
+            // First check if it's already a valid local ID
+            struct LocalCheck: Decodable { let id: Int }
+            let localRows: [LocalCheck] = try await supabase.client
+                .from("games")
+                .select("id")
+                .eq("id", value: rawgOrLocalId)
+                .limit(1)
+                .execute()
+                .value
+            
+            if localRows.first != nil {
+                return rawgOrLocalId
+            }
+            
+            // Not a local ID — treat as RAWG ID. Check if this RAWG ID exists.
+            struct RawgCheck: Decodable { let id: Int }
+            let rawgRows: [RawgCheck] = try await supabase.client
+                .from("games")
+                .select("id")
+                .eq("rawg_id", value: rawgOrLocalId)
+                .limit(1)
+                .execute()
+                .value
+            
+            if let existing = rawgRows.first {
+                return existing.id
+            }
+            
+            // Doesn't exist at all — create it
+            struct NewGame: Encodable {
+                let rawg_id: Int
+                let title: String
+                let cover_url: String?
+                let genres: [String]
+                let tags: [String]
+            }
+            
+            struct InsertedGame: Decodable { let id: Int }
+            
+            let inserted: InsertedGame = try await supabase.client
+                .from("games")
+                .insert(NewGame(
+                    rawg_id: rawgOrLocalId,
+                    title: title,
+                    cover_url: coverUrl,
+                    genres: [],
+                    tags: []
+                ))
+                .select("id")
+                .single()
+                .execute()
+                .value
+            
+            print("📦 Created new games row for RAWG ID \(rawgOrLocalId): local ID \(inserted.id)")
+            return inserted.id
+            
+        } catch {
+            print("⚠️ resolveLocalGameId failed, using original ID: \(error)")
+            return rawgOrLocalId
         }
     }
     

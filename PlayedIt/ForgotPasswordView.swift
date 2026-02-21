@@ -31,11 +31,11 @@ struct ForgotPasswordView: View {
                         Text(stepTitle)
                             .font(.title)
                             .fontWeight(.bold)
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         Text(stepSubtitle)
                             .font(.body)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
                     }
@@ -46,7 +46,7 @@ struct ForgotPasswordView: View {
                             Text("Email")
                                 .font(.callout)
                                 .fontWeight(.medium)
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("your@email.com", text: $email)
                                 .textInputAutocapitalization(.never)
@@ -94,7 +94,7 @@ struct ForgotPasswordView: View {
                             Text("Reset Code")
                                 .font(.callout)
                                 .fontWeight(.medium)
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("6-digit code", text: $code)
                                 .keyboardType(.numberPad)
@@ -150,7 +150,7 @@ struct ForgotPasswordView: View {
                                 Text("New Password")
                                     .font(.callout)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                 
                                 SecureField("••••••••", text: $newPassword)
                                     .playedItTextField()
@@ -160,7 +160,7 @@ struct ForgotPasswordView: View {
                                 Text("Confirm Password")
                                     .font(.callout)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                 
                                 SecureField("••••••••", text: $confirmPassword)
                                     .playedItTextField()
@@ -169,7 +169,7 @@ struct ForgotPasswordView: View {
                             if !newPassword.isEmpty && newPassword.count < 6 {
                                 Text("Password needs to be at least 6 characters.")
                                     .font(.caption)
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                             }
                             
                             if !confirmPassword.isEmpty && newPassword != confirmPassword {
@@ -244,7 +244,7 @@ struct ForgotPasswordView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                     }
                 }
             }

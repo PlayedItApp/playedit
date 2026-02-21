@@ -28,7 +28,7 @@ class RAWGService {
         
         return results
     }
-
+    
     private func performSearch(query: String) async throws -> [Game] {
         let cleanedQuery = query
             .folding(options: .diacriticInsensitive, locale: .current)
@@ -38,10 +38,10 @@ class RAWGService {
             .replacingOccurrences(of: ":", with: " ")
             .replacingOccurrences(of: "  ", with: " ")
             .trimmingCharacters(in: .whitespaces)
-
+        
         let encodedQuery = cleanedQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cleanedQuery
         let urlString = "\(baseURL)/games?key=\(apiKey)&search=\(encodedQuery)&search_precise=true&page_size=40&exclude_additions=true"
-
+        
         print("🔍 Searching for: \(cleanedQuery)")
         
         guard let url = URL(string: urlString) else {
@@ -87,7 +87,7 @@ class RAWGService {
         
         return Array(sortedGames.prefix(20))
     }
-
+    
     private func generateQueryVariations(_ query: String) -> [String] {
         var variations: [String] = []
         let lower = query.lowercased()
@@ -141,8 +141,8 @@ class RAWGService {
         
         return variations
     }
-
-private func relevanceScore(game: Game, name: String, query: String, queryWords: Set<String>) -> Int {
+    
+    private func relevanceScore(game: Game, name: String, query: String, queryWords: Set<String>) -> Int {
         var score = 0
         
         // Normalize both for comparison
@@ -176,41 +176,41 @@ private func relevanceScore(game: Game, name: String, query: String, queryWords:
             }
         }
         
-    // Bonus for each query word found in title
-    for word in queryWords {
-        let normalizedWord = word.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
-        if normalizedName.contains(normalizedWord) {
-            score += 50
+        // Bonus for each query word found in title
+        for word in queryWords {
+            let normalizedWord = word.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
+            if normalizedName.contains(normalizedWord) {
+                score += 50
+            }
         }
-    }
-    
-    // === Ordered query words bonus ===
-    let nameWords = normalizedName.split(separator: " ").map { String($0) }
-    let queryWordArray = normalizedQuery.split(separator: " ").map { String($0) }
-    if queryWordArray.count >= 2 {
-        var nameIndex = 0
-        var matchedAll = true
-        for qWord in queryWordArray {
-            var found = false
-            while nameIndex < nameWords.count {
-                if nameWords[nameIndex].contains(qWord) {
+        
+        // === Ordered query words bonus ===
+        let nameWords = normalizedName.split(separator: " ").map { String($0) }
+        let queryWordArray = normalizedQuery.split(separator: " ").map { String($0) }
+        if queryWordArray.count >= 2 {
+            var nameIndex = 0
+            var matchedAll = true
+            for qWord in queryWordArray {
+                var found = false
+                while nameIndex < nameWords.count {
+                    if nameWords[nameIndex].contains(qWord) {
+                        nameIndex += 1
+                        found = true
+                        break
+                    }
                     nameIndex += 1
-                    found = true
+                }
+                if !found {
+                    matchedAll = false
                     break
                 }
-                nameIndex += 1
             }
-            if !found {
-                matchedAll = false
-                break
+            if matchedAll {
+                score += 400
             }
         }
-        if matchedAll {
-            score += 400
-        }
-    }
-    
-    // === Popularity boost (0-300 points) ===
+        
+        // === Popularity boost (0-300 points) ===
         let addedCount = game.added ?? 0
         if addedCount > 50000 {
             score += 300
@@ -384,6 +384,32 @@ private func relevanceScore(game: Game, name: String, query: String, queryWords:
             print("⚠️ Could not fetch parent game for \(gameId): \(error)")
             return nil
         }
+    }
+    
+    // MARK: - Discover Games by Genre
+    func discoverGames(genres: [String], tags: [String] = [], page: Int = 1) async throws -> [Game] {
+        // RAWG genre slugs: action, adventure, rpg, shooter, puzzle, platformer, etc.
+        let genreSlugs = genres.map { $0.lowercased().replacingOccurrences(of: " ", with: "-") }
+        let tagSlugs = tags.map { $0.lowercased().replacingOccurrences(of: " ", with: "-") }
+        
+        var urlString = "\(baseURL)/games?key=\(apiKey)&ordering=-metacritic&metacritic=75,100&page_size=20&page=\(page)&exclude_additions=true"
+        
+        if !genreSlugs.isEmpty {
+            urlString += "&genres=\(genreSlugs.joined(separator: ","))"
+        }
+        if !tagSlugs.isEmpty {
+            urlString += "&tags=\(tagSlugs.joined(separator: ","))"
+        }
+        
+        guard let url = URL(string: urlString) else { throw RAWGError.invalidURL }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else { throw RAWGError.invalidResponse }
+        
+        let searchResponse = try JSONDecoder().decode(RAWGSearchResponse.self, from: data)
+        return searchResponse.results.map { Game(from: $0) }
     }
 }
 

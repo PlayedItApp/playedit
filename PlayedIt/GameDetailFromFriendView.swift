@@ -15,6 +15,8 @@ struct GameDetailFromFriendView: View {
     @State private var showLogGame = false
     @State private var metacriticScore: Int? = nil
     @State private var showReportSheet = false
+    @State private var gameDescription: String? = nil
+    @State private var prediction: GamePrediction? = nil
     
     // Check if current user has this game ranked
     private var iHaveThisGame: Bool {
@@ -43,10 +45,9 @@ struct GameDetailFromFriendView: View {
             }
             .padding(.vertical, 16)
         }
-        .navigationTitle(userGame.gameTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: .cancellationAction) {
                 if userGame.userId.lowercased() != (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
                     Menu {
                         Button(role: .destructive) {
@@ -65,7 +66,18 @@ struct GameDetailFromFriendView: View {
         .task {
             resolveMyGame()
             await fetchMetacriticScore()
+            await fetchGameDescription()
             await fetchFriendRankings()
+            if myUserGame == nil {
+                await fetchPrediction()
+            }
+        }
+        .sheet(isPresented: $showLogGame, onDismiss: {
+            Task {
+                await refreshMyGame()
+            }
+        }) {
+            GameLogView(game: userGame.toGame())
         }
         .sheet(isPresented: $showReportSheet) {
             ReportView(
@@ -88,11 +100,11 @@ struct GameDetailFromFriendView: View {
                     .aspectRatio(contentMode: .fill)
             } placeholder: {
                 Rectangle()
-                    .fill(Color.lightGray)
+                    .fill(Color.secondaryBackground)
                     .overlay(
                         Image(systemName: "gamecontroller")
                             .font(.system(size: 40))
-                            .foregroundColor(.silver)
+                            .foregroundStyle(Color.adaptiveSilver)
                     )
             }
             .frame(width: 160, height: 213)
@@ -103,7 +115,7 @@ struct GameDetailFromFriendView: View {
             // Title
             Text(userGame.gameTitle)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             
@@ -112,14 +124,14 @@ struct GameDetailFromFriendView: View {
                 if let year = userGame.gameReleaseDate?.prefix(4) {
                     Label(String(year), systemImage: "calendar")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                 }
                 
                 if let score = metacriticScore ?? resolveMetacriticFromGame() {
                     HStack(spacing: 4) {
                         Text("Metacritic")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                         
                         Text("\(score)")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -130,6 +142,12 @@ struct GameDetailFromFriendView: View {
                             .cornerRadius(4)
                     }
                 }
+            }
+                        
+            // Game description
+            if let desc = gameDescription, !desc.isEmpty {
+                GameDescriptionView(text: desc)
+                    .padding(.horizontal, 20)
             }
         }
         .padding(.top, 20)
@@ -144,7 +162,7 @@ struct GameDetailFromFriendView: View {
                 
                 Text("\(friend.username)'s Take")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
             }
             
             VStack(alignment: .leading, spacing: 12) {
@@ -170,7 +188,7 @@ struct GameDetailFromFriendView: View {
                         
                         Text(userGame.platformPlayed.joined(separator: ", "))
                             .font(.system(size: 15, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                     }
                 }
                 
@@ -184,7 +202,7 @@ struct GameDetailFromFriendView: View {
                         
                         Text("Logged \(formatDate(loggedAt))")
                             .font(.system(size: 15, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                 }
                 
@@ -200,7 +218,7 @@ struct GameDetailFromFriendView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white)
+            .background(Color.cardBackground) 
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
@@ -212,7 +230,7 @@ struct GameDetailFromFriendView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your Take")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             if let myGame = myUserGame {
                 // User has this game ranked
@@ -255,7 +273,7 @@ struct GameDetailFromFriendView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white)
+                .background(Color.cardBackground) 
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
                 
@@ -264,11 +282,47 @@ struct GameDetailFromFriendView: View {
                 VStack(spacing: 16) {
                     Text("You haven't ranked this yet")
                         .font(.system(size: 16, weight: .medium, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                     
-                    Text("See where it lands on your list")
-                        .font(.system(size: 14, design: .rounded))
-                        .foregroundColor(.grayText)
+                    if let pred = prediction {
+                        let range = pred.estimatedRank(inListOf: myGames.count)
+                        VStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Text(pred.emoji)
+                                Text("PlayedIt Prediction: \(pred.summaryText)")
+                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveSlate)
+                            }
+                            
+                            Text("Estimated rank: ~#\(range.lower)–\(range.upper)")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(.primaryBlue)
+                            
+                            HStack(spacing: 4) {
+                                Text(pred.confidenceDots)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.primaryBlue)
+                                Text(pred.confidenceLabel)
+                                    .font(.system(size: 12, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveGray)
+                            }
+                            
+                            if !pred.friendSignals.isEmpty {
+                                let names = pred.friendSignals.map { $0.friendName }.joined(separator: ", ")
+                                Text("Based on \(names)'s rankings & your taste")
+                                    .font(.system(size: 12, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveGray)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.primaryBlue.opacity(0.08))
+                        .cornerRadius(10)
+                    } else {
+                        Text("See where it lands on your list")
+                            .font(.system(size: 14, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
                     
                     Button {
                         showLogGame = true
@@ -299,7 +353,7 @@ struct GameDetailFromFriendView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("How friends ranked this")
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             if isLoadingFriendRankings {
                 ProgressView()
@@ -324,7 +378,7 @@ struct GameDetailFromFriendView: View {
                             
                             Text(ranking.username)
                                 .font(.system(size: 15, weight: .medium, design: .rounded))
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
                             Spacer()
                             
@@ -341,7 +395,7 @@ struct GameDetailFromFriendView: View {
                         }
                     }
                 }
-                .background(Color.white)
+                .background(Color.cardBackground) 
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
             }
@@ -356,6 +410,23 @@ struct GameDetailFromFriendView: View {
         myUserGame = myGames.first(where: {
             ($0.canonicalGameId ?? $0.gameId) == targetGameId
         })
+    }
+    
+    private func fetchGameDescription() async {
+        do {
+            struct GameRawgId: Decodable { let rawg_id: Int }
+            let result: GameRawgId = try await supabase.client
+                .from("games")
+                .select("rawg_id")
+                .eq("id", value: userGame.gameId)
+                .single()
+                .execute()
+                .value
+            let game = try await RAWGService.shared.getGameDetails(id: result.rawg_id)
+            gameDescription = game.gameDescription
+        } catch {
+            print("⚠️ Could not fetch game description: \(error)")
+        }
     }
     
     private func resolveMetacriticFromGame() -> Int? {
@@ -555,6 +626,96 @@ struct GameDetailFromFriendView: View {
                     .foregroundColor(.primaryBlue)
             )
     }
+    
+    // MARK: - Prediction
+    private func fetchPrediction() async {
+        guard let context = await PredictionEngine.buildContext() else { return }
+        
+        // Get game genres/tags/metacritic from Supabase
+        do {
+            struct GameInfo: Decodable {
+                let rawg_id: Int
+                let genres: [String]?
+                let tags: [String]?
+                let metacritic_score: Int?
+                let description: String?
+            }
+            
+            let info: GameInfo = try await supabase.client
+                .from("games")
+                .select("rawg_id, genres, tags, metacritic_score")
+                .eq("id", value: userGame.gameId)
+                .single()
+                .execute()
+                .value
+            
+            let target = PredictionTarget(
+                rawgId: info.rawg_id,
+                canonicalGameId: userGame.canonicalGameId,
+                genres: info.genres ?? [],
+                tags: info.tags ?? [],
+                metacriticScore: info.metacritic_score
+            )
+            
+            prediction = PredictionEngine.shared.predict(game: target, context: context)
+        } catch {
+            print("⚠️ Could not fetch prediction data: \(error)")
+        }
+    }
+
+    private func refreshMyGame() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        let targetGameId = userGame.canonicalGameId ?? userGame.gameId
+        
+        do {
+            struct UserGameRow: Decodable {
+                let id: String
+                let game_id: Int
+                let user_id: String
+                let rank_position: Int
+                let platform_played: [String]
+                let notes: String?
+                let logged_at: String?
+                let canonical_game_id: Int?
+                let games: GameDetails
+                
+                struct GameDetails: Decodable {
+                    let title: String
+                    let cover_url: String?
+                    let release_date: String?
+                    let rawg_id: Int?
+                }
+            }
+            
+            let rows: [UserGameRow] = try await supabase.client
+                .from("user_games")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
+                .eq("user_id", value: userId.uuidString)
+                .or("game_id.eq.\(targetGameId),canonical_game_id.eq.\(targetGameId)")
+                .limit(1)
+                .execute()
+                .value
+            
+            if let row = rows.first {
+                myUserGame = UserGame(
+                    id: row.id,
+                    gameId: row.game_id,
+                    userId: row.user_id,
+                    rankPosition: row.rank_position,
+                    platformPlayed: row.platform_played,
+                    notes: row.notes,
+                    loggedAt: row.logged_at,
+                    canonicalGameId: row.canonical_game_id,
+                    gameTitle: row.games.title,
+                    gameCoverURL: row.games.cover_url,
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
+                )
+            }
+        } catch {
+            print("❌ Error refreshing my game: \(error)")
+        }
+    }
 }
 
 #Preview {
@@ -571,7 +732,8 @@ struct GameDetailFromFriendView: View {
                 canonicalGameId: nil,
                 gameTitle: "The Legend of Zelda: Breath of the Wild",
                 gameCoverURL: nil,
-                gameReleaseDate: "2017-03-03"
+                gameReleaseDate: "2017-03-03",
+                gameRawgId: nil
             ),
             friend: Friend(
                 id: "f-1",

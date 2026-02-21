@@ -52,15 +52,15 @@ struct NotificationsView: View {
             
             Image(systemName: "bell")
                 .font(.system(size: 48))
-                .foregroundColor(.silver)
+                .foregroundStyle(Color.adaptiveSilver)
             
             Text("No notifications yet")
                 .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Text("When friends like or comment on your rankings, you'll see it here.")
                 .font(.body)
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             
@@ -121,10 +121,13 @@ struct NotificationsView: View {
                 
                 struct GameInfo: Decodable {
                     let games: GameDetails
+                    let description: String?
                     
                     struct GameDetails: Decodable {
                         let title: String
                         let cover_url: String?
+                        let release_date: String?
+                        let rawg_id: Int?
                     }
                 }
             }
@@ -247,7 +250,8 @@ struct NotificationsView: View {
                 gameCoverURL: notification.gameCoverURL,
                 rankPosition: 0,
                 loggedAt: nil,
-                likeCount: 0,
+                batchSource: nil,
+                likeCount: 5,
                 commentCount: 0,
                 isLikedByMe: false
             )
@@ -307,7 +311,7 @@ struct NotificationRow: View {
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle()
-                        .fill(Color.lightGray)
+                        .fill(Color.secondaryBackground)
                 }
                 .frame(width: 40, height: 54)
                 .cornerRadius(4)
@@ -325,12 +329,12 @@ struct NotificationRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(messageText)
                     .font(.subheadline)
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(2)
                 
                 Text(timeAgo(from: notification.createdAt))
                     .font(.caption)
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
             }
             
             Spacer()

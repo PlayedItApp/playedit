@@ -10,12 +10,13 @@ struct LoginView: View {
     @State private var showSignUp = false
     @State private var isAnimating = false
     @State private var currentNonce: String?
+    @Environment(\.colorScheme) private var colorSchemeValue
     
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background
-                Color.white
+                Color.appBackground
                     .ignoresSafeArea()
                 
                 ScrollView {
@@ -38,20 +39,20 @@ struct LoginView: View {
                             HStack(spacing: 0) {
                                 Text("played")
                                     .font(.largeTitle)
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                 Text("it")
                                     .font(.largeTitle)
                                     .foregroundColor(.accentOrange)
                             }
                             .opacity(isAnimating ? 1.0 : 0.0)
                             
-                            Text("Welcome back!")
+                            Text("Rank your games!")
                                 .font(.title3)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                                 .opacity(isAnimating ? 1.0 : 0.0)
                         }
                         .animation(.easeOut(duration: 0.6), value: isAnimating)
-                        
+/* temp remove email login
                         // Form
                         VStack(spacing: 16) {
                             // Email or Username Field
@@ -59,7 +60,7 @@ struct LoginView: View {
                                 Text("Email or Username")
                                     .font(.callout)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                 
                                 TextField("email or username", text: $email)
                                     .textInputAutocapitalization(.never)
@@ -73,7 +74,7 @@ struct LoginView: View {
                                 Text("Password")
                                     .font(.callout)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                 
                                 SecureField("••••••••", text: $password)
                                     .textContentType(.password)
@@ -99,6 +100,7 @@ struct LoginView: View {
                         .offset(y: isAnimating ? 0 : 20)
                         .animation(.easeOut(duration: 0.6).delay(0.2), value: isAnimating)
                         
+ */
                         // Error Message
                         if let error = supabase.errorMessage {
                             HStack {
@@ -114,36 +116,38 @@ struct LoginView: View {
                         
                         // Buttons
                         VStack(spacing: 12) {
-                            Button {
-                                Task {
-                                    await supabase.signIn(email: email, password: password)
-                                }
-                            } label: {
-                                if supabase.isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                } else {
-                                    Text("Let's go!")
-                                }
-                            }
-                            .buttonStyle(PrimaryButtonStyle())
-                            .disabled(email.isEmpty || password.isEmpty || supabase.isLoading)
-                            .opacity(email.isEmpty || password.isEmpty ? 0.6 : 1.0)
-                            
-                            // Divider
-                            HStack {
-                                Rectangle()
-                                    .fill(Color.silver)
-                                    .frame(height: 1)
-                                Text("or")
-                                    .font(.callout)
-                                    .foregroundColor(.grayText)
-                                Rectangle()
-                                    .fill(Color.silver)
-                                    .frame(height: 1)
-                            }
-                            .padding(.vertical, 4)
-                            
+                            /* Temp hide email login
+                             Button {
+                             Task {
+                             await supabase.signIn(email: email, password: password)
+                             }
+                             } label: {
+                             if supabase.isLoading {
+                             ProgressView()
+                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                             } else {
+                             Text("Let's go!")
+                             }
+                             }
+                             .buttonStyle(PrimaryButtonStyle())
+                             .disabled(email.isEmpty || password.isEmpty || supabase.isLoading)
+                             .opacity(email.isEmpty || password.isEmpty ? 0.6 : 1.0)
+                             
+                             // Divider
+                             HStack {
+                             Rectangle()
+                             .fill(Color.adaptiveSilver)
+                             .frame(height: 1)
+                             Text("or")
+                             .font(.callout)
+                             .foregroundStyle(Color.adaptiveGray)
+                             Rectangle()
+                             .fill(Color.adaptiveSilver)
+                             .frame(height: 1)
+                             }
+                             .padding(.vertical, 4)
+                             
+                             */
                             // Sign in with Apple
                             SignInWithAppleButton(.signIn) { request in
                                 let nonce = randomNonceString()
@@ -158,23 +162,25 @@ struct LoginView: View {
                                     print("❌ Apple sign in failed: \(error)")
                                 }
                             }
-                            .signInWithAppleButtonStyle(.black)
+                            .signInWithAppleButtonStyle(colorSchemeValue == .dark ? .white : .black)
                             .frame(height: 50)
                             .cornerRadius(12)
-                            
-                            Button {
-                                showSignUp = true
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text("New here?")
-                                        .foregroundColor(.grayText)
-                                    Text("Create an account")
-                                        .foregroundColor(.primaryBlue)
-                                        .fontWeight(.semibold)
-                                }
-                                .font(.callout)
-                            }
-                            .padding(.top, 8)
+/*temp hide email login
+                             Button {
+                             showSignUp = true
+                             } label: {
+                             HStack(spacing: 4) {
+                             Text("New here?")
+                             .foregroundStyle(Color.adaptiveGray)
+                             Text("Create an account")
+                             .foregroundColor(.primaryBlue)
+                             .fontWeight(.semibold)
+                             }
+                             .font(.callout)
+                             }
+                             .padding(.top, 8)
+                             }
+*/
                         }
                         .padding(.horizontal, 24)
                         .opacity(isAnimating ? 1.0 : 0.0)
@@ -186,7 +192,11 @@ struct LoginView: View {
                 }
             }
             .navigationDestination(isPresented: $showSignUp) {
-                SignUpView()
+                SignUpView(initialEmail: email.contains("@") ? email : "", initialUsername: email.contains("@") ? "" : email, onDismissEmail: { returnedEmail in
+                    if !returnedEmail.isEmpty {
+                        email = returnedEmail
+                    }
+                })
             }
         }
         .onAppear {
@@ -245,7 +255,7 @@ struct LogoView: View {
             HStack(alignment: .bottom, spacing: size * 0.05) {
                 // Short bar (left part of check)
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.white)
+                    .fill(Color.cardBackground)
                     .frame(width: size * 0.15, height: size * 0.25)
                     .rotationEffect(.degrees(-10))
                     .offset(y: -size * 0.05)

@@ -36,10 +36,10 @@ struct GameLogView: View {
                                 .aspectRatio(contentMode: .fill)
                         } placeholder: {
                             Rectangle()
-                                .fill(Color.lightGray)
+                                .fill(Color.secondaryBackground)
                                 .overlay(
                                     Image(systemName: "gamecontroller")
-                                        .foregroundColor(.silver)
+                                        .foregroundStyle(Color.adaptiveSilver)
                                 )
                         }
                         .frame(width: 80, height: 107)
@@ -49,13 +49,13 @@ struct GameLogView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(game.title)
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                                 .lineLimit(2)
                             
                             if let year = game.releaseDate?.prefix(4) {
                                 Text(String(year))
                                     .font(.subheadline)
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                             }
                         }
                         
@@ -68,11 +68,11 @@ struct GameLogView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Where'd you play it? (optional)")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         Text("Select all that apply")
                             .font(.caption)
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                         
                         LazyVGrid(columns: [
                             GridItem(.flexible()),
@@ -98,11 +98,11 @@ struct GameLogView: View {
                                 .font(.system(size: 14, design: .rounded))
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
-                                .background(Color.lightGray)
+                                .background(Color.secondaryBackground)
                                 .cornerRadius(8)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.silver, lineWidth: 1)
+                                        .stroke(Color.adaptiveSilver, lineWidth: 1)
                                 )
                             
                             Button {
@@ -121,7 +121,7 @@ struct GameLogView: View {
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 10)
-                                    .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.silver : Color.primaryBlue)
+                                    .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.adaptiveSilver : Color.primaryBlue)
                                     .cornerRadius(8)
                             }
                             .disabled(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -157,22 +157,22 @@ struct GameLogView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Any thoughts?")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                         
                         TextEditor(text: $notes)
                             .frame(minHeight: 100)
                             .padding(12)
-                            .background(Color.lightGray)
+                            .background(Color.secondaryBackground)
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.silver, lineWidth: 1)
+                                    .stroke(Color.adaptiveSilver, lineWidth: 1)
                             )
                             .overlay(
                                 Group {
                                     if notes.isEmpty {
                                         Text("Favorite moments? Hot takes? (optional)")
-                                            .foregroundColor(.grayText)
+                                            .foregroundStyle(Color.adaptiveGray)
                                             .padding(.leading, 16)
                                             .padding(.top, 20)
                                     }
@@ -336,6 +336,27 @@ struct GameLogView: View {
                 let platforms: [String]
                 let release_date: String
                 let metacritic_score: Int
+                let tags: [String]
+            }
+            
+            // Fetch tags from RAWG detail endpoint (search results don't include them)
+            var gameTags = game.tags
+            if gameTags.isEmpty {
+                if let details = try? await RAWGService.shared.getGameDetails(id: game.rawgId) {
+                    gameTags = details.tags
+                }
+            }
+            // Filter out non-useful tags for taste prediction
+            let excludedTags: Set<String> = [
+                "Steam Achievements", "Steam Cloud", "Full controller support",
+                "Steam Leaderboards", "Steam Trading Cards", "Steam Workshop",
+                "controller support", "cloud saves", "overlay", "online",
+                "achievements", "stats", "console", "offline",
+                "Includes level editor", "Early Access", "Free to Play"
+            ]
+            gameTags = gameTags.filter { tag in
+                !excludedTags.contains(tag) &&
+                tag.allSatisfy { $0.isASCII || $0 == " " || $0 == "-" }
             }
             
             let gameInsert = GameInsert(
@@ -345,7 +366,8 @@ struct GameLogView: View {
                 genres: game.genres,
                 platforms: game.platforms,
                 release_date: game.releaseDate ?? "",
-                metacritic_score: game.metacriticScore ?? 0
+                metacritic_score: game.metacriticScore ?? 0,
+                tags: gameTags
             )
             
             try await supabase.client.from("games")
@@ -364,6 +386,23 @@ struct GameLogView: View {
                 .value
             
             let gameId = gameRecord.id
+                        
+            // Cache game description in background
+            Task {
+                do {
+                    let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
+                    if let desc = details.gameDescriptionHtml ?? details.gameDescription, !desc.isEmpty {
+                        _ = try? await supabase.client
+                            .from("games")
+                            .update(["description": desc])
+                            .eq("rawg_id", value: game.rawgId)
+                            .execute()
+                        print("📖 Cached description for \(game.title)")
+                    }
+                } catch {
+                    print("⚠️ Background description cache failed: \(error)")
+                }
+            }
             
             struct UserGameRow: Decodable {
                 let id: String
@@ -379,12 +418,13 @@ struct GameLogView: View {
                     let title: String
                     let cover_url: String?
                     let release_date: String?
+                    let rawg_id: Int?
                 }
             }
             
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .neq("game_id", value: gameId)
                 .not("rank_position", operator: .is, value: "null")
@@ -404,7 +444,8 @@ struct GameLogView: View {
                     canonicalGameId: nil,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
                 )
             }
             
@@ -549,11 +590,11 @@ struct PlatformButton: View {
                 .frame(maxWidth: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? Color.primaryBlue : Color.lightGray)
+                        .fill(isSelected ? Color.primaryBlue : Color.secondaryBackground)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.primaryBlue : Color.silver, lineWidth: 1)
+                        .stroke(isSelected ? Color.primaryBlue : Color.adaptiveSilver, lineWidth: 1)
                 )
         }
         .buttonStyle(PlainButtonStyle())
@@ -617,7 +658,10 @@ struct FlowLayout: Layout {
             genres: [RAWGGenre(id: 1, name: "Action")],
             platforms: [RAWGPlatformWrapper(platform: RAWGPlatform(id: 1, name: "Nintendo Switch"))],
             added: nil,
-            rating: nil
+            rating: nil,
+            descriptionRaw: nil,
+            descriptionHtml: nil,
+            tags: nil
         )
     ))
 }

@@ -4,6 +4,7 @@ struct ComparisonView: View {
     let newGame: Game
     let existingGames: [UserGame]
     var skipCelebration: Bool = false
+    var hideCancel: Bool = false
     let onComplete: (Int) -> Void
     
     @Environment(\.dismiss) var dismiss
@@ -45,8 +46,8 @@ struct ComparisonView: View {
                 // Prompt
                 if finalPosition == nil {
                     Text(prompts[comparisonCount % prompts.count])
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .font(Font.system(size: 22, weight: .bold, design: .rounded))
+                                                .foregroundStyle(Color.adaptiveSlate)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
@@ -90,13 +91,13 @@ struct ComparisonView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 16)
                     
-                    Spacer()
-                    
                     // Tip
                     Text("Tap the game you liked better")
                         .font(.caption)
-                        .foregroundColor(.grayText)
-                        .padding(.bottom, 24)
+                        .foregroundStyle(Color.adaptiveGray)
+                        .padding(.top, 8)
+                    
+                    Spacer()
                     
                 } else if let position = finalPosition {
                     if skipCelebration {
@@ -119,8 +120,10 @@ struct ComparisonView: View {
             .toolbar {
                 if finalPosition == nil {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Cancel") {
-                            showCancelAlert = true
+                        if !hideCancel {
+                            Button("Cancel") {
+                                showCancelAlert = true
+                            }
                         }
                     }
                     
@@ -282,11 +285,11 @@ struct GameComparisonCard: View {
                 ZStack {
                     // Pixel border effect
                     Rectangle()
-                        .fill(isHighlighted ? Color.primaryBlue : Color.slate.opacity(0.3))
+                        .fill(isHighlighted ? Color.primaryBlue : Color.adaptiveSlate.opacity(0.3))
                         .frame(width: 148, height: 195)
                     
                     Rectangle()
-                        .fill(isHighlighted ? Color.primaryBlue.opacity(0.3) : Color.lightGray)
+                        .fill(isHighlighted ? Color.primaryBlue.opacity(0.3) : Color.secondaryBackground)
                         .frame(width: 144, height: 191)
                     
                     AsyncImage(url: URL(string: coverURL ?? "")) { image in
@@ -295,11 +298,11 @@ struct GameComparisonCard: View {
                             .aspectRatio(contentMode: .fill)
                     } placeholder: {
                         Rectangle()
-                            .fill(Color.lightGray)
+                            .fill(Color.secondaryBackground)
                             .overlay(
                                 Image(systemName: "gamecontroller")
                                     .font(.system(size: 32))
-                                    .foregroundColor(.silver)
+                                    .foregroundStyle(Color.adaptiveSilver)
                             )
                     }
                     .frame(width: 140, height: 187)
@@ -310,7 +313,7 @@ struct GameComparisonCard: View {
                 VStack(spacing: 2) {
                     Text(title)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .frame(height: 36)
@@ -318,7 +321,7 @@ struct GameComparisonCard: View {
                     if !year.isEmpty {
                         Text(year)
                             .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                 }
             }
@@ -327,11 +330,11 @@ struct GameComparisonCard: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isHighlighted ? Color.primaryBlue.opacity(0.1) : Color.white)
+                    .fill(isHighlighted ? Color.primaryBlue.opacity(0.1) : Color.cardBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isHighlighted ? Color.primaryBlue : Color.lightGray, lineWidth: isHighlighted ? 3 : 1)
+                    .stroke(isHighlighted ? Color.primaryBlue : Color.secondaryBackground, lineWidth: isHighlighted ? 3 : 1)
             )
             .scaleEffect(isHighlighted ? 1.02 : 1.0)
             .animation(.spring(response: 0.2), value: isHighlighted)
@@ -370,7 +373,7 @@ struct RetroCompletionView: View {
                     
                     Text(celebrationMessage)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .multilineTextAlignment(.center)
                         .opacity(showContent ? 1 : 0)
                         .offset(y: showContent ? 0 : 20)
@@ -386,7 +389,7 @@ struct RetroCompletionView: View {
                     
                     Text("is now #\(position)")
                         .font(.system(size: 16, design: .rounded))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                         .opacity(showContent ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.45), value: showContent)
                     
@@ -516,7 +519,10 @@ struct ScaleButtonStyle: ButtonStyle {
                 genres: [],
                 platforms: [],
                 added: nil,
-                rating: nil
+                rating: nil,
+                descriptionRaw: nil,
+                descriptionHtml: nil,
+                tags: nil
             )
         ),
         existingGames: [],

@@ -70,7 +70,7 @@ struct ReportView: View {
                     // Header
                     Text("What's the issue?")
                         .font(.custom("Nunito-Bold", size: 22))
-                        .foregroundColor(Color.slate)
+                        .foregroundColor(Color.adaptiveSlate)
                     
                     // Reason selection
                     VStack(spacing: 8) {
@@ -88,13 +88,13 @@ struct ReportView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Anything else? (optional)")
                                 .font(.custom("Nunito-SemiBold", size: 16))
-                                .foregroundColor(Color.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("Add details...", text: $details, axis: .vertical)
                                 .font(.custom("Nunito-Regular", size: 17))
                                 .lineLimit(3...6)
                                 .padding(12)
-                                .background(Color.lightGray)
+                                .background(Color.secondaryBackground)
                                 .cornerRadius(12)
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -117,10 +117,10 @@ struct ReportView: View {
                                 .foregroundColor(.success)
                             Text("Thanks for letting us know.")
                                 .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundColor(.slate)
+                                .foregroundStyle(Color.adaptiveSlate)
                             Text("We'll look into it.")
                                 .font(.system(size: 14, design: .rounded))
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 20)
@@ -136,7 +136,7 @@ struct ReportView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(selectedReason != nil ? Color.accentOrange : Color.silver)
+                            .background(selectedReason != nil ? Color.accentOrange : Color.adaptiveSilver)
                             .foregroundColor(.white)
                             .cornerRadius(12)
                         }
@@ -148,7 +148,7 @@ struct ReportView: View {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("Cancel") { dismiss() }
                             .font(.custom("Nunito-SemiBold", size: 16))
-                            .foregroundColor(Color.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                 }
             }
@@ -236,22 +236,22 @@ struct ReportReasonRow: View {
             HStack(spacing: 12) {
                 Image(systemName: reason.icon)
                     .font(.system(size: 18))
-                    .foregroundColor(isSelected ? Color.accentOrange : Color.grayText)
+                    .foregroundStyle(isSelected ? Color.accentOrange : Color.adaptiveGray)
                     .frame(width: 24)
                 
                 Text(reason.displayName)
                     .font(.custom("Nunito-SemiBold", size: 16))
-                    .foregroundColor(Color.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                 
                 Spacer()
                 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20))
-                    .foregroundColor(isSelected ? Color.accentOrange : Color.silver)
+                    .foregroundStyle(isSelected ? Color.accentOrange : Color.adaptiveSilver)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(isSelected ? Color.accentOrange.opacity(0.08) : Color.lightGray)
+            .background(isSelected ? Color.accentOrange.opacity(0.08) : Color.secondaryBackground)
             .cornerRadius(12)
         }
         .buttonStyle(.plain)

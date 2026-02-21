@@ -15,11 +15,22 @@ struct RAWGGame: Codable, Identifiable {
     let platforms: [RAWGPlatformWrapper]?
     let added: Int?
     let rating: Double?
+    let descriptionRaw: String?
+    let descriptionHtml: String?
+    let tags: [RAWGTag]?
     
     enum CodingKeys: String, CodingKey {
         case id, name, released, metacritic, genres, platforms, added, rating
         case backgroundImage = "background_image"
+        case descriptionRaw = "description_raw"
+        case descriptionHtml = "description"
+        case tags
     }
+}
+
+struct RAWGTag: Codable {
+    let id: Int
+    let name: String
 }
 
 struct RAWGGenre: Codable {
@@ -48,6 +59,25 @@ struct Game: Identifiable, Codable {
     let metacriticScore: Int?
     let added: Int?
     let rating: Double?
+    let gameDescription: String?
+    let gameDescriptionHtml: String?
+    let tags: [String]
+    
+    init(id: Int, rawgId: Int, title: String, coverURL: String?, genres: [String], platforms: [String], releaseDate: String?, metacriticScore: Int?, added: Int?, rating: Double?, gameDescription: String?, gameDescriptionHtml: String? = nil, tags: [String]) {
+            self.id = id
+            self.rawgId = rawgId
+            self.title = title
+            self.coverURL = coverURL
+            self.genres = genres
+            self.platforms = platforms
+            self.releaseDate = releaseDate
+            self.metacriticScore = metacriticScore
+            self.added = added
+            self.rating = rating
+            self.gameDescription = gameDescription
+            self.gameDescriptionHtml = gameDescriptionHtml
+            self.tags = tags
+        }
     
     init(from rawgGame: RAWGGame) {
         self.id = rawgGame.id
@@ -60,5 +90,8 @@ struct Game: Identifiable, Codable {
         self.metacriticScore = rawgGame.metacritic
         self.added = rawgGame.added
         self.rating = rawgGame.rating
+        self.gameDescription = rawgGame.descriptionRaw
+        self.gameDescriptionHtml = rawgGame.descriptionHtml
+        self.tags = rawgGame.tags?.map { $0.name } ?? []
     }
 }

@@ -35,7 +35,7 @@ struct BatchRankFlowView: View {
                             HStack(spacing: 4) {
                                 ForEach(0..<games.count, id: \.self) { i in
                                     Circle()
-                                        .fill(i < currentIndex ? Color.teal : (i == currentIndex ? Color.primaryBlue : Color.silver.opacity(0.5)))
+                                        .fill(i < currentIndex ? Color.teal : (i == currentIndex ? Color.primaryBlue : Color.adaptiveSilver.opacity(0.5)))
                                         .frame(width: i == currentIndex ? 8 : 6, height: i == currentIndex ? 8 : 6)
                                 }
                             }
@@ -48,11 +48,11 @@ struct BatchRankFlowView: View {
                                 .aspectRatio(contentMode: .fill)
                         } placeholder: {
                             Rectangle()
-                                .fill(Color.lightGray)
+                                .fill(Color.secondaryBackground)
                                 .overlay(
                                     Image(systemName: "gamecontroller")
                                         .font(.system(size: 40))
-                                        .foregroundColor(.silver)
+                                        .foregroundStyle(Color.adaptiveSilver)
                                 )
                         }
                         .frame(width: 150, height: 200)
@@ -63,14 +63,14 @@ struct BatchRankFlowView: View {
                         // Title
                         Text(game.gameTitle)
                             .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                         
                         if let year = game.gameReleaseDate?.prefix(4) {
                             Text(String(year))
                                 .font(.subheadline)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                         
                         // Up next preview
@@ -78,10 +78,10 @@ struct BatchRankFlowView: View {
                             HStack(spacing: 4) {
                                 Text("Up next:")
                                     .font(.system(size: 13, design: .rounded))
-                                    .foregroundColor(.grayText)
+                                    .foregroundStyle(Color.adaptiveGray)
                                 Text(games[currentIndex + 1].gameTitle)
                                     .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundColor(.slate)
+                                    .foregroundStyle(Color.adaptiveSlate)
                                     .lineLimit(1)
                             }
                             .padding(.top, 8)
@@ -106,7 +106,7 @@ struct BatchRankFlowView: View {
                         } label: {
                             Text("Skip")
                                 .font(.system(size: 15, weight: .medium, design: .rounded))
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                     }
                 } else {
@@ -176,11 +176,11 @@ struct BatchRankFlowView: View {
             
             Text("All done!")
                 .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Text("You ranked \(games.count) game\(games.count == 1 ? "" : "s")")
                 .font(.system(size: 16, design: .rounded))
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
             
             Button("Finish") {
                 dismiss()

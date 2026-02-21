@@ -14,6 +14,7 @@ struct UserGame: Identifiable, Codable {
     let gameTitle: String
     let gameCoverURL: String?
     let gameReleaseDate: String?
+    let gameRawgId: Int?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -27,6 +28,7 @@ struct UserGame: Identifiable, Codable {
         case gameTitle = "game_title"
         case gameCoverURL = "game_cover_url"
         case gameReleaseDate = "game_release_date"
+        case gameRawgId = "game_rawg_id"
     }
 }
 
@@ -34,7 +36,7 @@ extension UserGame {
     func toGame() -> Game {
         Game(
             from: RAWGGame(
-                id: gameId,
+                id: gameRawgId ?? gameId,
                 name: gameTitle,
                 backgroundImage: gameCoverURL,
                 released: gameReleaseDate,
@@ -42,7 +44,10 @@ extension UserGame {
                 genres: nil,
                 platforms: nil,
                 added: nil,
-                rating: nil
+                rating: nil,
+                descriptionRaw: nil,
+                descriptionHtml: nil,
+                tags: nil
             )
         )
     }

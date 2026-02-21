@@ -98,7 +98,7 @@ final class ContentModerator {
         "noreply", "no-reply", "no_reply",
         "abuse", "security", "privacy", "legal", "copyright",
         "everyone", "all", "here", "channel",
-        "dan", "tony", "alex"
+        "dan", "tony", "alex", "dwrib"
     ]
     
     // Targeted insults — profanity aimed at people, blocked in all contexts
@@ -258,16 +258,6 @@ final class ContentModerator {
                 allowed: false,
                 reason: "This username is reserved. Please choose a different one."
             )
-        }
-        
-        // Check if contains a reserved name as substring
-        for reserved in reservedUsernames {
-            if lower.contains(reserved) {
-                return ModerationResult(
-                    allowed: false,
-                    reason: "This username is reserved. Please choose a different one."
-                )
-            }
         }
         
         // Check slurs (always blocked)

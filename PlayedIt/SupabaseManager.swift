@@ -13,6 +13,8 @@ class SupabaseManager: ObservableObject {
     @Published var currentUser: User?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var needsEmailConfirmation = false
+    @Published var pendingEmail: String?
     
     private init() {
         self.client = SupabaseClient(
@@ -29,6 +31,12 @@ class SupabaseManager: ObservableObject {
     func checkSession() async {
         do {
             let session = try await client.auth.session
+            if session.user.emailConfirmedAt == nil {
+                try await client.auth.signOut()
+                self.isAuthenticated = false
+                self.currentUser = nil
+                return
+            }
             self.currentUser = session.user
             self.isAuthenticated = true
         } catch {
@@ -53,14 +61,17 @@ class SupabaseManager: ObservableObject {
                 data: ["username": .string(username)]
             )
             
-            let user = authResponse.user
-            print("✅ Auth user created with ID: \(user.id)")
-            print("📝 User metadata: \(String(describing: user.userMetadata))")
-            
-            self.currentUser = user
-            self.isAuthenticated = true
+            if let session = authResponse.session {
+                self.currentUser = session.user
+                self.isAuthenticated = true
+                print("✅ Auth user created with session, ID: \(session.user.id)")
+            } else {
+                // Email confirmation required
+                self.needsEmailConfirmation = true
+                self.pendingEmail = email
+                print("📧 Auth user created, awaiting email confirmation")
+            }
             isLoading = false
-            print("✅ Signup complete!")
             return true
             
         } catch {
@@ -103,12 +114,22 @@ class SupabaseManager: ObservableObject {
                 password: password
             )
             
+            // Block unconfirmed email accounts
+            if session.user.emailConfirmedAt == nil {
+                try await client.auth.signOut()
+                errorMessage = "Please confirm your email before signing in. Check your inbox!"
+                isLoading = false
+                return false
+            }
+            
             self.currentUser = session.user
             self.isAuthenticated = true
             isLoading = false
             return true
             
         } catch {
+            print("❌ Sign in error: \(error)")
+            print("❌ Error details: \(error.localizedDescription)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -239,6 +260,8 @@ class SupabaseManager: ObservableObject {
             return "Can't connect right now. Check your internet and try again?"
         } else if errorString.contains("rate") || errorString.contains("limit") {
             return "Slow down, speedrunner! Give it a sec."
+        } else if errorString.contains("email not confirmed") {
+            return "Please confirm your email before signing in. Check your inbox!"
         } else {
             return "Oops! Something went wrong. Try again?"
         }

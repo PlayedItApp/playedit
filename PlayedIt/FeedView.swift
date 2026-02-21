@@ -85,15 +85,15 @@ struct FeedView: View {
             
             Image(systemName: "bell.slash")
                 .font(.system(size: 48))
-                .foregroundColor(.silver)
+                .foregroundStyle(Color.adaptiveSilver)
             
             Text("Your feed is quiet")
                 .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Text("Add friends or log some games to get things moving.")
                 .font(.body)
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             
@@ -112,6 +112,30 @@ struct FeedView: View {
                             onLikeTapped: { toggleLike(for: item) },
                             onCommentTapped: { selectedItem = item }
                         )
+                    case .groupedGames(let group):
+                        GroupedFeedRow(
+                            group: group,
+                            onLikeTapped: { toggleGroupLike(for: group) },
+                            onCommentTapped: {
+                                selectedItem = FeedItem(
+                                    id: group.id,
+                                    feedPostId: group.feedPostId,
+                                    userGameId: "",
+                                    userId: group.userId,
+                                    username: group.username,
+                                    avatarURL: group.avatarURL,
+                                    gameId: 0,
+                                    gameTitle: "\(group.username) ranked \(group.gameCount) games",
+                                    gameCoverURL: nil,
+                                    rankPosition: nil,
+                                    loggedAt: nil,
+                                    batchSource: group.batchSource,
+                                    likeCount: group.likeCount,
+                                    commentCount: group.commentCount,
+                                    isLikedByMe: group.isLikedByMe
+                                )
+                            }
+                        )
                     case .activity(let item):
                         ActivityFeedRow(
                             item: item,
@@ -129,6 +153,7 @@ struct FeedView: View {
                                     gameCoverURL: nil,
                                     rankPosition: nil,
                                     loggedAt: nil,
+                                    batchSource: nil,
                                     likeCount: item.likeCount,
                                     commentCount: item.commentCount,
                                     isLikedByMe: item.isLikedByMe
@@ -178,6 +203,37 @@ struct FeedView: View {
         }
     }
     
+    private func toggleGroupLike(for group: GroupedFeedItem) {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        Task {
+            do {
+                if group.isLikedByMe {
+                    try await supabase.client
+                        .from("feed_reactions")
+                        .delete()
+                        .eq("feed_post_id", value: group.feedPostId)
+                        .eq("user_id", value: userId.uuidString)
+                        .execute()
+                } else {
+                    try await supabase.client
+                        .from("feed_reactions")
+                        .insert([
+                            "feed_post_id": group.feedPostId,
+                            "user_id": userId.uuidString,
+                            "emoji": "❤️"
+                        ])
+                        .execute()
+                }
+                
+                await fetchFeed()
+                
+            } catch {
+                print("❌ Error toggling group like: \(error)")
+            }
+        }
+    }
+    
     private func toggleActivityLike(for item: ActivityFeedItem) {
             guard let userId = supabase.currentUser?.id else { return }
             
@@ -208,6 +264,7 @@ struct FeedView: View {
                 }
             }
         }
+
     
     private func fetchFeed() async {
         guard let userId = supabase.currentUser?.id else {
@@ -243,9 +300,16 @@ struct FeedView: View {
                 let post_type: String
                 let user_game_id: String?
                 let activity_feed_id: String?
+                let batch_post_id: String?
+                let metadata: BatchMetadata?
                 let created_at: String
                 let users: UserInfo
                 let user_games: GamePostInfo?
+                
+                struct BatchMetadata: Decodable {
+                    let game_count: Int?
+                    let user_game_ids: [String]?
+                }
                 
                 struct UserInfo: Decodable {
                     let username: String?
@@ -256,21 +320,24 @@ struct FeedView: View {
                     let game_id: Int
                     let rank_position: Int?
                     let logged_at: String?
+                    let batch_source: String?
                     let games: GameDetails
                     
                     struct GameDetails: Decodable {
                         let title: String
                         let cover_url: String?
+                        let release_date: String?
+                        let rawg_id: Int?
                     }
                 }
             }
             
             let posts: [FeedPostRow] = try await supabase.client
                 .from("feed_posts")
-                .select("id, user_id, post_type, user_game_id, activity_feed_id, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, games(title, cover_url))")
+                .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
                 .in("user_id", values: feedUserIds)
                 .order("created_at", ascending: false)
-                .limit(50)
+                .limit(100)
                 .execute()
                 .value
             
@@ -334,6 +401,9 @@ struct FeedView: View {
                 
                 switch post.post_type {
                 case "ranked_game":
+                    // Skip if this post belongs to a batch — it'll be included via the batch_ranked post
+                    if post.batch_post_id != nil { continue }
+                    
                     guard let ug = post.user_games, ug.rank_position != nil else { continue }
                     let item = FeedItem(
                         id: post.user_game_id ?? post.id,
@@ -347,12 +417,60 @@ struct FeedView: View {
                         gameCoverURL: ug.games.cover_url,
                         rankPosition: ug.rank_position,
                         loggedAt: ug.logged_at,
+                        batchSource: ug.batch_source,
                         likeCount: likes,
                         commentCount: comments,
                         isLikedByMe: isLiked
                     )
                     feedItems.append(item)
                     combined.append(.game(item))
+                    
+                case "batch_ranked":
+                    // Build grouped entry from the batch's child posts
+                    let childPosts = posts.filter { p in
+                        p.batch_post_id == post.id && p.post_type == "ranked_game"
+                    }
+                    
+                    let childItems: [FeedItem] = childPosts.compactMap { child in
+                        guard let ug = child.user_games, ug.rank_position != nil else { return nil }
+                        let childLikes = likeCountMap[child.id] ?? 0
+                        let childComments = commentCountMap[child.id] ?? 0
+                        let childIsLiked = myLikedIds.contains(child.id)
+                        return FeedItem(
+                            id: child.user_game_id ?? child.id,
+                            feedPostId: child.id,
+                            userGameId: child.user_game_id ?? "",
+                            userId: child.user_id,
+                            username: child.users.username ?? "Friend",
+                            avatarURL: child.users.avatar_url,
+                            gameId: ug.game_id,
+                            gameTitle: ug.games.title,
+                            gameCoverURL: ug.games.cover_url,
+                            rankPosition: ug.rank_position,
+                            loggedAt: ug.logged_at,
+                            batchSource: ug.batch_source,
+                            likeCount: childLikes,
+                            commentCount: childComments,
+                            isLikedByMe: childIsLiked
+                        )
+                    }
+                    
+                    guard !childItems.isEmpty else { continue }
+                    
+                    let group = GroupedFeedItem(
+                        id: post.id,
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        items: childItems,
+                        batchSource: childItems.first?.batchSource,
+                        mostRecentDate: post.created_at,
+                        feedPostId: post.id,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    combined.append(.groupedGames(group))
                     
                 case "reset_rankings":
                     let item = ActivityFeedItem(
@@ -421,11 +539,13 @@ struct ActivityFeedItem: Identifiable {
 enum FeedEntry: Identifiable {
     case game(FeedItem)
     case activity(ActivityFeedItem)
+    case groupedGames(GroupedFeedItem)
     
     var id: String {
         switch self {
         case .game(let item): return "game-\(item.id)"
         case .activity(let item): return "activity-\(item.id)"
+        case .groupedGames(let group): return "group-\(group.id)"
         }
     }
     
@@ -433,6 +553,52 @@ enum FeedEntry: Identifiable {
         switch self {
         case .game(let item): return item.loggedAt ?? ""
         case .activity(let item): return item.createdAt
+        case .groupedGames(let group): return group.mostRecentDate
+        }
+    }
+    
+    var userId: String {
+        switch self {
+        case .game(let item): return item.userId
+        case .activity(let item): return item.userId
+        case .groupedGames(let group): return group.userId
+        }
+    }
+}
+
+// MARK: - Grouped Feed Item
+struct GroupedFeedItem: Identifiable {
+    let id: String
+    let userId: String
+    let username: String
+    let avatarURL: String?
+    let items: [FeedItem]
+    let batchSource: String?
+    let mostRecentDate: String
+    let feedPostId: String
+    let likeCount: Int
+    let commentCount: Int
+    let isLikedByMe: Bool
+    
+    var gameCount: Int { items.count }
+    
+    // Pull out any #1 ranked game to show separately
+    var newNumberOne: FeedItem? {
+        items.first { $0.rankPosition == 1 }
+    }
+    
+    var collapsedItems: [FeedItem] {
+        items.filter { $0.rankPosition != 1 }
+    }
+    
+    var displayLabel: String {
+        switch batchSource {
+        case "steam_import":
+            return "\(username) imported their Steam library — \(gameCount) games ranked"
+        case "onboarding":
+            return "\(username) just joined and ranked \(gameCount) games!"
+        default:
+            return "\(username) ranked \(gameCount) games"
         }
     }
 }
@@ -450,6 +616,7 @@ struct FeedItem: Identifiable {
     let gameCoverURL: String?
     let rankPosition: Int?
     let loggedAt: String?
+    let batchSource: String?
     let likeCount: Int
     let commentCount: Int
     let isLikedByMe: Bool
@@ -479,10 +646,10 @@ struct FeedItemRow: View {
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Rectangle()
-                        .fill(Color.lightGray)
+                        .fill(Color.secondaryBackground)
                         .overlay(
                             Image(systemName: "gamecontroller")
-                                .foregroundColor(.silver)
+                                .foregroundStyle(Color.adaptiveSilver)
                         )
                 }
                 .frame(width: 50, height: 67)
@@ -492,11 +659,11 @@ struct FeedItemRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(item.username) ranked")
                         .font(.subheadline)
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                     
                     Text(item.gameTitle)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .lineLimit(2)
                     
                     HStack(spacing: 4) {
@@ -507,7 +674,7 @@ struct FeedItemRow: View {
                         if let loggedAt = item.loggedAt {
                             Text("• \(timeAgo(from: loggedAt))")
                                 .font(.caption)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                     }
                 }
@@ -563,12 +730,12 @@ struct FeedItemRow: View {
                     HStack(spacing: 6) {
                         Image(systemName: item.isLikedByMe ? "heart.fill" : "heart")
                             .font(.system(size: 18))
-                            .foregroundColor(item.isLikedByMe ? .orange : .grayText)
+                            .foregroundStyle(item.isLikedByMe ? Color.orange : Color.adaptiveGray)
                         
                         if item.likeCount > 0 {
                             Text("\(item.likeCount)")
                                 .font(.subheadline)
-                                .foregroundColor(item.isLikedByMe ? .orange : .grayText)
+                                .foregroundStyle(item.isLikedByMe ? Color.orange : Color.adaptiveGray)
                         }
                     }
                 }
@@ -579,12 +746,12 @@ struct FeedItemRow: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.right")
                             .font(.system(size: 18))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                         
                         if item.commentCount > 0 {
                             Text("\(item.commentCount)")
                                 .font(.subheadline)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                     }
                 }
@@ -598,7 +765,7 @@ struct FeedItemRow: View {
                         if showToast {
                             Text(toastMessage)
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                                 .transition(.opacity)
                         }
                         BookmarkButton(
@@ -628,14 +795,14 @@ struct FeedItemRow: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 14))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                     }
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         .sheet(isPresented: $showReportSheet) {
@@ -646,6 +813,9 @@ struct FeedItemRow: View {
                 reportedUserId: UUID(uuidString: item.userId) ?? UUID()
             )
             .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showGameDetail) {
+            FeedGameDetailSheet(item: item)
         }
     }
     
@@ -710,11 +880,11 @@ struct ActivityFeedRow: View {
                             .foregroundColor(.primaryBlue)
                     }
                         .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundColor(.slate)
+                        .foregroundStyle(Color.adaptiveSlate)
                     
                     Text(timeAgo(from: item.createdAt))
                         .font(.caption)
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                 }
                 
                 Spacer()
@@ -730,12 +900,12 @@ struct ActivityFeedRow: View {
                     HStack(spacing: 6) {
                         Image(systemName: item.isLikedByMe ? "heart.fill" : "heart")
                             .font(.system(size: 18))
-                            .foregroundColor(item.isLikedByMe ? .orange : .grayText)
+                            .foregroundStyle(item.isLikedByMe ? Color.orange : Color.adaptiveGray)
                         
                         if item.likeCount > 0 {
                             Text("\(item.likeCount)")
                                 .font(.subheadline)
-                                .foregroundColor(item.isLikedByMe ? .orange : .grayText)
+                                .foregroundStyle(item.isLikedByMe ? Color.orange : Color.adaptiveGray)
                         }
                     }
                 }
@@ -745,12 +915,12 @@ struct ActivityFeedRow: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.right")
                             .font(.system(size: 18))
-                            .foregroundColor(.grayText)
+                            .foregroundStyle(Color.adaptiveGray)
                         
                         if item.commentCount > 0 {
                             Text("\(item.commentCount)")
                                 .font(.subheadline)
-                                .foregroundColor(.grayText)
+                                .foregroundStyle(Color.adaptiveGray)
                         }
                     }
                 }
@@ -761,11 +931,11 @@ struct ActivityFeedRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .background(Color.white)
+        .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
-    
+        
     private var avatarPlaceholder: some View {
         Circle()
             .fill(Color.primaryBlue.opacity(0.2))
@@ -791,7 +961,7 @@ struct ActivityFeedRow: View {
     }
 }
 
-// MARK: - Feed Game Detail Sheet
+//// MARK: - Feed Game Detail Sheet
 struct FeedGameDetailSheet: View {
     let item: FeedItem
     @Environment(\.dismiss) private var dismiss
@@ -802,40 +972,55 @@ struct FeedGameDetailSheet: View {
     @State private var isLoading = true
     
     var body: some View {
-        NavigationStack {
+        Group {
             if isLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button { dismiss() } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.silver)
+                NavigationStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button { dismiss() } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundStyle(Color.adaptiveSilver)
+                                }
+                            }
+                        }
+                }
+            } else if let userGame = userGame {
+                if item.userId.lowercased() == (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
+                    GameDetailSheet(game: userGame, rank: userGame.rankPosition)
+                } else if let friend = friend {
+                    NavigationStack {
+                        GameDetailFromFriendView(
+                            userGame: userGame,
+                            friend: friend,
+                            myGames: myGames
+                        )
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button { dismiss() } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundStyle(Color.adaptiveSilver)
+                                }
                             }
                         }
                     }
-            } else if let userGame = userGame, let friend = friend {
-                GameDetailFromFriendView(
-                    userGame: userGame,
-                    friend: friend,
-                    myGames: myGames
-                )
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.silver)
-                        }
+                } else {
+                    VStack(spacing: 12) {
+                        Text("Couldn't load game details")
+                            .font(.system(size: 16, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                        Button("Dismiss") { dismiss() }
                     }
                 }
             } else {
                 VStack(spacing: 12) {
                     Text("Couldn't load game details")
                         .font(.system(size: 16, design: .rounded))
-                        .foregroundColor(.grayText)
+                        .foregroundStyle(Color.adaptiveGray)
                     Button("Dismiss") { dismiss() }
                 }
             }
@@ -867,13 +1052,14 @@ struct FeedGameDetailSheet: View {
                     let title: String
                     let cover_url: String?
                     let release_date: String?
+                    let rawg_id: Int?
                 }
             }
             
             // 1. Fetch the user_game entry
             let row: UserGameRow = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("id", value: item.userGameId)
                 .single()
                 .execute()
@@ -890,8 +1076,15 @@ struct FeedGameDetailSheet: View {
                 canonicalGameId: row.canonical_game_id,
                 gameTitle: row.games.title,
                 gameCoverURL: row.games.cover_url,
-                gameReleaseDate: row.games.release_date
+                gameReleaseDate: row.games.release_date,
+                gameRawgId: row.games.rawg_id
             )
+            
+            // Skip friend/myGames fetch if it's own post
+            if item.userId.lowercased() == userId.uuidString.lowercased() {
+                isLoading = false
+                return
+            }
             
             // 2. Fetch the poster's profile and friendship
             struct UserProfile: Decodable {
@@ -908,27 +1101,20 @@ struct FeedGameDetailSheet: View {
                 .execute()
                 .value
             
-            // Find the friendship ID
             struct FriendshipRow: Decodable {
                 let id: String
             }
             
-            let friendshipId: String
-            if item.userId.lowercased() == userId.uuidString.lowercased() {
-                // It's your own post
-                friendshipId = ""
-            } else {
-                let friendships: [FriendshipRow] = try await supabase.client
-                    .from("friendships")
-                    .select("id")
-                    .or("and(user_id.eq.\(userId.uuidString),friend_id.eq.\(item.userId)),and(user_id.eq.\(item.userId),friend_id.eq.\(userId.uuidString))")
-                    .eq("status", value: "accepted")
-                    .limit(1)
-                    .execute()
-                    .value
-                
-                friendshipId = friendships.first?.id ?? ""
-            }
+            let friendships: [FriendshipRow] = try await supabase.client
+                .from("friendships")
+                .select("id")
+                .or("and(user_id.eq.\(userId.uuidString),friend_id.eq.\(item.userId)),and(user_id.eq.\(item.userId),friend_id.eq.\(userId.uuidString))")
+                .eq("status", value: "accepted")
+                .limit(1)
+                .execute()
+                .value
+            
+            let friendshipId = friendships.first?.id ?? ""
             
             friend = Friend(
                 id: friendshipId,
@@ -941,7 +1127,7 @@ struct FeedGameDetailSheet: View {
             // 3. Fetch my games
             let myRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date)")
+                .select("*, games(title, cover_url, release_date, rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -960,7 +1146,8 @@ struct FeedGameDetailSheet: View {
                     canonicalGameId: r.canonical_game_id,
                     gameTitle: r.games.title,
                     gameCoverURL: r.games.cover_url,
-                    gameReleaseDate: r.games.release_date
+                    gameReleaseDate: r.games.release_date,
+                    gameRawgId: r.games.rawg_id
                 )
             }
             
@@ -993,7 +1180,7 @@ struct BookmarkButton: View {
             } label: {
                 Image(systemName: isWantToPlay ? "bookmark.fill" : "bookmark")
                     .font(.system(size: 18))
-                    .foregroundColor(isWantToPlay ? .accentOrange : .grayText)
+                    .foregroundStyle(isWantToPlay ? Color.accentOrange : Color.adaptiveGray)
             }
             .buttonStyle(.plain)
             .task {
@@ -1033,6 +1220,362 @@ struct BookmarkButton: View {
         } catch {
             print("❌ Error checking ranked status: \(error)")
         }
+    }
+}
+
+// MARK: - Grouped Feed Row
+struct GroupedFeedRow: View {
+    let group: GroupedFeedItem
+    let onLikeTapped: () -> Void
+    let onCommentTapped: () -> Void
+    @State private var isExpanded = false
+    @State private var selectedItem: FeedItem?
+    @State private var selectedCommentItem: FeedItem?
+    @State private var localLikeOverrides: [String: Bool] = [:]
+    @State private var localLikeCountOverrides: [String: Int] = [:]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 12) {
+                // Avatar
+                NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                    if let avatarURL = group.avatarURL, let url = URL(string: avatarURL) {
+                        AsyncImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            avatarPlaceholder
+                        }
+                        .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        avatarPlaceholder
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.displayLabel)
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.adaptiveSlate)
+                    
+                    Text(timeAgo(from: group.mostRecentDate))
+                        .font(.caption)
+                        .foregroundStyle(Color.adaptiveGray)
+                }
+                
+                Spacer()
+                
+                // Batch icon
+                Image(systemName: batchIcon)
+                    .font(.system(size: 16))
+                    .foregroundColor(.primaryBlue)
+            }
+            .padding(12)
+            
+            // Cover art grid
+            coverArtGrid
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            
+            Divider()
+                .padding(.horizontal, 12)
+            
+            // Like/Comment bar (when collapsed)
+            if !isExpanded {
+                HStack(spacing: 24) {
+                    Button(action: onLikeTapped) {
+                        HStack(spacing: 6) {
+                            Image(systemName: group.isLikedByMe ? "heart.fill" : "heart")
+                                .font(.system(size: 18))
+                                .foregroundStyle(group.isLikedByMe ? Color.orange : Color.adaptiveGray)
+                            if group.likeCount > 0 {
+                                Text("\(group.likeCount)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(group.isLikedByMe ? Color.orange : Color.adaptiveGray)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: onCommentTapped) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bubble.right")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color.adaptiveGray)
+                            if group.commentCount > 0 {
+                                Text("\(group.commentCount)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.adaptiveGray)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                
+                Divider()
+                    .padding(.horizontal, 12)
+            }
+            
+            // Expand/view button
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Text(isExpanded ? "Collapse" : "See all \(group.collapsedItems.count) games")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primaryBlue)
+                    
+                    Spacer()
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primaryBlue)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            // Inline expanded list (small batches only)
+            if isExpanded {
+                expandedList
+            }
+        }
+        .background(Color.cardBackground) 
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .sheet(item: $selectedItem) { item in
+            FeedGameDetailSheet(item: item)
+        }
+        .sheet(item: $selectedCommentItem) { item in
+            CommentsSheet(feedItem: item, onDismiss: {
+                selectedCommentItem = nil
+            })
+        }
+    }
+    
+    // MARK: - Cover Art Grid
+    private var coverArtGrid: some View {
+        let displayItems = Array(group.collapsedItems.prefix(6))
+        let remaining = group.collapsedItems.count - 6
+        
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: min(displayItems.count, 3)), spacing: 8) {
+            ForEach(Array(displayItems.enumerated()), id: \.element.id) { index, item in
+                ZStack {
+                    AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.secondaryBackground)
+                            .overlay(
+                                Image(systemName: "gamecontroller")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.adaptiveSilver)
+                            )
+                    }
+                    .frame(height: 60)
+                    .clipped()
+                    .cornerRadius(6)
+                    
+                    // "+X more" badge on last item
+                    if index == 5 && remaining > 0 {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.5))
+                            .cornerRadius(6)
+                        
+                        Text("+\(remaining)")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+    }
+    
+    private var expandedList: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .padding(.horizontal, 12)
+            
+            LazyVStack(spacing: 0) {
+                    ForEach(group.collapsedItems) { item in
+                        VStack(spacing: 0) {
+                            // Game info row - tappable for detail
+                            HStack(spacing: 10) {
+                                AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.secondaryBackground)
+                                        .overlay(
+                                            Image(systemName: "gamecontroller")
+                                                .font(.system(size: 8))
+                                                .foregroundStyle(Color.adaptiveSilver)
+                                        )
+                                }
+                                .frame(width: 36, height: 48)
+                                .clipped()
+                                .cornerRadius(4)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.gameTitle)
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                        .foregroundStyle(Color.adaptiveSlate)
+                                        .lineLimit(1)
+                                    
+                                    Text("#\(item.rankPosition ?? 0)")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.primaryBlue)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.adaptiveSilver)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 8)
+                            .padding(.bottom, 4)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selectedItem = item
+                            }
+                            
+                            // Like/comment buttons - separate tap targets
+                            HStack(spacing: 0) {
+                                Button {
+                                    toggleChildLike(for: item)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: isChildLiked(item) ? "heart.fill" : "heart")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(isChildLiked(item) ? Color.orange : Color.adaptiveGray)
+                                        if childLikeCount(item) > 0 {
+                                            Text("\(childLikeCount(item))")
+                                                .font(.caption)
+                                                .foregroundStyle(isChildLiked(item) ? Color.orange : Color.adaptiveGray)
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Button {
+                                    selectedCommentItem = item
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "bubble.right")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(Color.adaptiveGray)
+                                        if item.commentCount > 0 {
+                                            Text("\(item.commentCount)")
+                                                .font(.caption)
+                                                .foregroundStyle(Color.adaptiveGray)
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Spacer()
+                            }
+                            .padding(.leading, 46)
+                            .padding(.bottom, 4)
+                            
+                            Divider()
+                                .padding(.horizontal, 12)
+                        }
+                    }
+                }
+            }
+        }
+    
+    private func isChildLiked(_ item: FeedItem) -> Bool {
+        localLikeOverrides[item.feedPostId] ?? item.isLikedByMe
+    }
+    
+    private func childLikeCount(_ item: FeedItem) -> Int {
+        localLikeCountOverrides[item.feedPostId] ?? item.likeCount
+    }
+    
+    private func toggleChildLike(for item: FeedItem) {
+        guard let userId = SupabaseManager.shared.currentUser?.id else { return }
+        
+        let currentlyLiked = isChildLiked(item)
+        let currentCount = childLikeCount(item)
+        
+        localLikeOverrides[item.feedPostId] = !currentlyLiked
+        localLikeCountOverrides[item.feedPostId] = currentlyLiked ? currentCount - 1 : currentCount + 1
+        
+        Task {
+            do {
+                if currentlyLiked {
+                    try await SupabaseManager.shared.client
+                        .from("feed_reactions")
+                        .delete()
+                        .eq("feed_post_id", value: item.feedPostId)
+                        .eq("user_id", value: userId.uuidString)
+                        .execute()
+                } else {
+                    try await SupabaseManager.shared.client
+                        .from("feed_reactions")
+                        .insert([
+                            "feed_post_id": item.feedPostId,
+                            "user_game_id": item.userGameId,
+                            "user_id": userId.uuidString,
+                            "emoji": "❤️"
+                        ])
+                        .execute()
+                }
+            } catch {
+                localLikeOverrides[item.feedPostId] = currentlyLiked
+                localLikeCountOverrides[item.feedPostId] = currentCount
+                print("❌ Error toggling child like: \(error)")
+            }
+        }
+    }
+    
+    private var avatarPlaceholder: some View {
+        Circle()
+            .fill(Color.primaryBlue.opacity(0.2))
+            .frame(width: 36, height: 36)
+            .overlay(
+                Text(String(group.username.prefix(1)).uppercased())
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primaryBlue)
+            )
+    }
+    
+    private var batchIcon: String {
+        switch group.batchSource {
+        case "steam_import": return "arrow.down.circle"
+        case "onboarding": return "star.circle"
+        default: return "square.stack"
+        }
+    }
+    
+    private func timeAgo(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = formatter.date(from: dateString) else { return "" }
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 { return "Just now" }
+        else if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        else if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        else { return "\(Int(interval / 86400))d ago" }
     }
 }
 

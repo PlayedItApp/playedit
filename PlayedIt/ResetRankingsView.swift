@@ -129,11 +129,11 @@ struct ResetRankingsView: View {
             
             Text("Round two!")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Text("Same games, fresh rankings. Let's see if your opinions have changed.")
                 .font(.system(size: 17, design: .rounded))
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             
@@ -174,11 +174,11 @@ struct ResetRankingsView: View {
             
             Text("All done!")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
             
             Text("Your rankings have been rebuilt from scratch.")
                 .font(.system(size: 17, design: .rounded))
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             
@@ -205,12 +205,12 @@ struct ResetRankingsView: View {
             VStack(spacing: 4) {
                 Text("Ranking game \(currentGameIndex + 1) of \(shuffledGames.count)")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.lightGray)
+                            .fill(Color.secondaryBackground)
                             .frame(height: 6)
                         
                         RoundedRectangle(cornerRadius: 4)
@@ -227,7 +227,7 @@ struct ResetRankingsView: View {
             // Prompt
             Text(prompts[comparisonCount % prompts.count])
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundColor(.slate)
+                .foregroundStyle(Color.adaptiveSlate)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -270,7 +270,7 @@ struct ResetRankingsView: View {
             
             Text("Tap the game you liked better")
                 .font(.caption)
-                .foregroundColor(.grayText)
+                .foregroundStyle(Color.adaptiveGray)
                 .padding(.bottom, 24)
         }
     }
@@ -281,12 +281,12 @@ struct ResetRankingsView: View {
             VStack(spacing: 4) {
                 Text("Ranking game \(min(currentGameIndex + 1, shuffledGames.count)) of \(shuffledGames.count)")
                     .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
                 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.lightGray)
+                            .fill(Color.secondaryBackground)
                             .frame(height: 6)
                         
                         RoundedRectangle(cornerRadius: 4)

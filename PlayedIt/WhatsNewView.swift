@@ -90,11 +90,11 @@ struct WhatsNewView: View {
             VStack(spacing: 8) {
                 Text("What's New 🎮")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.slate)
+                    .foregroundStyle(Color.adaptiveSlate)
                 
                 Text("v\(WhatsNewManager.currentVersion)")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundColor(.grayText)
+                    .foregroundStyle(Color.adaptiveGray)
             }
             .padding(.top, 32)
             .padding(.bottom, 24)
@@ -119,11 +119,11 @@ struct WhatsNewView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(feature.title)
                                         .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.slate)
+                                        .foregroundStyle(Color.adaptiveSlate)
                                     
                                     Text(feature.description)
                                         .font(.system(size: 15, design: .rounded))
-                                        .foregroundColor(.grayText)
+                                        .foregroundStyle(Color.adaptiveGray)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,7 +135,7 @@ struct WhatsNewView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Minor Improvements")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                             .padding(.horizontal, 24)
                             .padding(.top, 8)
                         
@@ -147,7 +147,7 @@ struct WhatsNewView: View {
                                         .font(.system(size: 15, weight: .semibold))
                                     Text(item)
                                         .font(.system(size: 14, design: .rounded))
-                                        .foregroundColor(.grayText)
+                                        .foregroundStyle(Color.adaptiveGray)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
@@ -159,7 +159,7 @@ struct WhatsNewView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Bug Fixes 🛠️")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundColor(.slate)
+                            .foregroundStyle(Color.adaptiveSlate)
                             .padding(.horizontal, 24)
                             .padding(.top, 8)
                         
@@ -171,7 +171,7 @@ struct WhatsNewView: View {
                                         .font(.system(size: 15, weight: .semibold))
                                     Text(item)
                                         .font(.system(size: 14, design: .rounded))
-                                        .foregroundColor(.grayText)
+                                        .foregroundStyle(Color.adaptiveGray)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
