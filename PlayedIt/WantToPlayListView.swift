@@ -236,7 +236,9 @@ struct WantToPlayListView: View {
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
-        .sheet(isPresented: $showRecommendations) {
+        .sheet(isPresented: $showRecommendations, onDismiss: {
+            Task { await loadGames() }
+        }) {
             RecommendationsView()
         }
     }

@@ -297,7 +297,7 @@ class WantToPlayManager: ObservableObject {
                 .select("*")
                 .eq("user_id", value: userId.uuidString)
                 .filter("sort_position", operator: "is", value: "null")
-                .order("created_at", ascending: false)
+                .order("created_at", ascending: true)
                 .execute()
                 .value
             

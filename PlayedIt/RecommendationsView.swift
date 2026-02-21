@@ -1,10 +1,13 @@
 import SwiftUI
+internal import PostgREST
+import Supabase
 
 struct RecommendationsView: View {
     @StateObject private var manager = RecommendationManager.shared
     @State private var showDismissSheet = false
     @State private var dismissTarget: RecommendationDisplay? = nil
     @State private var gameToLog: RecommendationDisplay? = nil
+    @State private var selectedDetail: RecommendationDisplay? = nil
     @State private var toast: String? = nil
     @State private var hasGenerated = false
     @Environment(\.dismiss) private var dismiss
@@ -26,15 +29,6 @@ struct RecommendationsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.adaptiveGray)
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
                         Task {
                             await manager.generateRecommendations()
                         }
@@ -43,6 +37,15 @@ struct RecommendationsView: View {
                             .foregroundColor(.primaryBlue)
                     }
                     .disabled(manager.isGenerating)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
                 }
             }
             .overlay(alignment: .bottom) {
@@ -94,6 +97,9 @@ struct RecommendationsView: View {
                 Button("Cancel", role: .cancel) { }
             } message: { _ in
                 Text("Why doesn't this work for you? (optional)")
+            }
+            .sheet(item: $selectedDetail) { rec in
+                RecommendationDetailSheet(recommendation: rec)
             }
         }
     }
@@ -193,7 +199,6 @@ struct RecommendationsView: View {
                         },
                         onWantToPlay: {
                             Task {
-                                // Add to Want to Play
                                 let added = await WantToPlayManager.shared.addGame(
                                     gameId: rec.recommendation.gameId,
                                     gameTitle: rec.gameTitle,
@@ -203,12 +208,18 @@ struct RecommendationsView: View {
                                 if added {
                                     let _ = await manager.markAsWantToPlay(recommendationId: rec.id)
                                     withAnimation { toast = "Added! Find it in your Want to Play list." }
+                                } else {
+                                    let _ = await manager.markAsWantToPlay(recommendationId: rec.id)
+                                    withAnimation { toast = "Already in your Want to Play list!" }
                                 }
                             }
                         },
                         onDismiss: {
                             dismissTarget = rec
                             showDismissSheet = true
+                        },
+                        onTapDetail: {
+                            selectedDetail = rec
                         }
                     )
                 }
@@ -248,6 +259,7 @@ struct RecommendationCard: View {
     let onRankIt: () -> Void
     let onWantToPlay: () -> Void
     let onDismiss: () -> Void
+    var onTapDetail: () -> Void = {}
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -297,6 +309,8 @@ struct RecommendationCard: View {
                 
                 Spacer()
             }
+            .contentShape(Rectangle())
+            .onTapGesture { onTapDetail() }
             
             // Action buttons
             HStack(spacing: 10) {
@@ -369,72 +383,189 @@ struct RecommendationLogGameSheet: View {
     
     @Environment(\.dismiss) var dismiss
     
+    private var game: Game {
+        Game(
+            id: recommendation.gameRawgId,
+            rawgId: recommendation.gameRawgId,
+            title: recommendation.gameTitle,
+            coverURL: recommendation.gameCoverUrl,
+            genres: recommendation.genres,
+            platforms: recommendation.platforms ?? [],
+            releaseDate: nil,
+            metacriticScore: nil,
+            added: nil,
+            rating: nil,
+            gameDescription: nil,
+            tags: []
+        )
+    }
+    
+    var body: some View {
+        GameLogView(game: game)
+    }
+}
+
+// MARK: - Recommendation Detail Sheet
+
+struct RecommendationDetailSheet: View {
+    let recommendation: RecommendationDisplay
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var gameDescription: String? = nil
+    @State private var isLoadingDescription = true
+    
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // Game preview
-                HStack(spacing: 12) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Cover art
                     AsyncImage(url: URL(string: recommendation.gameCoverUrl ?? "")) { image in
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .aspectRatio(contentMode: .fit)
                     } placeholder: {
                         Rectangle()
                             .fill(Color.secondaryBackground)
+                            .overlay(
+                                Image(systemName: "gamecontroller")
+                                    .foregroundStyle(Color.adaptiveSilver)
+                                    .font(.system(size: 30))
+                            )
                     }
-                    .frame(width: 60, height: 80)
-                    .cornerRadius(8)
+                    .frame(maxHeight: 300)
+                    .cornerRadius(12)
                     .clipped()
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
                     
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(recommendation.gameTitle)
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.adaptiveSlate)
-                        
-                        Text("This will open the full game log flow")
-                            .font(.system(size: 14, design: .rounded))
+                    // Genres
+                    if !recommendation.genres.isEmpty {
+                        Text(recommendation.genres.prefix(4).joined(separator: " · "))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.adaptiveGray)
                     }
                     
-                    Spacer()
+                    // Prediction badge
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12))
+                        Text(recommendation.prediction.summaryText)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(predictionColor)
+                    
+                    // Friend attribution
+                    if let friendName = recommendation.sourceFriendName,
+                       let friendRank = recommendation.sourceFriendRankPosition {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 12))
+                            Text("\(friendName) ranked this #\(friendRank)")
+                                .font(.system(size: 14, design: .rounded))
+                        }
+                        .foregroundStyle(Color.adaptiveGray)
+                    }
+                    
+                    // Description
+                    if isLoadingDescription {
+                        ProgressView()
+                            .padding(.top, 10)
+                    } else if let desc = gameDescription, !desc.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("About")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.adaptiveSlate)
+                            
+                            Text(desc)
+                                .font(.system(size: 14, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                                .lineSpacing(4)
+                        }
+                        .padding(.horizontal, 20)
+                    } else {
+                        Text("No description available")
+                            .font(.system(size: 14, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSilver)
+                    }
+                    
+                    Spacer(minLength: 40)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                
-                Text("Tap below to search for this game and log it through the normal ranking flow. Once ranked, we'll track how our prediction stacked up!")
-                    .font(.system(size: 15, design: .rounded))
-                    .foregroundStyle(Color.adaptiveGray)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 30)
-                
-                Spacer()
-                
-                // For now, just dismiss — the user will go to the normal log flow
-                // In a future iteration, this could pre-fill the game search
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Got it")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.primaryBlue)
-                .padding(.horizontal, 40)
-                .padding(.bottom, 30)
             }
-            .navigationTitle("Rank This Game")
+            .navigationTitle(recommendation.gameTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
                 }
             }
-        }
-        .presentationDetents([.medium])
+            .task {
+                await loadDescription()
+            }
         }
     }
+    
+    private var predictionColor: Color {
+        switch recommendation.prediction.predictedPercentile {
+        case 65...100: return Color(red: 0.25, green: 0.55, blue: 0.42)
+        case 40..<65: return .adaptiveGray
+        default: return Color.red
+        }
+    }
+    
+    private func loadDescription() async {
+        // First try the games table
+        do {
+            struct GameDesc: Decodable {
+                let description: String?
+            }
+            
+            let infos: [GameDesc] = try await SupabaseManager.shared.client
+                .from("games")
+                .select("description")
+                .eq("rawg_id", value: recommendation.gameRawgId)
+                .limit(1)
+                .execute()
+                .value
+            
+            if let desc = infos.first?.description, !desc.isEmpty {
+                let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                gameDescription = cleaned
+                isLoadingDescription = false
+                return
+            }
+        } catch {
+            print("⚠️ Error loading description from DB: \(error)")
+        }
+        
+        // Fallback to RAWG API
+        do {
+            let details = try await RAWGService.shared.getGameDetails(id: recommendation.gameRawgId)
+            let desc = details.gameDescription ?? details.gameDescriptionHtml ?? ""
+            let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            gameDescription = cleaned.isEmpty ? nil : cleaned
+            
+            // Cache for next time
+            if !cleaned.isEmpty {
+                _ = try? await SupabaseManager.shared.client
+                    .from("games")
+                    .update(["description": desc])
+                    .eq("rawg_id", value: recommendation.gameRawgId)
+                    .execute()
+            }
+        } catch {
+            print("⚠️ Error loading description from RAWG: \(error)")
+            gameDescription = nil
+        }
+        
+        isLoadingDescription = false
+    }
+}
 
     // MARK: - How It Works Sheet
 
