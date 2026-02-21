@@ -3,9 +3,65 @@ import SwiftUI
 // MARK: - WhatsNew Manager
 
 struct WhatsNewManager {
-    static let currentVersion = "1.2.3"
+    static let currentVersion = "1.3.0"
     
     static let features: [WhatsNewFeature] = [
+        WhatsNewFeature(
+            icon: "moon.stars.fill",
+            title: "Dark Mode",
+            description: "Your rankings look even better in the dark. Full dark mode support with true black backgrounds for OLED displays. Your eyes (and your battery) will thank you."
+        ),
+        WhatsNewFeature(
+            icon: "sparkles",
+            title: "Game Recommendations",
+            description: "PlayedIt now predicts how much you'll like games you haven't played yet. We blend your friends' taste, your genre preferences, and review data to surface your next favorite game."
+        ),
+        WhatsNewFeature(
+            icon: "arrow.down.doc.fill",
+            title: "Steam Library Import",
+            description: "Bring your Steam library along for the ride. Import your games and start ranking without logging everything manually."
+        ),
+        WhatsNewFeature(
+            icon: "eye.fill",
+            title: "Want to Play, Now Social",
+            description: "Your Want to Play list is now visible to friends. Let them see your backlog, and silently judge your taste."
+        ),
+        WhatsNewFeature(
+            icon: "text.book.closed.fill",
+            title: "Game Descriptions",
+            description: "Game detail views now include full descriptions so you can finally remember what that indie game was actually about."
+        ),
+        WhatsNewFeature(
+            icon: "flag.fill",
+            title: "Report Content",
+            description: "See something that shouldn't be there? Report posts, comments, and profiles right from the app. Keeping things clean for everyone."
+        )
+    ]
+    
+    static let minorImprovements: [String] = [
+        "Feed posts are now condensed when someone logs a bunch of games at once. No more scrolling past 47 Steam imports",
+        "Tap any game in your Want to Play list to open its detail view",
+        "Rank games directly from a friend's profile, no more dead-end taps",
+        "Games in the feed are clickable just like on profiles",
+        "Tapping a profile image on re-ranked posts now actually goes to that person's profile",
+        "The plus button is now on the same side across all pages (consistency, what a concept)",
+        "Sort your Want to Play list however you want",
+        "Cancel pending friend requests if you change your mind",
+        "Menu button and close button swapped to the correct sides on feed game details",
+        "Larger touch targets on menu buttons. Easier to tap, harder to miss",
+        "RAWG attribution added to the search page",
+        "Friend request confirmation text no longer sticks around after you go back to send another"
+    ]
+    
+    static let bugFixes: [String] = [
+        "Fixed icon alignment on the changelog across different device sizes",
+        "Clicking a profile image on re-ranked posts now navigates correctly",
+        "Friend request confirmation no longer persists when sending multiple requests"
+    ]
+    
+    // MARK: - Previous Version (1.2.3)
+    
+    static let previousFeatures_1_2_3: [WhatsNewFeature] = [
         WhatsNewFeature(
             icon: "apple.logo",
             title: "Sign in with Apple",
@@ -33,7 +89,7 @@ struct WhatsNewManager {
         )
     ]
     
-    static let minorImprovements: [String] = [
+    static let previousMinorImprovements_1_2_3: [String] = [
         "Reset your password with the new forgot password flow",
         "Edit platforms and notes after ranking without re-ranking",
         "Platform selection is now optional when ranking",
@@ -51,7 +107,7 @@ struct WhatsNewManager {
         "New version toast so you know what's changed"
     ]
     
-    static let bugFixes: [String] = [
+    static let previousBugFixes_1_2_3: [String] = [
         "Wrong password error no longer haunts the forgot password screen",
         "Tapping whitespace on a profile no longer opens random game details",
         "Game art taps in rankings work consistently now",
@@ -103,33 +159,33 @@ struct WhatsNewView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     // Major features
-                        ForEach(WhatsNewManager.features) { feature in
-                            HStack(alignment: .top, spacing: 0) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color.accentOrange.opacity(0.12))
-                                        .frame(width: 44, height: 44)
-                                    
-                                    Image(systemName: feature.icon)
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.accentOrange)
-                                }
-                                .frame(width: 60, alignment: .leading)
+                    ForEach(WhatsNewManager.features) { feature in
+                        HStack(alignment: .top, spacing: 0) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.accentOrange.opacity(0.12))
+                                    .frame(width: 44, height: 44)
                                 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(feature.title)
-                                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(Color.adaptiveSlate)
-                                    
-                                    Text(feature.description)
-                                        .font(.system(size: 15, design: .rounded))
-                                        .foregroundStyle(Color.adaptiveGray)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: feature.icon)
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.accentOrange)
                             }
-                            .padding(.horizontal, 24)
+                            .frame(width: 60, alignment: .leading)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(feature.title)
+                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveSlate)
+                                
+                                Text(feature.description)
+                                    .font(.system(size: 15, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveGray)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .padding(.horizontal, 24)
+                    }
                     
                     // Minor improvements section
                     VStack(alignment: .leading, spacing: 12) {

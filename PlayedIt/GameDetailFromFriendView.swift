@@ -47,7 +47,7 @@ struct GameDetailFromFriendView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
+            ToolbarItem(placement: .primaryAction) {
                 if userGame.userId.lowercased() != (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
                     Menu {
                         Button(role: .destructive) {

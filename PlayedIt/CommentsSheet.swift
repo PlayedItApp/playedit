@@ -476,9 +476,10 @@ struct CommentRowView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.caption)
+                            .font(.system(size: 14))
                             .foregroundStyle(Color.adaptiveGray)
-                            .padding(4)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                         Button("Delete", role: .destructive) {

@@ -796,6 +796,8 @@ struct FeedItemRow: View {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 14))
                             .foregroundStyle(Color.adaptiveGray)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                 }
             }
@@ -999,7 +1001,7 @@ struct FeedGameDetailSheet: View {
                             myGames: myGames
                         )
                         .toolbar {
-                            ToolbarItem(placement: .navigationBarTrailing) {
+                            ToolbarItem(placement: .navigationBarLeading) {
                                 Button { dismiss() } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 24))
