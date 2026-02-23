@@ -876,7 +876,9 @@ struct FriendProfileView: View {
                 friendName: friend.username
             )
         }
-        .sheet(isPresented: $showBatchRank) {
+        .sheet(isPresented: $showBatchRank, onDismiss: {
+            Task { await loadData() }
+        }) {
             BatchRankSelectionView(
                 friendGames: friendGames,
                 myGames: myGames,

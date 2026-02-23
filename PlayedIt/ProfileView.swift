@@ -240,7 +240,7 @@ struct ProfileView: View {
                                 
                                 ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
                                     RankedGameRow(rank: index + 1, game: game) {
-                                        Task { await fetchRankedGames() }
+                                        await fetchRankedGames()
                                     }
                                 }
                                 .padding(.horizontal, 20)

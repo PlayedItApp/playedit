@@ -239,7 +239,7 @@ struct MainTabView: View {
 struct RankedGameRow: View {
     let rank: Int
     let game: UserGame
-    var onUpdate: (() -> Void)? = nil
+    var onUpdate: (() async -> Void)? = nil
     @State private var showDetail = false
     
     var body: some View {
@@ -298,9 +298,11 @@ struct RankedGameRow: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail, onDismiss: {
-            onUpdate?()
+            Task { await onUpdate?() }
         }) {
-            GameDetailSheet(game: game, rank: rank)
+            GameDetailSheet(game: game, rank: rank, onRankUpdated: {
+                await onUpdate?()
+            })
         }
     }
     
@@ -317,6 +319,7 @@ struct RankedGameRow: View {
 struct GameDetailSheet: View {
     let game: UserGame
     let rank: Int
+    var onRankUpdated: (() async -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var supabase = SupabaseManager.shared
     
@@ -769,6 +772,7 @@ struct GameDetailSheet: View {
                     onComplete: { newPosition in
                         Task {
                             await saveReRankedGame(newPosition: newPosition)
+                            await onRankUpdated?()
                             dismiss()
                         }
                     }
@@ -922,6 +926,8 @@ struct GameDetailSheet: View {
             
             debugLog("✅ Re-ranked from #\(rank) → #\(newPosition)")
             
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s for DB propagation
+            
         } catch {
             debugLog("❌ Error saving re-ranked game: \(error)")
         }
@@ -977,6 +983,7 @@ struct GameDetailSheet: View {
             }
             
             debugLog("✅ Removed \(game.gameTitle) from rankings")
+            await onRankUpdated?()
             dismiss()
             
         } catch {

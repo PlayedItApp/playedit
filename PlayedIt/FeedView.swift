@@ -588,7 +588,7 @@ struct GroupedFeedItem: Identifiable {
     }
     
     var collapsedItems: [FeedItem] {
-        items.filter { $0.rankPosition != 1 }
+        items
     }
     
     var displayLabel: String {
