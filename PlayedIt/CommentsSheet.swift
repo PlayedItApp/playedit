@@ -13,10 +13,13 @@ struct CommentsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isInputFocused: Bool
     @State private var editingComment: FeedComment? = nil
+    @State private var replyingTo: FeedComment? = nil
     @State private var editText = ""
     @State private var moderationError: String?
     @State private var hiddenCommentIds: Set<String> = []
     @State private var reportingComment: FeedComment? = nil
+    @State private var isPostMuted = false
+    @State private var mutedCommentIds: Set<String> = []
 
     private var isPostOwner: Bool {
         feedItem.userId.lowercased() == (supabase.currentUser?.id.uuidString ?? "").lowercased()
@@ -102,21 +105,64 @@ struct CommentsSheet: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(comments) { comment in
-                                CommentRowView(
-                                    comment: comment,
-                                    isPostOwner: isPostOwner,
-                                    onEdit: {
-                                        editingComment = comment
-                                        editText = comment.content
-                                    },
-                                    onDelete: {
-                                        deleteComment(comment)
-                                    },
-                                    isReported: hiddenCommentIds.contains(comment.id),
-                                    onReport: {
-                                        reportingComment = comment
+                                VStack(alignment: .leading, spacing: 0) {
+                                    CommentRowView(
+                                        comment: comment,
+                                        isPostOwner: isPostOwner,
+                                        onEdit: {
+                                            editingComment = comment
+                                            editText = comment.content
+                                        },
+                                        onDelete: {
+                                            deleteComment(comment)
+                                        },
+                                        isReported: hiddenCommentIds.contains(comment.id),
+                                        onReport: {
+                                            reportingComment = comment
+                                        },
+                                        onReply: {
+                                            replyingTo = comment
+                                            isInputFocused = true
+                                        },
+                                        onLike: {
+                                            toggleCommentLike(comment)
+                                        },
+                                        onMuteThread: {
+                                            toggleMuteThread(comment)
+                                        },
+                                        isThreadMuted: mutedCommentIds.contains(comment.id)
+                                    )
+                                    
+                                    // Threaded replies
+                                    if !comment.replies.isEmpty {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            ForEach(comment.replies) { reply in
+                                                CommentRowView(
+                                                    comment: reply,
+                                                    isPostOwner: isPostOwner,
+                                                    onEdit: {
+                                                        editingComment = reply
+                                                        editText = reply.content
+                                                    },
+                                                    onDelete: {
+                                                        deleteComment(reply)
+                                                    },
+                                                    isReported: hiddenCommentIds.contains(reply.id),
+                                                    onReport: {
+                                                        reportingComment = reply
+                                                    },
+                                                    onReply: nil,
+                                                    onLike: {
+                                                        toggleCommentLike(reply)
+                                                    },
+                                                    isReply: true
+                                                )
+                                            }
+                                        }
+                                        .padding(.leading, 42)
+                                        .padding(.top, 8)
                                     }
-                                )
+                                }
                             }
                         }
                         .padding()
@@ -141,6 +187,24 @@ struct CommentsSheet: View {
                             Spacer()
                             Button {
                                 self.moderationError = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.adaptiveGray)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                    }
+                    
+                    if let replyTarget = replyingTo {
+                        HStack {
+                            Text("Replying to \(replyTarget.username)")
+                                .font(.caption)
+                                .foregroundColor(.primaryBlue)
+                            Spacer()
+                            Button {
+                                replyingTo = nil
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
@@ -216,9 +280,27 @@ struct CommentsSheet: View {
                         dismiss()
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button {
+                            toggleMutePost()
+                        } label: {
+                            Label(
+                                isPostMuted ? "Unmute notifications" : "Mute notifications",
+                                systemImage: isPostMuted ? "bell.fill" : "bell.slash"
+                            )
+                        }
+                    } label: {
+                        Image(systemName: isPostMuted ? "bell.slash.fill" : "bell.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(isPostMuted ? .adaptiveGray : .primaryBlue)
+                    }
+                }
             }
             .task {
                 await fetchComments()
+                await checkMuteStatus()
+                await fetchMutedThreads()
             }
             .sheet(item: $reportingComment) { comment in
                 ReportView(
@@ -244,6 +326,7 @@ struct CommentsSheet: View {
                 let user_id: String
                 let content: String
                 let created_at: String
+                let parent_comment_id: String?
                 let users: UserInfo?
                 
                 struct UserInfo: Decodable {
@@ -254,13 +337,42 @@ struct CommentsSheet: View {
             
             let data: [CommentData] = try await supabase.client
                 .from("feed_comments")
-                .select("id, user_id, content, created_at, users(username, avatar_url)")
+                .select("id, user_id, content, created_at, parent_comment_id, users(username, avatar_url)")
                 .eq("feed_post_id", value: feedItem.feedPostId)
                 .order("created_at", ascending: true)
                 .execute()
                 .value
             
-            comments = data.map { row in
+            // Fetch comment reactions
+            let commentIds = data.map { $0.id }
+            
+            struct CommentReactionRow: Decodable {
+                let comment_id: String
+                let user_id: String
+            }
+            
+            var reactionRows: [CommentReactionRow] = []
+            if !commentIds.isEmpty {
+                reactionRows = try await supabase.client
+                    .from("comment_reactions")
+                    .select("comment_id, user_id")
+                    .in("comment_id", values: commentIds)
+                    .execute()
+                    .value
+            }
+            
+            var commentLikeCountMap: [String: Int] = [:]
+            var myLikedCommentIds: Set<String> = []
+            
+            for reaction in reactionRows {
+                commentLikeCountMap[reaction.comment_id, default: 0] += 1
+                if reaction.user_id.lowercased() == userId.uuidString.lowercased() {
+                    myLikedCommentIds.insert(reaction.comment_id)
+                }
+            }
+            
+            // Build flat list
+            let allComments = data.map { row in
                 FeedComment(
                     id: row.id,
                     userId: row.user_id,
@@ -268,12 +380,26 @@ struct CommentsSheet: View {
                     avatarURL: row.users?.avatar_url,
                     content: row.content,
                     createdAt: row.created_at,
-                    isOwn: row.user_id.lowercased() == userId.uuidString.lowercased()
+                    isOwn: row.user_id.lowercased() == userId.uuidString.lowercased(),
+                    parentCommentId: row.parent_comment_id,
+                    likeCount: commentLikeCountMap[row.id] ?? 0,
+                    isLikedByMe: myLikedCommentIds.contains(row.id),
+                    replies: []
                 )
             }
             
-            isLoading = false
+            // Build threaded structure
+            let repliesByParent = Dictionary(grouping: allComments.filter { $0.parentCommentId != nil }) { $0.parentCommentId! }
             
+            comments = allComments
+                .filter { $0.parentCommentId == nil }
+                .map { comment in
+                    var c = comment
+                    c.replies = repliesByParent[comment.id] ?? []
+                    return c
+                }
+            
+            isLoading = false
         } catch {
             debugLog("❌ Error fetching comments: \(error)")
             isLoading = false
@@ -302,6 +428,7 @@ struct CommentsSheet: View {
                     let user_game_id: String?
                     let user_id: String
                     let content: String
+                    let parent_comment_id: String?
                 }
                 
                 try await supabase.client
@@ -310,11 +437,13 @@ struct CommentsSheet: View {
                         feed_post_id: feedItem.feedPostId,
                         user_game_id: feedItem.userGameId.isEmpty ? nil : feedItem.userGameId,
                         user_id: userId.uuidString,
-                        content: content
+                        content: content,
+                        parent_comment_id: replyingTo?.id
                     ))
                     .execute()
                 
                 newComment = ""
+                replyingTo = nil
                 isInputFocused = false
                 await fetchComments()
                 
@@ -339,6 +468,134 @@ struct CommentsSheet: View {
                     
                 } catch {
                     debugLog("❌ Error deleting comment: \(error)")
+                }
+            }
+        }
+    
+    private func toggleMuteThread(_ comment: FeedComment) {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            Task {
+                do {
+                    if mutedCommentIds.contains(comment.id) {
+                        try await supabase.client
+                            .from("muted_threads")
+                            .delete()
+                            .eq("user_id", value: userId.uuidString)
+                            .eq("comment_id", value: comment.id)
+                            .execute()
+                        mutedCommentIds.remove(comment.id)
+                    } else {
+                        try await supabase.client
+                            .from("muted_threads")
+                            .insert([
+                                "user_id": userId.uuidString,
+                                "feed_post_id": feedItem.feedPostId,
+                                "comment_id": comment.id
+                            ])
+                            .execute()
+                        mutedCommentIds.insert(comment.id)
+                    }
+                } catch {
+                    debugLog("❌ Error toggling thread mute: \(error)")
+                }
+            }
+        }
+        
+        private func fetchMutedThreads() async {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            do {
+                struct MuteRow: Decodable {
+                    let comment_id: String?
+                }
+                let rows: [MuteRow] = try await supabase.client
+                    .from("muted_threads")
+                    .select("comment_id")
+                    .eq("user_id", value: userId.uuidString)
+                    .eq("feed_post_id", value: feedItem.feedPostId)
+                    .not("comment_id", operator: .is, value: "null")
+                    .execute()
+                    .value
+                mutedCommentIds = Set(rows.compactMap { $0.comment_id })
+            } catch {
+                debugLog("❌ Error fetching muted threads: \(error)")
+            }
+        }
+    
+    private func toggleMutePost() {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            Task {
+                do {
+                    if isPostMuted {
+                        try await supabase.client
+                            .from("muted_threads")
+                            .delete()
+                            .eq("user_id", value: userId.uuidString)
+                            .eq("feed_post_id", value: feedItem.feedPostId)
+                            .is("comment_id", value: nil)
+                            .execute()
+                    } else {
+                        try await supabase.client
+                            .from("muted_threads")
+                            .insert([
+                                "user_id": userId.uuidString,
+                                "feed_post_id": feedItem.feedPostId
+                            ])
+                            .execute()
+                    }
+                    isPostMuted.toggle()
+                } catch {
+                    debugLog("❌ Error toggling mute: \(error)")
+                }
+            }
+        }
+        
+        private func checkMuteStatus() async {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            do {
+                struct MuteRow: Decodable { let id: String }
+                let rows: [MuteRow] = try await supabase.client
+                    .from("muted_threads")
+                    .select("id")
+                    .eq("user_id", value: userId.uuidString)
+                    .eq("feed_post_id", value: feedItem.feedPostId)
+                    .is("comment_id", value: nil)
+                    .limit(1)
+                    .execute()
+                    .value
+                isPostMuted = !rows.isEmpty
+            } catch {
+                debugLog("❌ Error checking mute status: \(error)")
+            }
+        }
+    
+    private func toggleCommentLike(_ comment: FeedComment) {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            Task {
+                do {
+                    if comment.isLikedByMe {
+                        try await supabase.client
+                            .from("comment_reactions")
+                            .delete()
+                            .eq("comment_id", value: comment.id)
+                            .eq("user_id", value: userId.uuidString)
+                            .execute()
+                    } else {
+                        try await supabase.client
+                            .from("comment_reactions")
+                            .insert([
+                                "comment_id": comment.id,
+                                "user_id": userId.uuidString
+                            ])
+                            .execute()
+                    }
+                    await fetchComments()
+                } catch {
+                    debugLog("❌ Error toggling comment like: \(error)")
                 }
             }
         }
@@ -389,6 +646,10 @@ struct FeedComment: Identifiable {
     let content: String
     let createdAt: String
     let isOwn: Bool
+    let parentCommentId: String?
+    var likeCount: Int
+    var isLikedByMe: Bool
+    var replies: [FeedComment]
 }
 
 // MARK: - Comment Row View
@@ -399,10 +660,14 @@ struct CommentRowView: View {
     let onDelete: () -> Void
     var isReported: Bool = false
     var onReport: (() -> Void)? = nil
+    var onReply: (() -> Void)? = nil
+    var onLike: (() -> Void)? = nil
+    var onMuteThread: (() -> Void)? = nil
+    var isThreadMuted: Bool = false
+    var isReply: Bool = false
     
     @State private var showDeleteConfirm = false
     
-    // Can delete if: it's your own comment OR you own the post
     private var canDelete: Bool {
         comment.isOwn || isPostOwner
     }
@@ -420,19 +685,19 @@ struct CommentRowView: View {
                             .fill(Color.primaryBlue.opacity(0.2))
                             .overlay(
                                 Text(String(comment.username.prefix(1)).uppercased())
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: isReply ? 10 : 14, weight: .semibold))
                                     .foregroundColor(.primaryBlue)
                             )
                     }
-                    .frame(width: 32, height: 32)
+                    .frame(width: isReply ? 24 : 32, height: isReply ? 24 : 32)
                     .clipShape(Circle())
                 } else {
                     Circle()
                         .fill(Color.primaryBlue.opacity(0.2))
-                        .frame(width: 32, height: 32)
+                        .frame(width: isReply ? 24 : 32, height: isReply ? 24 : 32)
                         .overlay(
                             Text(String(comment.username.prefix(1)).uppercased())
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: isReply ? 10 : 14, weight: .semibold))
                                 .foregroundColor(.primaryBlue)
                         )
                 }
@@ -441,7 +706,7 @@ struct CommentRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(comment.username)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: isReply ? 13 : 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.adaptiveSlate)
                     
                     Text(timeAgo(from: comment.createdAt))
@@ -474,9 +739,20 @@ struct CommentRowView: View {
                                 Label("Report", systemImage: "flag")
                             }
                         }
+                        
+                        if comment.isOwn && !isReply {
+                            Button {
+                                onMuteThread?()
+                            } label: {
+                                Label(
+                                    isThreadMuted ? "Unmute replies" : "Mute replies",
+                                    systemImage: isThreadMuted ? "bell.fill" : "bell.slash"
+                                )
+                            }
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 14))
+                            .font(.system(size: isReply ? 12 : 14))
                             .foregroundStyle(Color.adaptiveGray)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -500,9 +776,44 @@ struct CommentRowView: View {
                         .cornerRadius(8)
                 } else {
                     SpoilerTextView(comment.content)
-                        .font(.subheadline)
+                        .font(.system(size: isReply ? 13 : 14))
                         .foregroundStyle(Color.adaptiveSlate)
                 }
+                
+                // Like & Reply buttons
+                HStack(spacing: 16) {
+                    Button {
+                        onLike?()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: comment.isLikedByMe ? "heart.fill" : "heart")
+                                .font(.system(size: 12))
+                                .foregroundStyle(comment.isLikedByMe ? Color.orange : Color.adaptiveGray)
+                            if comment.likeCount > 0 {
+                                Text("\(comment.likeCount)")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(comment.isLikedByMe ? Color.orange : Color.adaptiveGray)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    if !isReply {
+                        Button {
+                            onReply?()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrowshape.turn.up.left")
+                                    .font(.system(size: 12))
+                                Text("Reply")
+                                    .font(.system(size: 12))
+                            }
+                            .foregroundStyle(Color.adaptiveGray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 4)
             }
         }
     }
