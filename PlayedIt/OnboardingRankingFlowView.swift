@@ -294,56 +294,18 @@ struct OnboardingRankingFlowView: View {
         guard let userId = supabase.currentUser?.id else { return }
         
         do {
-            // Shift games at or below position down by 1
-            struct GameToShift: Decodable {
-                let id: String
-                let rank_position: Int
-            }
-            
-            let gamesToShift: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .not("rank_position", operator: .is, value: "null")
-                .gte("rank_position", value: position)
-                .order("rank_position", ascending: false)
-                .execute()
-                .value
-            
-            for g in gamesToShift {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position + 1])
-                    .eq("id", value: g.id)
-                    .execute()
-            }
-            
-            // Resolve canonical game ID
             let canonicalId = await RAWGService.shared.getParentGameId(for: currentGame?.rawgId ?? gameId) ?? gameId
             
-            // Insert
-            struct UserGameInsert: Encodable {
-                let user_id: String
-                let game_id: Int
-                let rank_position: Int
-                let platform_played: [String]
-                let notes: String
-                let canonical_game_id: Int
-                let batch_source: String
-            }
-            
-            let insert = UserGameInsert(
-                user_id: userId.uuidString,
-                game_id: gameId,
-                rank_position: position,
-                platform_played: [],
-                notes: "",
-                canonical_game_id: canonicalId,
-                batch_source: "onboarding"
-            )
-            
-            try await supabase.client.from("user_games")
-                .insert(insert)
+            try await supabase.client
+                .rpc("insert_game_at_rank", params: [
+                    "p_user_id": AnyJSON.string(userId.uuidString),
+                    "p_game_id": AnyJSON.integer(gameId),
+                    "p_rank": AnyJSON.integer(position),
+                    "p_platform_played": AnyJSON.array([]),
+                    "p_notes": AnyJSON.string(""),
+                    "p_canonical_game_id": AnyJSON.integer(canonicalId),
+                    "p_batch_source": AnyJSON.string("onboarding")
+                ])
                 .execute()
             
             debugLog("✅ Onboarding: \(currentGame?.title ?? "Unknown") ranked at #\(position)")

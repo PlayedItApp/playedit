@@ -476,102 +476,53 @@ struct GameLogView: View {
     }
     
     // MARK: - Save User Game
-    private func saveUserGame(gameId: Int, position: Int) async {
-        guard let userId = supabase.currentUser?.id else { return }
-        
-        do {
-            // If re-ranking, delete the old entry first and adjust positions
-            if let existing = existingUserGame {
-                // Delete the old entry
-                try await supabase.client
-                    .from("user_games")
-                    .delete()
-                    .eq("id", value: existing.id)
-                    .execute()
-                
-                // Shift games that were below the old position up by 1
-                struct GameToShiftUp: Decodable {
-                    let id: String
-                    let rank_position: Int
-                }
-                
-                let gamesToShiftUp: [GameToShiftUp] = try await supabase.client
-                    .from("user_games")
-                    .select("id, rank_position")
-                    .eq("user_id", value: userId.uuidString)
-                    .not("rank_position", operator: .is, value: "null")
-                    .gt("rank_position", value: existing.rank_position)
-                    .execute()
-                    .value
-                for game in gamesToShiftUp {
+        private func saveUserGame(gameId: Int, position: Int) async {
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            do {
+                // If re-ranking, use the rerank RPC
+                if let existing = existingUserGame {
+                    let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
+                    debugLog("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
+                    
                     try await supabase.client
-                        .from("user_games")
-                        .update(["rank_position": game.rank_position - 1])
-                        .eq("id", value: game.id)
+                        .rpc("rerank_game", params: [
+                            "p_user_game_id": AnyJSON.string(existing.id),
+                            "p_user_id": AnyJSON.string(userId.uuidString),
+                            "p_old_rank": AnyJSON.integer(existing.rank_position),
+                            "p_new_rank": AnyJSON.integer(position),
+                            "p_game_id": AnyJSON.integer(gameId),
+                            "p_platform_played": AnyJSON.array(Array(selectedPlatforms).map { AnyJSON.string($0) }),
+                            "p_notes": AnyJSON.string(notes),
+                            "p_canonical_game_id": AnyJSON.integer(canonicalId)
+                        ])
                         .execute()
+                    
+                    debugLog("✅ Re-ranked at position \(position)")
+                    existingUserGame = nil
+                } else {
+                    // New game — use insert RPC
+                    let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
+                    debugLog("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
+                    
+                    try await supabase.client
+                        .rpc("insert_game_at_rank", params: [
+                            "p_user_id": AnyJSON.string(userId.uuidString),
+                            "p_game_id": AnyJSON.integer(gameId),
+                            "p_rank": AnyJSON.integer(position),
+                            "p_platform_played": AnyJSON.array(Array(selectedPlatforms).map { AnyJSON.string($0) }),
+                            "p_notes": AnyJSON.string(notes),
+                            "p_canonical_game_id": AnyJSON.integer(canonicalId)
+                        ])
+                        .execute()
+                    
+                    debugLog("✅ Game logged at position \(position)")
                 }
                 
-                debugLog("✅ Deleted old entry at position \(existing.rank_position)")
-                existingUserGame = nil
+            } catch {
+                debugLog("❌ Error saving user game: \(error)")
             }
-            
-            // Now shift games at or below the new position down by 1
-            struct GameToShift: Decodable {
-                let id: String
-                let rank_position: Int
-            }
-            
-            let gamesToShift: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .not("rank_position", operator: .is, value: "null")
-                .gte("rank_position", value: position)
-                .order("rank_position", ascending: false)
-                .execute()
-                .value
-            
-            for game in gamesToShift {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": game.rank_position + 1])
-                    .eq("id", value: game.id)
-                    .execute()
-            }
-            
-            // Resolve canonical game ID
-            let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
-            debugLog("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
-            
-            // Insert the new entry
-            struct UserGameInsert: Encodable {
-                let user_id: String
-                let game_id: Int
-                let rank_position: Int
-                let platform_played: [String]
-                let notes: String
-                let canonical_game_id: Int
-            }
-            
-            let userGameInsert = UserGameInsert(
-                user_id: userId.uuidString,
-                game_id: gameId,
-                rank_position: position,
-                platform_played: selectedPlatforms.isEmpty ? [] : Array(selectedPlatforms),
-                notes: notes,
-                canonical_game_id: canonicalId
-            )
-            
-            try await supabase.client.from("user_games")
-                .insert(userGameInsert)
-                .execute()
-            
-            debugLog("✅ Game logged at position \(position)")
-            
-        } catch {
-            debugLog("❌ Error saving user game: \(error)")
         }
-    }
 }
 
 // MARK: - Platform Button

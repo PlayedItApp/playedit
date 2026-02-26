@@ -670,7 +670,6 @@ struct SteamImportView: View {
               let rawgId = game.rawgId else { return }
         
         do {
-            // Upsert game into games table
             struct GameInsert: Encodable {
                 let rawg_id: Int
                 let title: String
@@ -695,7 +694,6 @@ struct SteamImportView: View {
                 .upsert(gameInsert, onConflict: "rawg_id")
                 .execute()
             
-            // Get the game ID
             struct GameIdResponse: Decodable { let id: Int }
             let gameRecord: GameIdResponse = try await supabase.client.from("games")
                 .select("id")
@@ -704,54 +702,20 @@ struct SteamImportView: View {
                 .execute()
                 .value
             
-            // Shift existing games at or below position
-            struct GameToShift: Decodable { let id: String; let rank_position: Int }
-            let gamesToShift: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .not("rank_position", operator: .is, value: "null")
-                .gte("rank_position", value: position)
-                .order("rank_position", ascending: false)
-                .execute()
-                .value
-            
-            for g in gamesToShift {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position + 1])
-                    .eq("id", value: g.id)
-                    .execute()
-            }
-            
-            // Resolve canonical game ID
             let canonicalId = await RAWGService.shared.getParentGameId(for: rawgId) ?? rawgId
             
-            // Insert user_game
-            struct UserGameInsert: Encodable {
-                let user_id: String
-                let game_id: Int
-                let rank_position: Int
-                let platform_played: [String]
-                let notes: String
-                let canonical_game_id: Int
-                let steam_appid: Int
-                let steam_playtime_minutes: Int
-                let batch_source: String
-            }
-            
-            try await supabase.client.from("user_games")
-                .insert(UserGameInsert(
-                    user_id: userId.uuidString,
-                    game_id: gameRecord.id,
-                    rank_position: position,
-                    platform_played: ["PC"],
-                    notes: "",
-                    canonical_game_id: canonicalId,
-                    steam_appid: game.steamAppId,
-                    steam_playtime_minutes: game.playtimeMinutes,
-                    batch_source: "steam_import"
-                ))
+            try await supabase.client
+                .rpc("insert_game_at_rank", params: [
+                    "p_user_id": AnyJSON.string(userId.uuidString),
+                    "p_game_id": AnyJSON.integer(gameRecord.id),
+                    "p_rank": AnyJSON.integer(position),
+                    "p_platform_played": AnyJSON.array([AnyJSON.string("PC")]),
+                    "p_notes": AnyJSON.string(""),
+                    "p_canonical_game_id": AnyJSON.integer(canonicalId),
+                    "p_batch_source": AnyJSON.string("steam_import"),
+                    "p_steam_appid": AnyJSON.integer(game.steamAppId),
+                    "p_steam_playtime_minutes": AnyJSON.integer(game.playtimeMinutes)
+                ])
                 .execute()
             
             debugLog("✅ Imported \(game.displayTitle) at position \(position)")

@@ -992,7 +992,9 @@ struct FeedGameDetailSheet: View {
                 }
             } else if let userGame = userGame {
                 if item.userId.lowercased() == (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
-                    GameDetailSheet(game: userGame, rank: userGame.rankPosition)
+                    GameDetailSheet(game: userGame, rank: userGame.rankPosition, onRankUpdated: {
+                        // Feed will refresh on dismiss via .task
+                    })
                 } else if let friend = friend {
                     NavigationStack {
                         GameDetailFromFriendView(

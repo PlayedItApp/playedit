@@ -849,138 +849,40 @@ struct GameDetailSheet: View {
         guard let userId = supabase.currentUser?.id else { return }
         
         do {
-            // 1. Delete the old entry
-            try await supabase.client
-                .from("user_games")
-                .delete()
-                .eq("id", value: game.id)
-                .execute()
-            
-            // 2. Shift games that were below the old rank up by 1
-            struct GameToShift: Decodable {
-                let id: String
-                let rank_position: Int
-            }
-            
-            let gamesToShiftUp: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .not("rank_position", operator: .is, value: "null")
-                .gt("rank_position", value: rank)
-                .execute()
-                .value
-            
-            for g in gamesToShiftUp {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position - 1])
-                    .eq("id", value: g.id)
-                    .execute()
-            }
-            
-            // 3. Shift games at or below the new position down by 1
-            let gamesToShiftDown: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .not("rank_position", operator: .is, value: "null")
-                .gte("rank_position", value: newPosition)
-                .order("rank_position", ascending: false)
-                .execute()
-                .value
-            
-            for g in gamesToShiftDown {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position + 1])
-                    .eq("id", value: g.id)
-                    .execute()
-            }
-            
-            // Resolve canonical game ID
             let canonicalId = await RAWGService.shared.getParentGameId(for: game.gameRawgId ?? game.gameId) ?? (game.gameRawgId ?? game.gameId)
             
-            // 4. Insert at new position
-            struct UserGameInsert: Encodable {
-                let user_id: String
-                let game_id: Int
-                let rank_position: Int
-                let platform_played: [String]
-                let notes: String
-                let canonical_game_id: Int
-            }
-            
-            let insert = UserGameInsert(
-                user_id: userId.uuidString,
-                game_id: game.gameId,
-                rank_position: newPosition,
-                platform_played: game.platformPlayed,
-                notes: game.notes ?? "",
-                canonical_game_id: canonicalId
-            )
-            
-            try await supabase.client.from("user_games")
-                .insert(insert)
+            try await supabase.client
+                .rpc("rerank_game", params: [
+                    "p_user_game_id": AnyJSON.string(game.id),
+                    "p_user_id": AnyJSON.string(userId.uuidString),
+                    "p_old_rank": AnyJSON.integer(rank),
+                    "p_new_rank": AnyJSON.integer(newPosition),
+                    "p_game_id": AnyJSON.integer(game.gameId),
+                    "p_platform_played": AnyJSON.array(game.platformPlayed.map { AnyJSON.string($0) }),
+                    "p_notes": AnyJSON.string(game.notes ?? ""),
+                    "p_canonical_game_id": AnyJSON.integer(canonicalId)
+                ])
                 .execute()
             
             debugLog("✅ Re-ranked from #\(rank) → #\(newPosition)")
-            
-            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s for DB propagation
             
         } catch {
             debugLog("❌ Error saving re-ranked game: \(error)")
         }
     }
-    
-    // MARK: - Remove Game
+
+// MARK: - Remove Game
     private func removeGame() async {
         guard let userId = supabase.currentUser?.id else { return }
         isRemoving = true
         
         do {
-            // 1. Delete reactions and comments on this entry
             try await supabase.client
-                .from("feed_reactions")
-                .delete()
-                .eq("user_game_id", value: game.id)
+                .rpc("remove_game_and_rerank", params: [
+                    "p_user_game_id": AnyJSON.string(game.id),
+                    "p_user_id": AnyJSON.string(userId.uuidString)
+                ])
                 .execute()
-            
-            try await supabase.client
-                .from("feed_comments")
-                .delete()
-                .eq("user_game_id", value: game.id)
-                .execute()
-            
-            // 2. Delete the user_game entry
-            try await supabase.client
-                .from("user_games")
-                .delete()
-                .eq("id", value: game.id)
-                .execute()
-            
-            // 3. Shift all games ranked below this one up by 1
-            struct GameToShift: Decodable {
-                let id: String
-                let rank_position: Int
-            }
-            
-            let gamesToShift: [GameToShift] = try await supabase.client
-        .from("user_games")
-        .select("id, rank_position")
-        .eq("user_id", value: userId.uuidString)
-        .not("rank_position", operator: .is, value: "null")
-        .gt("rank_position", value: rank)
-        .execute()
-        .value
-            
-            for g in gamesToShift {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position - 1])
-                    .eq("id", value: g.id)
-                    .execute()
-            }
             
             debugLog("✅ Removed \(game.gameTitle) from rankings")
             await onRankUpdated?()

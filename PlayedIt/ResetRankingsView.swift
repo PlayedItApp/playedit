@@ -490,80 +490,50 @@ struct ResetRankingsView: View {
     }
     
     private func undoPreviousGame() async {
-        guard let snapshot = gameHistory.popLast() else { return }
-        guard let userId = supabase.currentUser?.id else { return }
-        
-        do {
-            // 1. Remove the rank from the game we just placed
-            let placedGame = shuffledGames[snapshot.gameIndex]
-            struct NullRank: Encodable {
-                let rank_position: String? = nil
-            }
+            guard let snapshot = gameHistory.popLast() else { return }
+            guard let userId = supabase.currentUser?.id else { return }
             
-            try await supabase.client
-                .from("user_games")
-                .update(NullRank())
-                .eq("id", value: placedGame.id)
-                .execute()
-            
-            // 2. Shift games that were pushed down back up
-            struct GameToShift: Decodable {
-                let id: String
-                let rank_position: Int
-            }
-            
-            let gamesToShift: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .gt("rank_position", value: snapshot.lastPlacedPosition)
-                .not("rank_position", operator: .is, value: "null")
-                .execute()
-                .value
-            
-            for g in gamesToShift {
-                try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position - 1])
-                    .eq("id", value: g.id)
-                    .execute()
-            }
-            
-            // 3. Restore local state
-            rankedSoFar = snapshot.rankedSoFar
-            currentGameIndex = snapshot.gameIndex
-            comparisonHistory = []
-            
-            // 4. If undoing back to the first matchup, also unrank game 1
-            if snapshot.gameIndex == 0 && snapshot.rankedSoFar.isEmpty {
-                // Unrank both games from the first matchup
-                let game0 = shuffledGames[0]
-                let game1 = shuffledGames[1]
+            do {
+                let placedGame = shuffledGames[snapshot.gameIndex]
                 
-                try await supabase.client
-                    .from("user_games")
-                    .update(NullRank())
-                    .eq("id", value: game1.id)
-                    .execute()
+                // Check if undoing back to the first matchup
+                if snapshot.gameIndex == 0 && snapshot.rankedSoFar.isEmpty {
+                    let game0 = shuffledGames[0]
+                    let game1 = shuffledGames[1]
+                    
+                    try await supabase.client
+                        .rpc("undo_first_matchup", params: [
+                            "p_game0_id": AnyJSON.string(game0.id),
+                            "p_game1_id": AnyJSON.string(game1.id),
+                            "p_user_id": AnyJSON.string(userId.uuidString)
+                        ])
+                        .execute()
+                    
+                    debugLog("✅ Undid first matchup, back to game 1 vs game 2")
+                } else {
+                    try await supabase.client
+                        .rpc("undo_game_placement", params: [
+                            "p_user_game_id": AnyJSON.string(placedGame.id),
+                            "p_user_id": AnyJSON.string(userId.uuidString),
+                            "p_placed_position": AnyJSON.integer(snapshot.lastPlacedPosition)
+                        ])
+                        .execute()
+                }
                 
-                try await supabase.client
-                    .from("user_games")
-                    .update(NullRank())
-                    .eq("id", value: game0.id)
-                    .execute()
+                // Restore local state
+                rankedSoFar = snapshot.rankedSoFar
+                currentGameIndex = snapshot.gameIndex
+                comparisonHistory = []
                 
-                debugLog("✅ Undid first matchup, back to game 1 vs game 2")
+                // Restart comparisons for this game
+                startComparisonForCurrentGame()
+                
+                debugLog("✅ Undid placement of \(placedGame.gameTitle), back to game \(snapshot.gameIndex + 1)")
+                
+            } catch {
+                debugLog("❌ Error undoing game placement: \(error)")
             }
-            
-            // 5. Restart comparisons for this game
-            startComparisonForCurrentGame()
-            
-            debugLog("✅ Undid placement of \(placedGame.gameTitle), back to game \(snapshot.gameIndex + 1)")
-            
-        } catch {
-            debugLog("❌ Error undoing game placement: \(error)")
         }
-    }
     
     // MARK: - Start Reset
     
@@ -598,79 +568,64 @@ struct ResetRankingsView: View {
     // MARK: - Place Game at Position
     
     private func placeGame(_ game: UserGame, at position: Int) async {
-        guard let userId = supabase.currentUser?.id else { return }
-        
-        // Save snapshot for game-level undo (skip first game — no comparison was made)
-        if currentGameIndex > 0 {
-            gameHistory.append(GameSnapshot(
-                gameIndex: currentGameIndex,
-                rankedSoFar: rankedSoFar,
-                lastPlacedPosition: position
-            ))
-        }
-        
-        do {
-            struct GameToShift: Decodable {
-                let id: String
-                let rank_position: Int
+            guard let userId = supabase.currentUser?.id else { return }
+            
+            // Save snapshot for game-level undo (skip first game — no comparison was made)
+            if currentGameIndex > 0 {
+                gameHistory.append(GameSnapshot(
+                    gameIndex: currentGameIndex,
+                    rankedSoFar: rankedSoFar,
+                    lastPlacedPosition: position
+                ))
             }
             
-            let gamesToShift: [GameToShift] = try await supabase.client
-                .from("user_games")
-                .select("id, rank_position")
-                .eq("user_id", value: userId.uuidString)
-                .not("rank_position", operator: .is, value: "null")
-                .gte("rank_position", value: position)
-                .order("rank_position", ascending: false)
-                .execute()
-                .value
-            
-            for g in gamesToShift {
+            do {
                 try await supabase.client
-                    .from("user_games")
-                    .update(["rank_position": g.rank_position + 1])
-                    .eq("id", value: g.id)
+                    .rpc("place_game_at_rank", params: [
+                        "p_user_game_id": AnyJSON.string(game.id),
+                        "p_user_id": AnyJSON.string(userId.uuidString),
+                        "p_rank": AnyJSON.integer(position)
+                    ])
                     .execute()
-            }
-            
-            try await supabase.client
-                .from("user_games")
-                .update(["rank_position": position])
-                .eq("id", value: game.id)
-                .execute()
-            
-            debugLog("✅ Placed \(game.gameTitle) at #\(position)")
-            
-            // Update local state
-            var updatedGame = game
-            updatedGame.rankPosition = position
-            
-            rankedSoFar = rankedSoFar.map { g in
-                var mutable = g
-                if mutable.rankPosition >= position {
-                    mutable.rankPosition += 1
+                
+                debugLog("✅ Placed \(game.gameTitle) at #\(position)")
+                
+                // Update local state
+                var updatedGame = game
+                updatedGame.rankPosition = position
+                
+                rankedSoFar = rankedSoFar.map { g in
+                    var mutable = g
+                    if mutable.rankPosition >= position {
+                        mutable.rankPosition += 1
+                    }
+                    return mutable
                 }
-                return mutable
+                rankedSoFar.append(updatedGame)
+                rankedSoFar.sort { $0.rankPosition < $1.rankPosition }
+                
+                // Move to next game
+                currentGameIndex += 1
+                
+                if currentGameIndex >= shuffledGames.count {
+                    // Safety net: renormalize at the end
+                    try? await supabase.client
+                        .rpc("renormalize_ranks", params: [
+                            "p_user_id": AnyJSON.string(userId.uuidString)
+                        ])
+                        .execute()
+                    
+                    await postFeedEntry()
+                    isComplete = true
+                } else {
+                    startComparisonForCurrentGame()
+                }
+                
+            } catch {
+                debugLog("❌ Error placing game: \(error)")
+                errorMessage = "Something went wrong. Try again?"
             }
-            rankedSoFar.append(updatedGame)
-            rankedSoFar.sort { $0.rankPosition < $1.rankPosition }
-            
-            // Move to next game
-            currentGameIndex += 1
-            
-            if currentGameIndex >= shuffledGames.count {
-                await postFeedEntry()
-                isComplete = true
-            } else {
-                // Immediately start comparison for next game — no sheet dismiss/present
-                startComparisonForCurrentGame()
-            }
-            
-        } catch {
-            debugLog("❌ Error placing game: \(error)")
-            errorMessage = "Something went wrong. Try again?"
         }
-    }
     
     // MARK: - Post Feed Entry
     
