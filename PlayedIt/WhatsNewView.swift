@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - WhatsNew Manager
 
 struct WhatsNewManager {
-    static let currentVersion = "1.3.0"
+    static let currentVersion = "1.2.6"
     
     static let features: [WhatsNewFeature] = [
         WhatsNewFeature(
@@ -35,6 +35,11 @@ struct WhatsNewManager {
             icon: "flag.fill",
             title: "Report Content",
             description: "See something that shouldn't be there? Report posts, comments, and profiles right from the app. Keeping things clean for everyone."
+        ),
+        WhatsNewFeature(
+            icon: "bubble.left.and.bubble.right.fill",
+            title: "Threaded Comments",
+            description: "Reply directly to comments and start conversations. Like comments to show some love, and mute threads when you need a break from the notifications."
         )
     ]
     

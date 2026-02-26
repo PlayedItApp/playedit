@@ -202,7 +202,11 @@ struct BatchGameRow: View {
                 Spacer()
             }
             .padding(12)
-            .background(isSelected ? Color.primaryBlue.opacity(0.05) : Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.adaptiveDivider, lineWidth: 0.5)
+            )
+            
             .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)

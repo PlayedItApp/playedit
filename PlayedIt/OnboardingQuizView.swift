@@ -115,6 +115,7 @@ struct OnboardingQuizView: View {
     @State private var gamesToRank: [OnboardingGame] = []
     @State private var rankedCount = 0
     @State private var showKeepGoingPrompt = false
+    @State private var showGameSearch = false
     
     enum OnboardingStep: Int, CaseIterable {
         case welcome = 0, platforms, genres, gameGrid
@@ -146,7 +147,7 @@ struct OnboardingQuizView: View {
                 }
                 
                 ZStack {
-                    Color.white.ignoresSafeArea()
+                    Color.appBackground.ignoresSafeArea()
                     
                     switch step {
                     case .welcome:
@@ -161,6 +162,13 @@ struct OnboardingQuizView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: step)
+            .sheet(isPresented: $showGameSearch) {
+                OnboardingGameSearchSheet(
+                    existingGameIds: Set(filteredGames.map { $0.rawgId }),
+                    selectedGameIds: $selectedGameIds,
+                    filteredGames: $filteredGames
+                )
+            }
             .fullScreenCover(isPresented: $showRankingFlow) {
                 OnboardingRankingFlowView(
                     games: filteredGames.filter { selectedGameIds.contains($0.id) },
@@ -345,7 +353,7 @@ struct OnboardingQuizView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(isSelected ? Color.primaryBlue : Color.clear, lineWidth: 2)
                         )
-                        .foregroundColor(isDisabled ? .silver : (isSelected ? .primaryBlue : .slate))
+                        .foregroundColor(isDisabled ? .adaptiveSilver : (isSelected ? .primaryBlue : .adaptiveSlate))
                     }
                     .buttonStyle(PlainButtonStyle())
                     .disabled(isDisabled)
@@ -413,7 +421,7 @@ struct OnboardingQuizView: View {
                     
                     // Search fallback
                     Button {
-                        // TODO: Open game search
+                        showGameSearch = true
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "magnifyingglass")
@@ -612,6 +620,214 @@ extension OnboardingGame {
             descriptionHtml: nil,
             tags: nil
         ))
+    }
+}
+
+// MARK: - Game Search Sheet
+
+struct OnboardingGameSearchSheet: View {
+    let existingGameIds: Set<Int>
+    @Binding var selectedGameIds: Set<UUID>
+    @Binding var filteredGames: [OnboardingGame]
+    
+    @Environment(\.dismiss) var dismiss
+    @State private var searchText = ""
+    @State private var searchResults: [Game] = []
+    @State private var isSearching = false
+    @State private var hasSearched = false
+    @State private var addedRawgIds: Set<Int> = []
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(Color.adaptiveGray)
+                    
+                    TextField("Search for a game...", text: $searchText)
+                        .autocorrectionDisabled()
+                        .onSubmit {
+                            Task { await search() }
+                        }
+                    
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                            searchResults = []
+                            hasSearched = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.secondaryBackground)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.adaptiveDivider, lineWidth: 1)
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                
+                if isSearching {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                } else if searchResults.isEmpty && hasSearched {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Image(systemName: "gamecontroller")
+                            .font(.system(size: 40))
+                            .foregroundStyle(Color.adaptiveSilver)
+                        Text("No games found")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    Spacer()
+                } else if searchResults.isEmpty {
+                    Spacer()
+                    Text("Search for any game to add it")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                    Spacer()
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(searchResults) { game in
+                                
+                                Button {
+                                    if let existing = filteredGames.first(where: { $0.rawgId == game.rawgId }) {
+                                        // Already in grid — toggle selection
+                                        if selectedGameIds.contains(existing.id) {
+                                            selectedGameIds.remove(existing.id)
+                                        } else {
+                                            selectedGameIds.insert(existing.id)
+                                        }
+                                    } else if addedRawgIds.contains(game.rawgId) {
+                                        removeGameFromGrid(game)
+                                    } else {
+                                        addGameToGrid(game)
+                                    }
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        AsyncImage(url: URL(string: game.coverURL ?? "")) { image in
+                                            image.resizable().scaledToFill()
+                                        } placeholder: {
+                                            Rectangle()
+                                                .fill(Color.secondaryBackground)
+                                                .overlay(
+                                                    Image(systemName: "gamecontroller.fill")
+                                                        .font(.system(size: 14))
+                                                        .foregroundStyle(Color.adaptiveSilver)
+                                                )
+                                        }
+                                        .frame(width: 50, height: 65)
+                                        .clipped()
+                                        .cornerRadius(6)
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(game.title)
+                                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                                .foregroundStyle(Color.adaptiveSlate)
+                                                .lineLimit(2)
+                                            
+                                            if let date = game.releaseDate?.prefix(4) {
+                                                Text(String(date))
+                                                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                                                    .foregroundStyle(Color.adaptiveGray)
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        if let existing = filteredGames.first(where: { $0.rawgId == game.rawgId }),
+                                           selectedGameIds.contains(existing.id) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 22))
+                                                .foregroundColor(.primaryBlue)
+                                        } else if addedRawgIds.contains(game.rawgId) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 22))
+                                                .foregroundColor(.primaryBlue)
+                                        } else {
+                                            Image(systemName: "plus.circle")
+                                                .font(.system(size: 22))
+                                                .foregroundColor(.primaryBlue)
+                                        }
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Divider().padding(.leading, 78)
+                            }
+                        }
+                        
+                        Link(destination: URL(string: "https://rawg.io")!) {
+                            Text("Game data powered by RAWG")
+                                .font(.system(size: 12, weight: .regular, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
+                        .padding(.vertical, 16)
+                    }
+                }
+            }
+            .navigationTitle("Search Games")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                }
+            }
+        }
+    }
+    
+    private func search() async {
+        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        isSearching = true
+        hasSearched = true
+        
+        do {
+            searchResults = try await RAWGService.shared.searchGames(query: searchText)
+        } catch {
+            debugLog("Search error: \(error)")
+            searchResults = []
+        }
+        
+        isSearching = false
+    }
+    
+    private func removeGameFromGrid(_ game: Game) {
+        if let index = filteredGames.firstIndex(where: { $0.rawgId == game.rawgId }) {
+            let onboardingGame = filteredGames[index]
+            selectedGameIds.remove(onboardingGame.id)
+            filteredGames.remove(at: index)
+        }
+        addedRawgIds.remove(game.rawgId)
+    }
+    
+    private func addGameToGrid(_ game: Game) {
+        let onboardingGame = OnboardingGame(
+            id: UUID(),
+            rawgId: game.rawgId,
+            title: game.title,
+            coverUrl: game.coverURL,
+            platforms: game.platforms,
+            genres: game.genres,
+            tags: [],
+            popularityScore: game.added ?? 0,
+            metacritic: game.metacriticScore,
+            releaseDate: game.releaseDate
+        )
+        
+        filteredGames.append(onboardingGame)
+        selectedGameIds.insert(onboardingGame.id)
+        addedRawgIds.insert(game.rawgId)
     }
 }
 

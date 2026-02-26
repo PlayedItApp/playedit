@@ -78,7 +78,6 @@ private func checkOnboardingStatus() async {
         needsOnboarding = false
         return
     }
-    
     debugLog("🔍 checkOnboardingStatus: checking for user \(userId)")
         
         do {
@@ -90,6 +89,7 @@ private func checkOnboardingStatus() async {
                 .count ?? 0
             
             needsOnboarding = count == 0
+            //needsOnboarding = true // TEMP: force onboarding
         } catch {
             debugLog("❌ Error checking onboarding status: \(error)")
             needsOnboarding = false
