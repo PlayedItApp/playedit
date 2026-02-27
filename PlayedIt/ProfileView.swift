@@ -21,6 +21,7 @@ struct ProfileView: View {
     @State private var currentNonce: String?
     @State private var appleLinkDelegate: AppleLinkDelegate?
     @AppStorage("startTab") private var startTab = 0
+    @AppStorage("hideNotifications") private var hideNotifications = false
     @EnvironmentObject var appearanceManager: AppearanceManager
     @State private var showGameSearch = false
     @State private var selectedListTab = 0
@@ -346,6 +347,9 @@ struct ProfileView: View {
                             }
                         } label: {
                             Label("Start Screen", systemImage: "house")
+                        }
+                        Toggle(isOn: $hideNotifications) {
+                            Label("Hide Notifications", systemImage: "bell.slash")
                         }
                         Menu {
                             Button { appearanceManager.appearanceMode = 0 } label: {

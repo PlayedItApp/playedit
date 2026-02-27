@@ -125,6 +125,7 @@ struct SplashView: View {
 struct MainTabView: View {
     var forceProfileTab: Bool = false
     @AppStorage("startTab") private var startTab = 0
+    @AppStorage("hideNotifications") private var hideNotifications = false
     @State private var selectedTab: Int = 0
     @State private var pendingRequestCount = 0
     @State private var unreadNotificationCount = 0
@@ -143,7 +144,7 @@ struct MainTabView: View {
                     Text("Feed")
                 }
                 .tag(0)
-                .badge(unreadNotificationCount > 0 ? unreadNotificationCount : 0)
+                .badge(!hideNotifications && unreadNotificationCount > 0 ? unreadNotificationCount : 0)
             
             FriendsView()
                 .tabItem {
@@ -182,7 +183,9 @@ struct MainTabView: View {
         }
         .task {
             await fetchPendingCount()
-            await fetchUnreadNotificationCount()
+            if !hideNotifications {
+                await fetchUnreadNotificationCount()
+            }
             await WantToPlayManager.shared.refreshMyIds()
             if let userId = supabase.currentUser?.id {
                     await GameLogView.backfillUsedPlatformsIfNeeded(for: userId, client: supabase.client)
@@ -230,7 +233,8 @@ struct MainTabView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            guard !hideNotifications else { return }
             Task {
                 await fetchUnreadNotificationCount()
             }

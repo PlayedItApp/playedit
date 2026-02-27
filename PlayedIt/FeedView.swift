@@ -10,6 +10,7 @@ struct FeedView: View {
     @State private var showGameSearch = false
     @State private var selectedItem: FeedItem?
     @State private var showNotifications = false
+    @AppStorage("hideNotifications") private var hideNotifications = false
     
     var body: some View {
         NavigationStack {
@@ -36,20 +37,22 @@ struct FeedView: View {
                     }
                 }
                 
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showNotifications = true
-                    } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "bell")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.primaryBlue)
-                            
-                            if unreadNotificationCount > 0 {
-                                Circle()
-                                    .fill(Color.orange)
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 2, y: -2)
+                if !hideNotifications {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showNotifications = true
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.primaryBlue)
+                                
+                                if unreadNotificationCount > 0 {
+                                    Circle()
+                                        .fill(Color.orange)
+                                        .frame(width: 8, height: 8)
+                                        .offset(x: 2, y: -2)
+                                }
                             }
                         }
                     }
@@ -68,14 +71,16 @@ struct FeedView: View {
                 NotificationsView()
             }
             .onChange(of: showNotifications) { _, isShowing in
-                if !isShowing {
+                if !isShowing && !hideNotifications {
                     Task { await fetchUnreadCount() }
                 }
             }
         }
         .task {
             await fetchFeed()
-            await fetchUnreadCount()
+            if !hideNotifications {
+                await fetchUnreadCount()
+            }
         }
     }
     
@@ -168,7 +173,9 @@ struct FeedView: View {
         .background(Color(.systemGroupedBackground))
         .refreshable {
             await fetchFeed()
-            await fetchUnreadCount()
+            if !hideNotifications {
+                await fetchUnreadCount()
+            }
         }
     }
     
