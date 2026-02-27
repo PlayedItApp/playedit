@@ -802,6 +802,12 @@ struct GameDetailSheet: View {
                 }
             }
             .task {
+                // Instantly apply cached metadata if available
+                if let cached = GameMetadataCache.shared.get(gameId: game.gameId) {
+                    metacriticScore = cached.metacriticScore
+                    gameDescription = cached.description
+                }
+                
                 // Fetch total ranked game count for share card
                 if let userId = supabase.currentUser?.id {
                     let count: Int = (try? await supabase.client
@@ -814,13 +820,15 @@ struct GameDetailSheet: View {
                     totalRankedGames = count
                 }
                 
+                // Skip DB+RAWG if we already have description from cache
+                guard gameDescription == nil else { return }
+                
                 do {
                     struct GameInfo: Decodable {
                         let rawg_id: Int
                         let description: String?
                         let metacritic_score: Int?
                     }
-                    // Try by rawg_id first, fall back to local id
                     var results: [GameInfo] = []
                     if let rawgId = game.gameRawgId {
                         results = try await SupabaseManager.shared.client
@@ -850,6 +858,7 @@ struct GameDetailSheet: View {
                     
                     if let cached = result.description, !cached.isEmpty {
                         gameDescription = cached
+                        GameMetadataCache.shared.set(gameId: game.gameId, description: cached, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate)
                         return
                     }
                     
@@ -857,6 +866,7 @@ struct GameDetailSheet: View {
                     gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                     
                     if let desc = gameDescription, !desc.isEmpty {
+                        GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate)
                         _ = try? await SupabaseManager.shared.client
                             .from("games")
                             .update(["description": desc])

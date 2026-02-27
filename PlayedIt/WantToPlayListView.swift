@@ -1635,6 +1635,15 @@ struct FirstTwoComparisonView: View {
         
         private func fetchGameDetails() async {
         debugLog("🔍 WTP Detail: fetching gameId=\(game.gameId), title=\(game.gameTitle)")
+        
+        // Instantly apply cached metadata if available
+        if let cached = GameMetadataCache.shared.get(gameId: game.gameId) {
+            metacriticScore = cached.metacriticScore
+            gameDescription = cached.description
+            releaseDate = cached.releaseDate
+            if gameDescription != nil { return }
+        }
+        
         do {
             struct GameInfo: Decodable {
                 let rawg_id: Int
@@ -1651,19 +1660,28 @@ struct FirstTwoComparisonView: View {
                 .value
             
             guard let info = infos.first else {
-                debugLog("⚠️ No games row found for rawg_id \(game.gameId), fetching directly from RAWG")
+                debugLog("⚠️ No games row found for gameId \(game.gameId), fetching directly from RAWG")
                 let details = try await RAWGService.shared.getGameDetails(id: game.gameId)
                 gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                 return
             }
                 
-                metacriticScore = info.metacritic_score
-                releaseDate = info.release_date
-                
+            metacriticScore = info.metacritic_score
+            releaseDate = info.release_date
+            
+            // Use cached description if available — skip RAWG entirely
+            if let desc = info.description, !desc.isEmpty {
+                gameDescription = desc
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date)
+                return
+            }
+            
+            // Only call RAWG if we don't have a description yet
             let details = try await RAWGService.shared.getGameDetails(id: info.rawg_id)
-                gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+            gameDescription = details.gameDescription ?? details.gameDescriptionHtml
 
             if let desc = gameDescription, !desc.isEmpty {
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date)
                 _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])

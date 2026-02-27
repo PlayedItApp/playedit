@@ -1474,24 +1474,27 @@ struct FeedGameDetailSheet: View {
     @State private var myGames: [UserGame] = []
     @State private var isLoading = true
     
+    // Pre-built UserGame from FeedItem for instant display
+    private var prebuiltUserGame: UserGame {
+        UserGame(
+            id: item.userGameId.isEmpty ? item.id : item.userGameId,
+            gameId: item.gameId,
+            userId: item.userId,
+            rankPosition: item.rankPosition ?? 0,
+            platformPlayed: [],
+            notes: nil,
+            loggedAt: item.loggedAt,
+            canonicalGameId: nil,
+            gameTitle: item.gameTitle,
+            gameCoverURL: item.gameCoverURL,
+            gameReleaseDate: nil,
+            gameRawgId: nil
+        )
+    }
+    
     var body: some View {
         Group {
-            if isLoading {
-                NavigationStack {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarTrailing) {
-                                Button { dismiss() } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                }
-                            }
-                        }
-                }
-            } else if let userGame = userGame {
+            if let userGame = userGame {
                 if item.userId.lowercased() == (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
                     GameDetailSheet(game: userGame, rank: userGame.rankPosition, onRankUpdated: {
                         // Feed will refresh on dismiss via .task
@@ -1531,6 +1534,15 @@ struct FeedGameDetailSheet: View {
             }
         }
         .task {
+            // Show instantly with what we already have
+            if userGame == nil {
+                userGame = prebuiltUserGame
+                
+                // For own posts, no friend data needed — stop loading immediately
+                if item.userId.lowercased() == (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
+                    isLoading = false
+                }
+            }
             await loadData()
         }
     }
@@ -1561,29 +1573,47 @@ struct FeedGameDetailSheet: View {
                 }
             }
             
-            // 1. Fetch the user_game entry
-            let row: UserGameRow = try await supabase.client
-                .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id)")
-                .eq("id", value: item.userGameId)
-                .single()
-                .execute()
-                .value
-            
-            userGame = UserGame(
-                id: row.id,
-                gameId: row.game_id,
-                userId: row.user_id,
-                rankPosition: row.rank_position ?? 0,
-                platformPlayed: row.platform_played,
-                notes: row.notes,
-                loggedAt: row.logged_at,
-                canonicalGameId: row.canonical_game_id,
-                gameTitle: row.games.title,
-                gameCoverURL: row.games.cover_url,
-                gameReleaseDate: row.games.release_date,
-                gameRawgId: row.games.rawg_id
-            )
+            // 1. Fetch the user_game entry (or use pre-built data if userGameId is empty, e.g. batch taps)
+            if !item.userGameId.isEmpty {
+                let row: UserGameRow = try await supabase.client
+                    .from("user_games")
+                    .select("*, games(title, cover_url, release_date, rawg_id)")
+                    .eq("id", value: item.userGameId)
+                    .single()
+                    .execute()
+                    .value
+                
+                userGame = UserGame(
+                    id: row.id,
+                    gameId: row.game_id,
+                    userId: row.user_id,
+                    rankPosition: row.rank_position ?? 0,
+                    platformPlayed: row.platform_played,
+                    notes: row.notes,
+                    loggedAt: row.logged_at,
+                    canonicalGameId: row.canonical_game_id,
+                    gameTitle: row.games.title,
+                    gameCoverURL: row.games.cover_url,
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
+                )
+            } else {
+                // Fallback: build from FeedItem data (no DB fetch needed)
+                userGame = UserGame(
+                    id: item.id,
+                    gameId: item.gameId,
+                    userId: item.userId,
+                    rankPosition: item.rankPosition ?? 0,
+                    platformPlayed: [],
+                    notes: nil,
+                    loggedAt: item.loggedAt,
+                    canonicalGameId: nil,
+                    gameTitle: item.gameTitle,
+                    gameCoverURL: item.gameCoverURL,
+                    gameReleaseDate: nil,
+                    gameRawgId: nil
+                )
+            }
             
             // Skip friend/myGames fetch if it's own post
             if item.userId.lowercased() == userId.uuidString.lowercased() {
