@@ -165,6 +165,7 @@ struct FeedView: View {
             }
             .padding(16)
         }
+        .background(Color(.systemGroupedBackground))
         .refreshable {
             await fetchFeed()
             await fetchUnreadCount()

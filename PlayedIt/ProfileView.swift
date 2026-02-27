@@ -255,9 +255,15 @@ struct ProfileView: View {
                     .padding(.top, 8)
                 }
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showGameSearch) {
+            .sheet(isPresented: $showGameSearch, onDismiss: {
+                Task {
+                    await fetchRankedGames()
+                    await WantToPlayManager.shared.refreshMyIds()
+                }
+            }) {
                 GameSearchView()
             }
             .fullScreenCover(isPresented: $showSteamImport, onDismiss: {
@@ -543,6 +549,7 @@ struct ProfileView: View {
         
         ImageCache.shared.prefetch(urls: rankedGames.compactMap { $0.gameCoverURL })
         isLoadingGames = false
+        NotificationCenter.default.post(name: .wantToPlayShouldRefresh, object: nil)
     }
     private func loadUnrankedAndResume() async {
         guard let userId = supabase.currentUser?.id else { return }

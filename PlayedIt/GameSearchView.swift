@@ -173,7 +173,6 @@ struct GameSearchRow: View {
     let game: Game
     let isRanked: Bool
     let onSelect: () -> Void
-    @ObservedObject private var wantToPlayManager = WantToPlayManager.shared
     @State private var showToast = false
     @State private var toastMessage = ""
     
@@ -228,25 +227,28 @@ struct GameSearchRow: View {
                             .padding(.vertical, 4)
                             .background(Color.teal)
                             .clipShape(Capsule())
-                    } else if wantToPlayManager.myWantToPlayIds.contains(game.id) {
-                        Text("Want to Play")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.accentOrange)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.accentOrange.opacity(0.15))
-                            .clipShape(Capsule())
                     } else {
-                        // Want to Play button
-                        Button {
-                            Task { await addToWantToPlay() }
-                        } label: {
-                            Image(systemName: "bookmark")
-                                .font(.system(size: 16))
-                                .foregroundStyle(Color.adaptiveGray)
+                        HStack(spacing: 6) {
+                            if showToast {
+                                Text(toastMessage)
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveGray)
+                                    .transition(.opacity)
+                            }
+                            BookmarkButton(
+                                gameId: game.id,
+                                gameTitle: game.title,
+                                gameCoverUrl: game.coverURL,
+                                source: "search",
+                                onToast: { message in
+                                    toastMessage = message
+                                    withAnimation { showToast = true }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                        withAnimation { showToast = false }
+                                    }
+                                }
+                            )
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 
@@ -262,40 +264,8 @@ struct GameSearchRow: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.adaptiveDivider, lineWidth: 0.5)
             )
-            .overlay(
-                Group {
-                    if showToast {
-                        Text(toastMessage)
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.slate)
-                            .cornerRadius(8)
-                            .transition(.opacity)
-                    }
-                }
-            )
         }
         .buttonStyle(PlainButtonStyle())
-    }
-    
-    private func addToWantToPlay() async {
-        debugLog("🔥 addToWantToPlay called with gameId: \(game.id), title: \(game.title), currentIds: \(wantToPlayManager.myWantToPlayIds)")
-            let success = await wantToPlayManager.addGame(
-            gameId: game.id,
-            gameTitle: game.title,
-            gameCoverUrl: game.coverURL,
-            source: "search"
-        )
-        if success {
-            debugLog("🔍 After add - gameId: \(game.id), contains: \(wantToPlayManager.myWantToPlayIds.contains(game.id)), allIds: \(wantToPlayManager.myWantToPlayIds)")
-            toastMessage = "Saved to Want to Play!"
-            withAnimation { showToast = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                withAnimation { showToast = false }
-            }
-        }
     }
 }
 

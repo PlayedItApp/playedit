@@ -2,6 +2,10 @@ import SwiftUI
 internal import PostgREST
 import Supabase
 
+extension Notification.Name {
+    static let wantToPlayShouldRefresh = Notification.Name("wantToPlayShouldRefresh")
+}
+
 struct WantToPlayListView: View {
     @ObservedObject private var manager = WantToPlayManager.shared
     @State private var rankedGames: [WantToPlayGame] = []
@@ -36,6 +40,9 @@ struct WantToPlayListView: View {
         .task {
             await loadGames()
             await fetchPredictions()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wantToPlayShouldRefresh)) { _ in
+            Task { await loadGames() }
         }
         .sheet(isPresented: $showRankAllSheet, onDismiss: {
             isRankingAll = false
