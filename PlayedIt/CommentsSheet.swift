@@ -163,7 +163,9 @@ struct CommentsSheet: View {
                                 }
                             }
                         }
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom)
                     }
                 }
                 
@@ -752,7 +754,7 @@ struct CommentRowView: View {
                         Image(systemName: "ellipsis")
                             .font(.system(size: isReply ? 12 : 14))
                             .foregroundStyle(Color.adaptiveGray)
-                            .frame(width: 44, height: 44)
+                            .padding(8)
                             .contentShape(Rectangle())
                     }
                     .confirmationDialog("Delete comment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -773,9 +775,7 @@ struct CommentRowView: View {
                         .background(Color.secondaryBackground)
                         .cornerRadius(8)
                 } else {
-                    SpoilerTextView(comment.content)
-                        .font(.system(size: isReply ? 13 : 14))
-                        .foregroundStyle(Color.adaptiveSlate)
+                    SpoilerTextView(comment.content, font: .system(size: isReply ? 13 : 14), color: .primary)
                 }
                 
                 // Like & Reply buttons

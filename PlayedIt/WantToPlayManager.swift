@@ -331,7 +331,7 @@ class WantToPlayManager: ObservableObject {
                 let batch_post_id: String?
             }
             
-            let posts: [FeedPostRow] = try await supabase.client
+            let _: [FeedPostRow] = try await supabase.client
                 .from("feed_posts")
                 .select("id, batch_post_id")
                 .eq("user_id", value: userId)
