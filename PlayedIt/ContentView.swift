@@ -373,7 +373,7 @@ struct RankedGameRow: View {
                     }
                     
                     if !game.platformPlayed.isEmpty {
-                        Text(game.platformPlayed.joined(separator: " • "))
+                        Text(game.platformPlayed.sorted().joined(separator: " • "))
                             .font(.caption)
                             .foregroundStyle(Color.adaptiveGray)
                             .lineLimit(1)
@@ -788,7 +788,7 @@ struct GameDetailSheet: View {
             .onAppear {
                 if !hasInitialized {
                     displayedNotes = game.notes
-                    displayedPlatforms = game.platformPlayed
+                    displayedPlatforms = game.platformPlayed.sorted()
                     hasInitialized = true
                 }
             }
@@ -1002,7 +1002,7 @@ struct GameDetailSheet: View {
                     .execute()
                 
                 debugLog("✅ Platforms saved")
-                displayedPlatforms = Array(editedPlatforms)
+                displayedPlatforms = Array(editedPlatforms).sorted()
                 isEditingPlatforms = false
                 customPlatform = ""
                 
