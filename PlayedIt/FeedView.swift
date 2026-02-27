@@ -332,7 +332,7 @@ struct FeedView: View {
                 }
             }
             
-            let posts: [FeedPostRow] = try await supabase.client
+            var allPosts: [FeedPostRow] = try await supabase.client
                 .from("feed_posts")
                 .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
                 .in("user_id", values: feedUserIds)
@@ -341,7 +341,22 @@ struct FeedView: View {
                 .execute()
                 .value
             
-            let feedPostIds = posts.map { $0.id }
+            // Fetch any batch children that fell outside the limit
+            let batchParentIds = allPosts.filter { $0.post_type == "batch_ranked" }.map { $0.id }
+            let fetchedChildBatchIds = Set(allPosts.compactMap { $0.batch_post_id })
+            let missingBatchIds = batchParentIds.filter { !fetchedChildBatchIds.contains($0) }
+            
+            if !missingBatchIds.isEmpty {
+                let missingChildren: [FeedPostRow] = try await supabase.client
+                    .from("feed_posts")
+                    .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                    .in("batch_post_id", values: missingBatchIds)
+                    .execute()
+                    .value
+                allPosts.append(contentsOf: missingChildren)
+            }
+            
+            let feedPostIds = allPosts.map { $0.id }
             
             guard !feedPostIds.isEmpty else {
                 feedItems = []
@@ -394,7 +409,7 @@ struct FeedView: View {
             // Build combined feed
             var combined: [FeedEntry] = []
             
-            for post in posts {
+            for post in allPosts {
                 let likes = likeCountMap[post.id] ?? 0
                 let comments = commentCountMap[post.id] ?? 0
                 let isLiked = myLikedIds.contains(post.id)
@@ -427,7 +442,7 @@ struct FeedView: View {
                     
                 case "batch_ranked":
                     // Build grouped entry from the batch's child posts
-                    let childPosts = posts.filter { p in
+                    let childPosts = allPosts.filter { p in
                         p.batch_post_id == post.id && p.post_type == "ranked_game"
                     }
                     
@@ -470,6 +485,7 @@ struct FeedView: View {
                         commentCount: comments,
                         isLikedByMe: isLiked
                     )
+                    debugLog("🔍 Batch \(post.id) — \(childItems.count) children, covers: \(childItems.map { $0.gameCoverURL ?? "nil" })")
                     combined.append(.groupedGames(group))
                     
                 case "reset_rankings":
@@ -594,7 +610,7 @@ struct GroupedFeedItem: Identifiable {
     var displayLabel: String {
         switch batchSource {
         case "steam_import":
-            return "\(username) imported their Steam library — \(gameCount) games ranked"
+            return "\(username) imported their Steam library. \(gameCount) games ranked!"
         case "onboarding":
             return "\(username) just joined and ranked \(gameCount) games!"
         default:
@@ -657,9 +673,11 @@ struct FeedItemRow: View {
                 .clipped()
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(item.username) ranked")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.adaptiveGray)
+                    NavigationLink(destination: item.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: item.userId, friendshipId: "", username: item.username, userId: item.userId, avatarURL: item.avatarURL)))) {
+                            Text("\(Text(item.username).fontWeight(.semibold).foregroundStyle(Color.adaptiveSlate))\(Text(" ranked").foregroundStyle(Color.adaptiveGray))")
+                                                            .font(.subheadline)
+                        }
+                        .buttonStyle(.plain)
                     
                     Text(item.gameTitle)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -875,7 +893,10 @@ struct ActivityFeedRow: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
-                        Text(item.username)
+                        NavigationLink(destination: item.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: item.userId, friendshipId: "", username: item.username, userId: item.userId, avatarURL: item.avatarURL)))) {
+                            Text(item.username)
+                        }
+                        .buttonStyle(.plain)
                         Text("rebuilt their rankings")
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 11, weight: .semibold))
@@ -933,12 +954,12 @@ struct ActivityFeedRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-        .background(Color.cardBackground) 
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-    }
-        
-    private var avatarPlaceholder: some View {
+        .background(Color.cardBackground)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        }
+            
+        private var avatarPlaceholder: some View {
         Circle()
             .fill(Color.primaryBlue.opacity(0.2))
             .frame(width: 40, height: 40)
@@ -1259,9 +1280,12 @@ struct GroupedFeedRow: View {
                 .buttonStyle(.plain)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(group.displayLabel)
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.adaptiveSlate)
+                    NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                        Text("\(Text(group.username).fontWeight(.semibold))\(Text(groupDisplaySuffix))")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
+                    }
+                    .buttonStyle(.plain)
                     
                     Text(timeAgo(from: group.mostRecentDate))
                         .font(.caption)
@@ -1368,32 +1392,36 @@ struct GroupedFeedRow: View {
     
     // MARK: - Cover Art Grid
     private var coverArtGrid: some View {
-        let displayItems = Array(group.collapsedItems.prefix(6))
-        let remaining = group.collapsedItems.count - 6
+        let totalCount = group.collapsedItems.count
+        let showCount = totalCount <= 3 ? totalCount : (totalCount <= 5 ? 3 : min(totalCount, 6))
+        let displayItems = Array(group.collapsedItems.prefix(showCount))
+        let remaining = totalCount - showCount
         
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: min(displayItems.count, 3)), spacing: 8) {
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
             ForEach(Array(displayItems.enumerated()), id: \.element.id) { index, item in
                 ZStack {
-                    AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
+                    GeometryReader { geo in
+                        AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
+                            image.resizable().scaledToFill()
+                                .frame(width: geo.size.width, height: geo.size.height)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color.secondaryBackground)
+                                .overlay(
+                                    Image(systemName: "gamecontroller")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.adaptiveSilver)
+                                )
+                        }
                     }
                     .frame(height: 60)
-                    .clipped()
                     .cornerRadius(6)
+                    .clipped()
                     
                     // "+X more" badge on last item
-                    if index == 5 && remaining > 0 {
-                        Rectangle()
+                    if index == displayItems.count - 1 && remaining > 0 {
+                        RoundedRectangle(cornerRadius: 6)
                             .fill(Color.black.opacity(0.5))
-                            .cornerRadius(6)
                         
                         Text("+\(remaining)")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -1549,6 +1577,17 @@ struct GroupedFeedRow: View {
                 localLikeCountOverrides[item.feedPostId] = currentCount
                 debugLog("❌ Error toggling child like: \(error)")
             }
+        }
+    }
+    
+    private var groupDisplaySuffix: String {
+        switch group.batchSource {
+        case "steam_import":
+            return " imported their Steam library. \(group.gameCount) games ranked!"
+        case "onboarding":
+            return " just joined and ranked \(group.gameCount) games!"
+        default:
+            return " ranked \(group.gameCount) games"
         }
     }
     

@@ -3,7 +3,9 @@ import SwiftUI
 // MARK: - WhatsNew Manager
 
 struct WhatsNewManager {
-    static let currentVersion = "1.2.6"
+    static let currentVersion: String = {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }()
     
     static let features: [WhatsNewFeature] = [
         WhatsNewFeature(

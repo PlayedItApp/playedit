@@ -92,7 +92,7 @@ private func checkOnboardingStatus() async {
             //needsOnboarding = true // TEMP: force onboarding
         } catch {
             debugLog("❌ Error checking onboarding status: \(error)")
-            needsOnboarding = false
+            needsOnboarding = true
         }
     }
 }
@@ -180,6 +180,9 @@ struct MainTabView: View {
             await fetchPendingCount()
             await fetchUnreadNotificationCount()
             await WantToPlayManager.shared.refreshMyIds()
+            if let userId = supabase.currentUser?.id {
+                await GameLogView.backfillUsedPlatformsIfNeeded(for: userId, client: supabase.client)
+            }
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             Task {
@@ -336,12 +339,23 @@ struct GameDetailSheet: View {
     @State private var editedPlatforms: Set<String> = []
     @State private var customPlatform: String = ""
     @State private var isSavingPlatforms = false
+    @State private var showAllPlatformsSheet = false
     @State private var displayedNotes: String? = nil
     @State private var displayedPlatforms: [String] = []
     @State private var hasInitialized = false
     @State private var notesError: String?
     @State private var gameDescription: String? = nil
     
+    
+    private var quickPlatforms: [String] {
+        guard let userId = supabase.currentUser?.id else { return GameLogView.popularPlatforms }
+        let used = GameLogView.usedPlatforms(for: userId)
+        if used.isEmpty {
+            return GameLogView.popularPlatforms
+        }
+        return GameLogView.allPlatforms.filter { used.contains($0) }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -390,9 +404,15 @@ struct GameDetailSheet: View {
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Label("Played on", systemImage: "gamecontroller")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundStyle(Color.adaptiveGray)
+                                HStack(spacing: 12) {
+                                    Image(systemName: "gamecontroller")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.primaryBlue)
+                                        .frame(width: 24)
+                                    Text("Played on")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                        .foregroundStyle(Color.adaptiveGray)
+                                }
                                 
                                 Spacer()
                                 
@@ -417,7 +437,7 @@ struct GameDetailSheet: View {
                                     GridItem(.flexible()),
                                     GridItem(.flexible())
                                 ], spacing: 10) {
-                                    ForEach(GameLogView.allPlatforms, id: \.self) { platform in
+                                    ForEach(quickPlatforms, id: \.self) { platform in
                                         PlatformButton(
                                             platform: platform,
                                             isSelected: editedPlatforms.contains(platform)
@@ -431,40 +451,11 @@ struct GameDetailSheet: View {
                                     }
                                 }
                                 
-                                HStack(spacing: 10) {
-                                    TextField("Other platform...", text: $customPlatform)
-                                        .font(.system(size: 14, design: .rounded))
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 10)
-                                        .background(Color.secondaryBackground)
-                                        .cornerRadius(8)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.adaptiveSilver, lineWidth: 1)
-                                        )
-                                    
-                                    Button {
-                                        let trimmed = customPlatform.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        guard !trimmed.isEmpty else { return }
-                                        editedPlatforms.insert(trimmed)
-                                        customPlatform = ""
-                                    } label: {
-                                        Text("Add")
-                                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 10)
-                                            .background(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.adaptiveSilver : Color.primaryBlue)
-                                            .cornerRadius(8)
-                                    }
-                                    .disabled(customPlatform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                }
-                                
-                                // Show custom selections not in the standard list
-                                let customSelections = editedPlatforms.filter { !GameLogView.allPlatforms.contains($0) }
-                                if !customSelections.isEmpty {
+                                // Show any selected platforms not in quickPlatforms
+                                let extraSelections = editedPlatforms.filter { !quickPlatforms.contains($0) }
+                                if !extraSelections.isEmpty {
                                     FlowLayout(spacing: 8) {
-                                        ForEach(Array(customSelections).sorted(), id: \.self) { platform in
+                                        ForEach(Array(extraSelections).sorted(), id: \.self) { platform in
                                             HStack(spacing: 4) {
                                                 Text(platform)
                                                     .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -482,6 +473,19 @@ struct GameDetailSheet: View {
                                             .cornerRadius(16)
                                         }
                                     }
+                                }
+                                
+                                Button {
+                                    showAllPlatformsSheet = true
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "plus.circle")
+                                            .font(.system(size: 14))
+                                        Text("More Platforms")
+                                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    }
+                                    .foregroundColor(.primaryBlue)
+                                    .padding(.vertical, 4)
                                 }
                                 
                                 HStack(spacing: 12) {
@@ -520,11 +524,13 @@ struct GameDetailSheet: View {
                                 Text(displayedPlatforms.joined(separator: ", "))
                                     .font(.system(size: 16, design: .rounded))
                                     .foregroundStyle(Color.adaptiveSlate)
+                                    .padding(.leading, 36)
                             } else {
                                 Text("No platforms added. Tap Add to set them!")
                                     .font(.system(size: 14, design: .rounded))
                                     .foregroundStyle(Color.adaptiveGray)
                                     .italic()
+                                    .padding(.leading, 36)
                             }
                         }
                         
@@ -539,9 +545,15 @@ struct GameDetailSheet: View {
                         // Notes section
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Label("Notes", systemImage: "note.text")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundStyle(Color.adaptiveGray)
+                                HStack(spacing: 12) {
+                                    Image(systemName: "note.text")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.primaryBlue)
+                                        .frame(width: 24)
+                                    Text("Notes")
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                        .foregroundStyle(Color.adaptiveGray)
+                                }
                                 
                                 Spacer()
                                 
@@ -629,12 +641,14 @@ struct GameDetailSheet: View {
                                     .disabled(isSavingNotes)
                                 }
                             } else if let notes = displayedNotes, !notes.isEmpty {
-                                    SpoilerTextView(notes, font: .system(size: 16, design: .rounded), color: .slate)
+                                SpoilerTextView(notes, font: .system(size: 16, design: .rounded), color: .slate)
+                                    .padding(.leading, 36)
                             } else {
                                 Text("No notes yet. Tap Add to write a review!")
                                     .font(.system(size: 14, design: .rounded))
                                     .foregroundStyle(Color.adaptiveGray)
                                     .italic()
+                                    .padding(.leading, 36)
                             }
                         }
                     }
@@ -764,6 +778,9 @@ struct GameDetailSheet: View {
                             .foregroundStyle(Color.adaptiveSilver)
                     }
                 }
+            }
+            .sheet(isPresented: $showAllPlatformsSheet) {
+                PlatformPickerSheet(selectedPlatforms: $editedPlatforms)
             }
             .sheet(isPresented: $showComparison) {
                 ComparisonView(
@@ -910,6 +927,10 @@ struct GameDetailSheet: View {
                 isEditingPlatforms = false
                 customPlatform = ""
                 
+                if let userId = supabase.currentUser?.id, !editedPlatforms.isEmpty {
+                    GameLogView.saveUsedPlatforms(editedPlatforms, for: userId)
+                }
+                
             } catch {
                 debugLog("❌ Error saving platforms: \(error)")
             }
@@ -960,21 +981,22 @@ struct DetailRow: View {
     let value: String
     
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundColor(.primaryBlue)
-                .frame(width: 24)
-            
-            Text(label)
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundStyle(Color.adaptiveGray)
-            
-            Spacer()
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(.primaryBlue)
+                    .frame(width: 24)
+                
+                Text(label)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+            }
             
             Text(value)
                 .font(.system(size: 16, design: .rounded))
                 .foregroundStyle(Color.adaptiveSlate)
+                .padding(.leading, 36) // 24 (icon frame) + 12 (spacing)
         }
     }
 }

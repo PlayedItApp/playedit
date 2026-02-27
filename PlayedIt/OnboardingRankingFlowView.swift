@@ -115,11 +115,17 @@ struct OnboardingRankingFlowView: View {
     }
     
     // MARK: - Process Current Game
-    
     private func processCurrentGame() async {
         debugLog("🎯 processCurrentGame: index=\(currentIndex), total=\(games.count)")
         guard let game = currentGame else {
             debugLog("🎯 No more games, calling onComplete")
+            if let userId = supabase.currentUser?.id {
+                _ = try? await supabase.client
+                    .rpc("renormalize_ranks", params: [
+                        "p_user_id": AnyJSON.string(userId.uuidString)
+                    ])
+                    .execute()
+            }
             onComplete()
             return
         }
@@ -304,7 +310,9 @@ struct OnboardingRankingFlowView: View {
                     "p_platform_played": AnyJSON.array([]),
                     "p_notes": AnyJSON.string(""),
                     "p_canonical_game_id": AnyJSON.integer(canonicalId),
-                    "p_batch_source": AnyJSON.string("onboarding")
+                    "p_batch_source": AnyJSON.string("onboarding"),
+                    "p_steam_appid": AnyJSON.null,
+                    "p_steam_playtime_minutes": AnyJSON.null
                 ])
                 .execute()
             
@@ -324,6 +332,14 @@ struct OnboardingRankingFlowView: View {
         debugLog("🎯 moveToNext: now at index \(currentIndex) of \(games.count)")
         
         if currentIndex >= games.count {
+            // Safety net: renormalize in case any gaps occurred
+            if let userId = supabase.currentUser?.id {
+                _ = try? await supabase.client
+                    .rpc("renormalize_ranks", params: [
+                        "p_user_id": AnyJSON.string(userId.uuidString)
+                    ])
+                    .execute()
+            }
             // All done!
             onComplete()
         } else {

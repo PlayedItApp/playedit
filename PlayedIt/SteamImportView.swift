@@ -272,6 +272,13 @@ struct SteamImportView: View {
                             await refreshExistingGames()
                             currentRankIndex += 1
                             if currentRankIndex >= gamesToRank.count {
+                                if let userId = supabase.currentUser?.id {
+                                    _ = try? await supabase.client
+                                        .rpc("renormalize_ranks", params: [
+                                            "p_user_id": AnyJSON.string(userId.uuidString)
+                                        ])
+                                        .execute()
+                                }
                                 showComparison = false
                                 dismiss()
                             } else {

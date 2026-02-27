@@ -609,7 +609,7 @@ struct ResetRankingsView: View {
                 
                 if currentGameIndex >= shuffledGames.count {
                     // Safety net: renormalize at the end
-                    try? await supabase.client
+                    _ = try? await supabase.client
                         .rpc("renormalize_ranks", params: [
                             "p_user_id": AnyJSON.string(userId.uuidString)
                         ])
