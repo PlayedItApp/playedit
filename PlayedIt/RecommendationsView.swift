@@ -29,6 +29,15 @@ struct RecommendationsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
                         Task {
                             await manager.generateRecommendations()
                         }
@@ -37,15 +46,6 @@ struct RecommendationsView: View {
                             .foregroundColor(.primaryBlue)
                     }
                     .disabled(manager.isGenerating)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.adaptiveGray)
-                    }
                 }
             }
             .overlay(alignment: .bottom) {
