@@ -1,6 +1,7 @@
 import SwiftUI
 import Supabase
 import Combine
+import UserNotifications
 
 struct ContentView: View {
     @ObservedObject var supabase = SupabaseManager.shared
@@ -182,6 +183,7 @@ struct MainTabView: View {
             }
         }
         .task {
+            PushNotificationManager.shared.requestPermissionAndRegister()
             await fetchPendingCount()
             if !hideNotifications {
                 await fetchUnreadNotificationCount()
@@ -328,6 +330,7 @@ struct MainTabView: View {
             
             unreadNotificationCount = count
                 debugLog("🔔 MainTab unread count: \(count) for user: \(userId.uuidString)")
+                try? await UNUserNotificationCenter.current().setBadgeCount(count)
                 
             } catch {
             debugLog("❌ Error fetching notification count: \(error)")

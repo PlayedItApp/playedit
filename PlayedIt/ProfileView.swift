@@ -3,6 +3,7 @@ import Supabase
 import PhotosUI
 import AuthenticationServices
 import CryptoKit
+import UserNotifications
 
 struct ProfileView: View {
     @ObservedObject var supabase = SupabaseManager.shared
@@ -390,6 +391,8 @@ struct ProfileView: View {
                         }
                         
                         Button {
+                            PushNotificationManager.shared.removeDeviceToken()
+                            UIApplication.shared.unregisterForRemoteNotifications()
                             Task { await supabase.signOut() }
                         } label: {
                             Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")

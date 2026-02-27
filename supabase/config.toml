@@ -459,3 +459,9 @@ entrypoint = "./functions/resend-confirmation/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/resend-confirmation/*.html" ]
+
+[functions.send-push]
+enabled = true
+verify_jwt = true
+import_map = "./functions/send-push/deno.json"
+entrypoint = "./functions/send-push/index.ts"

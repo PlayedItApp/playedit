@@ -1,5 +1,6 @@
 import SwiftUI
 import Supabase
+import UserNotifications
 
 struct FeedView: View {
     @Binding var unreadNotificationCount: Int
@@ -976,6 +977,7 @@ struct FeedView: View {
                 .count ?? 0
             
             unreadNotificationCount = count
+            try? await UNUserNotificationCenter.current().setBadgeCount(count)
             
         } catch {
             debugLog("❌ Error fetching unread count: \(error)")

@@ -5,6 +5,7 @@ import Supabase
 
 @main
 struct PlayedItApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var deepLinkUsername: String?
     @State private var pendingDeepLinkUsername: String?
     @State private var deepLinkGameId: Int?

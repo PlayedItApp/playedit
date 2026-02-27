@@ -1,5 +1,6 @@
 import SwiftUI
 import Supabase
+import UserNotifications
 
 struct NotificationsView: View {
     @ObservedObject var supabase = SupabaseManager.shared
@@ -177,6 +178,8 @@ struct NotificationsView: View {
                 
                 // Update local state
                 if let index = notifications.firstIndex(where: { $0.id == notification.id }) {
+                    let newUnreadCount = notifications.filter { !$0.isRead && $0.id != notification.id }.count
+                        try? await UNUserNotificationCenter.current().setBadgeCount(newUnreadCount)
                     notifications[index] = AppNotification(
                         id: notification.id,
                         type: notification.type,
@@ -225,6 +228,8 @@ struct NotificationsView: View {
                     )
                 }
                 
+                try await UNUserNotificationCenter.current().setBadgeCount(0)
+                                
             } catch {
                 debugLog("❌ Error marking all as read: \(error)")
             }
