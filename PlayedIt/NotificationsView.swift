@@ -8,7 +8,6 @@ struct NotificationsView: View {
     @State private var isLoading = true
     @State private var selectedFeedItem: FeedItem?
     @State private var selectedFriend: Friend?
-    @State private var showComments = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -88,10 +87,10 @@ struct NotificationsView: View {
         .refreshable {
             await fetchNotifications()
         }
-        .sheet(isPresented: $showComments) {
-            if let feedItem = selectedFeedItem {
-                CommentsSheet(feedItem: feedItem, onDismiss: {})
-            }
+        .sheet(item: $selectedFeedItem) { feedItem in
+            CommentsSheet(feedItem: feedItem, onDismiss: {
+                selectedFeedItem = nil
+            })
         }
         .navigationDestination(item: $selectedFriend) { friend in
             FriendProfileView(friend: friend)
@@ -115,6 +114,11 @@ struct NotificationsView: View {
                 let feed_post_id: String?
                 let from_user: UserInfo
                 let user_games: GameInfo?
+                let feed_posts: FeedPostInfo?
+                
+                struct FeedPostInfo: Decodable {
+                    let post_type: String?
+                }
                 
                 struct UserInfo: Decodable {
                     let username: String?
@@ -135,23 +139,80 @@ struct NotificationsView: View {
             
             let rows: [NotificationData] = try await supabase.client
                 .from("notifications")
-                .select("id, type, from_user_id, user_game_id, feed_post_id, is_read, created_at, from_user:users!from_user_id(username), user_games(games(title, cover_url))")
+                .select("id, type, from_user_id, user_game_id, feed_post_id, is_read, created_at, from_user:users!from_user_id(username), user_games(games(title, cover_url)), feed_posts(post_type)")
                 .eq("user_id", value: userId.uuidString)
                 .order("created_at", ascending: false)
                 .limit(50)
                 .execute()
                 .value
             
+            // Collect feed_post_ids for batch posts so we can fetch game titles
+            let batchPostIds = rows
+                .filter { $0.feed_posts?.post_type == "batch_ranked" && $0.feed_post_id != nil }
+                .compactMap { $0.feed_post_id }
+            
+            // Fetch child game titles for batch posts
+            var batchGameTitles: [String: (title: String, coverURL: String?, count: Int)] = [:]
+            if !batchPostIds.isEmpty {
+                struct BatchChild: Decodable {
+                    let batch_post_id: String
+                    let user_games: ChildGame?
+                    struct ChildGame: Decodable {
+                        let games: ChildGameDetails
+                        struct ChildGameDetails: Decodable {
+                            let title: String
+                            let cover_url: String?
+                        }
+                    }
+                }
+                
+                let children: [BatchChild] = try await supabase.client
+                    .from("feed_posts")
+                    .select("batch_post_id, user_games(games(title, cover_url))")
+                    .in("batch_post_id", values: batchPostIds)
+                    .eq("post_type", value: "ranked_game")
+                    .order("created_at", ascending: true)
+                    .execute()
+                    .value
+                
+                // Group by batch_post_id, take first game title + count
+                var grouped: [String: [(String, String?)]] = [:]
+                for child in children {
+                    guard let batchId = Optional(child.batch_post_id),
+                          let game = child.user_games else { continue }
+                    grouped[batchId, default: []].append((game.games.title, game.games.cover_url))
+                }
+                for (batchId, games) in grouped {
+                    if let first = games.first {
+                        batchGameTitles[batchId] = (title: first.0, coverURL: first.1, count: games.count)
+                    }
+                }
+            }
+            
             notifications = rows.map { row in
-                AppNotification(
+                let isBatch = row.feed_posts?.post_type == "batch_ranked"
+                let batchInfo = row.feed_post_id.flatMap { batchGameTitles[$0] }
+                
+                let gameTitle: String?
+                let coverURL: String?
+                if isBatch, let info = batchInfo {
+                    gameTitle = info.count > 1 ? "\(info.title) and \(info.count - 1) other\(info.count - 1 == 1 ? "" : "s")" : info.title
+                    coverURL = info.coverURL
+                } else {
+                    gameTitle = row.user_games?.games.title
+                    coverURL = row.user_games?.games.cover_url
+                }
+                
+                return AppNotification(
                     id: row.id,
                     type: NotificationType(rawValue: row.type) ?? .like,
                     fromUserId: row.from_user_id,
                     fromUsername: row.from_user.username ?? "Someone",
                     userGameId: row.user_game_id,
                     feedPostId: row.feed_post_id,
-                    gameTitle: row.user_games?.games.title,
-                    gameCoverURL: row.user_games?.games.cover_url,
+                    gameTitle: gameTitle,
+                    gameCoverURL: coverURL,
+                    postType: row.feed_posts?.post_type,
                     isRead: row.is_read,
                     createdAt: row.created_at
                 )
@@ -189,6 +250,7 @@ struct NotificationsView: View {
                         feedPostId: notification.feedPostId,
                         gameTitle: notification.gameTitle,
                         gameCoverURL: notification.gameCoverURL,
+                        postType: notification.postType,
                         isRead: true,
                         createdAt: notification.createdAt
                     )
@@ -223,6 +285,7 @@ struct NotificationsView: View {
                         feedPostId: notification.feedPostId,
                         gameTitle: notification.gameTitle,
                         gameCoverURL: notification.gameCoverURL,
+                        postType: notification.postType,
                         isRead: true,
                         createdAt: notification.createdAt
                     )
@@ -240,7 +303,8 @@ struct NotificationsView: View {
         switch notification.type {
         case .like, .comment:
             // Open comments sheet for this post
-            guard let userGameId = notification.userGameId else { return }
+            guard let feedPostId = notification.feedPostId, !feedPostId.isEmpty else { return }
+            let userGameId = notification.userGameId ?? ""
             
             // Fetch actual rank position
             Task {
@@ -278,7 +342,6 @@ struct NotificationsView: View {
                     commentCount: 0,
                     isLikedByMe: false
                 )
-                showComments = true
             }
             
         case .friendRequest, .friendAccepted:
@@ -311,6 +374,7 @@ struct AppNotification: Identifiable {
     let feedPostId: String?
     let gameTitle: String?
     let gameCoverURL: String?
+    let postType: String?
     let isRead: Bool
     let createdAt: String
 }
@@ -350,7 +414,7 @@ struct NotificationRow: View {
                 Text(messageText)
                     .font(.subheadline)
                     .foregroundStyle(Color.adaptiveSlate)
-                    .lineLimit(2)
+                    .lineLimit(3)
                 
                 Text(timeAgo(from: notification.createdAt))
                     .font(.caption)
