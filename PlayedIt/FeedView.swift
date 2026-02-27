@@ -1010,9 +1010,9 @@ struct WantToPlayGroupItem: Identifiable {
     
     var displayLabel: String {
         if items.count == 1 {
-            return "\(username) wants to play \(items.first?.gameTitle ?? "a game")"
+            return "\(username) added \(items.first?.gameTitle ?? "a game") to Want to Play"
         } else {
-            return "\(username) added \(items.count) games to their backlog"
+            return "\(username) added \(items.count) games to Want to Play"
         }
     }
 }
@@ -2161,57 +2161,119 @@ struct WantToPlayFeedRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(spacing: 12) {
-                NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
-                    if let avatarURL = group.avatarURL, let url = URL(string: avatarURL) {
-                        AsyncImage(url: url) { image in
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        } placeholder: {
+            // Header — only show for multi-game batches
+            if group.items.count > 1 {
+                HStack(spacing: 12) {
+                    NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                        if let avatarURL = group.avatarURL, let url = URL(string: avatarURL) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                avatarPlaceholder
+                            }
+                            .frame(width: 36, height: 36)
+                            .clipShape(Circle())
+                        } else {
                             avatarPlaceholder
                         }
-                        .frame(width: 36, height: 36)
-                        .clipShape(Circle())
-                    } else {
-                        avatarPlaceholder
                     }
+                    .buttonStyle(.plain)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                                Text(group.username).fontWeight(.semibold)
+                            }
+                            .buttonStyle(.plain)
+                            Text("added \(group.gameCount) to Want to Play")
+                        }
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.adaptiveSlate)
+                        
+                        Text(timeAgo(from: group.mostRecentDate))
+                            .font(.caption)
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.accentOrange)
                 }
-                .buttonStyle(.plain)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
+                .padding(12)
+            }
+            
+            // Game display (collapsed view)
+            if !isExpanded {
+                if group.items.count == 1, let game = group.items.first {
+                    // Single game — mirrors FeedItemRow exactly
+                    HStack(spacing: 12) {
+                        CachedAsyncImage(url: game.gameCoverURL) {
+                            Rectangle()
+                                .fill(Color.secondaryBackground)
+                                .overlay(
+                                    Image(systemName: "gamecontroller")
+                                        .foregroundStyle(Color.adaptiveSilver)
+                                )
+                        }
+                        .frame(width: 50, height: 67)
+                        .cornerRadius(6)
+                        .clipped()
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                                Text("\(Text(group.username).fontWeight(.semibold).foregroundStyle(Color.adaptiveSlate))\(Text(" added to Want to Play").foregroundStyle(Color.adaptiveGray))")
+                                    .font(.subheadline)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Text(game.gameTitle)
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.adaptiveSlate)
+                                .lineLimit(2)
+                            
+                            Text(timeAgo(from: group.mostRecentDate))
+                                .font(.caption)
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
+                        
+                        Spacer()
+                        
                         NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
-                            Text(group.username).fontWeight(.semibold)
+                            if let avatarURL = group.avatarURL, let url = URL(string: avatarURL) {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Circle()
+                                        .fill(Color.primaryBlue.opacity(0.2))
+                                        .overlay(
+                                            Text(String(group.username.prefix(1)).uppercased())
+                                                .font(.system(size: 10, weight: .semibold))
+                                                .foregroundColor(.primaryBlue)
+                                        )
+                                }
+                                .frame(width: 28, height: 28)
+                                .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(Color.primaryBlue.opacity(0.2))
+                                    .frame(width: 28, height: 28)
+                                    .overlay(
+                                        Text(String(group.username.prefix(1)).uppercased())
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundColor(.primaryBlue)
+                                    )
+                            }
                         }
                         .buttonStyle(.plain)
-                        
-                        if group.items.count == 1 {
-                            Text("wants to play")
-                        } else {
-                            Text("added \(group.gameCount) to their backlog")
-                        }
                     }
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.adaptiveSlate)
-                    
-                    Text(timeAgo(from: group.mostRecentDate))
-                        .font(.caption)
-                        .foregroundStyle(Color.adaptiveGray)
+                    .padding(12)
+                } else {
+                    coverArtGrid
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
                 }
-                
-                Spacer()
-                
-                Image(systemName: "bookmark.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.accentOrange)
-            }
-            .padding(12)
-            
-            // Cover art grid (collapsed view)
-            if !isExpanded {
-                coverArtGrid
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
                 
                 Divider()
                     .padding(.horizontal, 12)

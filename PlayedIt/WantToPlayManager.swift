@@ -311,12 +311,107 @@ class WantToPlayManager: ObservableObject {
                     .execute()
                 
                 myWantToPlayIds.remove(gameId)
+                
+                // Remove associated feed posts
+                await removeWantToPlayFeedPosts(userId: userId.uuidString, gameId: gameId)
+                
                 return true
             } catch {
                 debugLog("❌ Error removing from want to play: \(error)")
                 return false
             }
         }
+    
+    // MARK: - Remove Want to Play Feed Posts
+    private func removeWantToPlayFeedPosts(userId: String, gameId: Int) async {
+        do {
+            // Find child feed posts for this game
+            struct FeedPostRow: Decodable {
+                let id: String
+                let batch_post_id: String?
+            }
+            
+            let posts: [FeedPostRow] = try await supabase.client
+                .from("feed_posts")
+                .select("id, batch_post_id")
+                .eq("user_id", value: userId)
+                .eq("post_type", value: "want_to_play")
+                .execute()
+                .value
+            
+            // Filter to posts matching this game_id in metadata
+            // We need to check metadata->game_id
+            let matchingPosts: [FeedPostRow] = try await supabase.client
+                .from("feed_posts")
+                .select("id, batch_post_id")
+                .eq("user_id", value: userId)
+                .eq("post_type", value: "want_to_play")
+                .eq("metadata->>game_id", value: String(gameId))
+                .execute()
+                .value
+            
+            guard !matchingPosts.isEmpty else { return }
+            
+            let postIds = matchingPosts.map { $0.id }
+            let batchParentIds = Set(matchingPosts.compactMap { $0.batch_post_id })
+            
+            // Delete the child posts
+            try await supabase.client
+                .from("feed_posts")
+                .delete()
+                .in("id", values: postIds)
+                .execute()
+            
+            // For each batch parent, check if it still has children
+            for batchId in batchParentIds {
+                struct ChildCount: Decodable { let id: String }
+                let remainingChildren: [ChildCount] = try await supabase.client
+                    .from("feed_posts")
+                    .select("id")
+                    .eq("batch_post_id", value: batchId)
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                if remainingChildren.isEmpty {
+                    // No children left — delete the batch parent
+                    try await supabase.client
+                        .from("feed_posts")
+                        .delete()
+                        .eq("id", value: batchId)
+                        .execute()
+                    
+                    debugLog("🗑️ Deleted empty batch parent \(batchId)")
+                } else {
+                    // Update the parent's game_count
+                    let newCount: [ChildCount] = try await supabase.client
+                        .from("feed_posts")
+                        .select("id")
+                        .eq("batch_post_id", value: batchId)
+                        .execute()
+                        .value
+                    
+                    struct MetadataUpdate: Encodable {
+                        let metadata: MetaPayload
+                        struct MetaPayload: Encodable {
+                            let game_count: Int
+                        }
+                    }
+                    try await supabase.client
+                        .from("feed_posts")
+                        .update(MetadataUpdate(metadata: .init(game_count: newCount.count)))
+                        .eq("id", value: batchId)
+                        .execute()
+                    
+                    debugLog("📝 Updated batch \(batchId) game_count to \(newCount.count)")
+                }
+            }
+            
+            debugLog("🗑️ Removed \(postIds.count) want_to_play feed post(s) for game \(gameId)")
+        } catch {
+            debugLog("⚠️ Failed to remove want_to_play feed posts: \(error)")
+        }
+    }
     
     // MARK: - Fetch my list (ranked first by sort_position, then unranked by date)
     func fetchMyList() async -> [WantToPlayGame] {
