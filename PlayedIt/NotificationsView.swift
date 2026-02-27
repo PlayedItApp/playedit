@@ -237,25 +237,44 @@ struct NotificationsView: View {
             // Open comments sheet for this post
             guard let userGameId = notification.userGameId else { return }
             
-            // Build a minimal FeedItem to pass to CommentsSheet
-            selectedFeedItem = FeedItem(
-                id: userGameId,
-                feedPostId: notification.feedPostId ?? "",
-                userGameId: userGameId,
-                userId: supabase.currentUser?.id.uuidString ?? "",
-                username: "You",
-                avatarURL: nil,
-                gameId: 0,
-                gameTitle: notification.gameTitle ?? "Unknown Game",
-                gameCoverURL: notification.gameCoverURL,
-                rankPosition: 0,
-                loggedAt: nil,
-                batchSource: nil,
-                likeCount: 5,
-                commentCount: 0,
-                isLikedByMe: false
-            )
-            showComments = true
+            // Fetch actual rank position
+            Task {
+                var rankPosition: Int? = nil
+                do {
+                    struct UserGameRow: Decodable {
+                        let rank_position: Int?
+                    }
+                    let rows: [UserGameRow] = try await supabase.client
+                        .from("user_games")
+                        .select("rank_position")
+                        .eq("id", value: userGameId)
+                        .limit(1)
+                        .execute()
+                        .value
+                    rankPosition = rows.first?.rank_position
+                } catch {
+                    debugLog("❌ Error fetching rank for notification: \(error)")
+                }
+                
+                selectedFeedItem = FeedItem(
+                    id: userGameId,
+                    feedPostId: notification.feedPostId ?? "",
+                    userGameId: userGameId,
+                    userId: supabase.currentUser?.id.uuidString ?? "",
+                    username: "You",
+                    avatarURL: nil,
+                    gameId: 0,
+                    gameTitle: notification.gameTitle ?? "Unknown Game",
+                    gameCoverURL: notification.gameCoverURL,
+                    rankPosition: rankPosition,
+                    loggedAt: nil,
+                    batchSource: nil,
+                    likeCount: 0,
+                    commentCount: 0,
+                    isLikedByMe: false
+                )
+                showComments = true
+            }
             
         case .friendRequest, .friendAccepted:
             // Navigate to the friend's profile

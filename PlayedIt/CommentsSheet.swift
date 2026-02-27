@@ -65,9 +65,11 @@ struct CommentsSheet: View {
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color.adaptiveSlate)
                                 .lineLimit(1)
-                            Text("at #\(feedItem.rankPosition ?? 0)")
-                                .font(.caption)
-                                .foregroundColor(.primaryBlue)
+                            if let rank = feedItem.rankPosition {
+                                Text("at #\(rank)")
+                                    .font(.caption)
+                                    .foregroundColor(.primaryBlue)
+                            }
                         }
                     }
                     
