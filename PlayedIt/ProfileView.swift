@@ -399,6 +399,9 @@ struct ProfileView: View {
             hasAppleLinked = await supabase.hasAppleIdentity()
             hasSteamConnected = await SteamService.shared.getSteamId() != nil
         }
+        .onReceive(NotificationCenter.default.publisher(for: .profileNudgeTapped)) { _ in
+                isEditing = true
+            }
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
                 Task {

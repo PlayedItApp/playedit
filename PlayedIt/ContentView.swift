@@ -130,6 +130,10 @@ struct MainTabView: View {
     @State private var unreadNotificationCount = 0
     @State private var showWhatsNew = false
     @ObservedObject var supabase = SupabaseManager.shared
+    @AppStorage("profileNudgeDismissCount") private var profileNudgeDismissCount = 0
+    @State private var userAvatarURL: String?
+    @State private var userUsername: String = ""
+    @State private var profileNudgeVisible = false
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -181,13 +185,102 @@ struct MainTabView: View {
             await fetchUnreadNotificationCount()
             await WantToPlayManager.shared.refreshMyIds()
             if let userId = supabase.currentUser?.id {
-                await GameLogView.backfillUsedPlatformsIfNeeded(for: userId, client: supabase.client)
+                    await GameLogView.backfillUsedPlatformsIfNeeded(for: userId, client: supabase.client)
+                }
+                await fetchProfileForNudge()
+            }
+        .overlay(alignment: .top) {
+            if profileNudgeVisible {
+                HStack(spacing: 6) {
+                    Button {
+                        withAnimation {
+                            selectedTab = 2
+                            profileNudgeVisible = false
+                        }
+                        NotificationCenter.default.post(name: .profileNudgeTapped, object: nil)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.accentOrange)
+                            
+                            Text(profileNudgeText)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.white)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            profileNudgeDismissCount += 1
+                            profileNudgeVisible = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Color.primaryBlue))
+                .padding(.top, 54)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
             Task {
                 await fetchUnreadNotificationCount()
             }
+        }
+    }
+    
+    private var shouldShowProfileNudge: Bool {
+        guard profileNudgeDismissCount < 3 else { return false }
+        let needsAvatar = userAvatarURL == nil || userAvatarURL?.isEmpty == true
+        let needsUsername = userUsername.isEmpty || userUsername.contains("@") || userUsername.hasPrefix("user_")
+        return needsAvatar || needsUsername
+    }
+     
+    private var profileNudgeText: String {
+        let needsAvatar = userAvatarURL == nil || userAvatarURL?.isEmpty == true
+        let needsUsername = userUsername.isEmpty || userUsername.contains("@") || userUsername.hasPrefix("user_")
+        if needsAvatar && needsUsername {
+            return "Add a pic & username!"
+        } else if needsAvatar {
+            return "Add a profile pic!"
+        } else {
+            return "Set a username so friends can find you!"
+        }
+    }
+
+    private func fetchProfileForNudge() async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        do {
+            struct ProfileCheck: Decodable {
+                let username: String?
+                let avatar_url: String?
+            }
+            
+            let profile: ProfileCheck = try await supabase.client
+                .from("users")
+                .select("username, avatar_url")
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            userUsername = profile.username ?? ""
+            userAvatarURL = profile.avatar_url
+            
+            withAnimation(.easeOut(duration: 0.3).delay(1.0)) {
+                profileNudgeVisible = shouldShowProfileNudge
+            }
+        } catch {
+            debugLog("❌ Error fetching profile for nudge: \(error)")
         }
     }
     
@@ -278,6 +371,13 @@ struct RankedGameRow: View {
                             .font(.caption)
                             .foregroundStyle(Color.adaptiveGray)
                     }
+                    
+                    if !game.platformPlayed.isEmpty {
+                        Text(game.platformPlayed.joined(separator: " • "))
+                            .font(.caption)
+                            .foregroundStyle(Color.adaptiveGray)
+                            .lineLimit(1)
+                    }
                 }
                 
                 Spacer()
@@ -341,6 +441,7 @@ struct GameDetailSheet: View {
     @State private var hasInitialized = false
     @State private var notesError: String?
     @State private var gameDescription: String? = nil
+    @State private var metacriticScore: Int? = nil
     
     
     private var quickPlatforms: [String] {
@@ -356,41 +457,21 @@ struct GameDetailSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Cover art
-                    CachedAsyncImage(url: game.gameCoverURL) {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .font(.system(size: 40))
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
-                    }
-                    .frame(width: 150, height: 200)
-                    .cornerRadius(12)
-                    .clipped()
-                    .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+                    GameInfoHeroView(
+                        title: game.gameTitle,
+                        coverURL: game.gameCoverURL,
+                        releaseDate: game.gameReleaseDate,
+                        metacriticScore: metacriticScore,
+                        gameDescription: gameDescription
+                    )
                     
-                    // Title and rank
-                    VStack(spacing: 8) {
-                        Text(game.gameTitle)
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.adaptiveSlate)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Ranked #\(rank)")
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundColor(rank == 1 ? .accentOrange : .primaryBlue)
-                    }
+                    // Rank badge
+                    Text("Ranked #\(rank)")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundColor(rank == 1 ? .accentOrange : .primaryBlue)
                     
                     Divider()
                         .padding(.horizontal, 40)
-                    
-                    // Game description
-                    if let desc = gameDescription, !desc.isEmpty {
-                        GameDescriptionView(text: desc)
-                            .padding(.horizontal, 24)
-                    }
                     
                     // Details
                     VStack(alignment: .leading, spacing: 16) {
@@ -524,14 +605,6 @@ struct GameDetailSheet: View {
                                     .italic()
                                     .padding(.leading, 36)
                             }
-                        }
-                        
-                        if let year = game.gameReleaseDate?.prefix(4) {
-                            DetailRow(
-                                icon: "calendar",
-                                label: "Released",
-                                value: String(year)
-                            )
                         }
                         
                         // Notes section
@@ -724,13 +797,14 @@ struct GameDetailSheet: View {
                     struct GameInfo: Decodable {
                         let rawg_id: Int
                         let description: String?
+                        let metacritic_score: Int?
                     }
                     // Try by rawg_id first, fall back to local id
                     var results: [GameInfo] = []
                     if let rawgId = game.gameRawgId {
                         results = try await SupabaseManager.shared.client
                             .from("games")
-                            .select("rawg_id, description")
+                            .select("rawg_id, description, metacritic_score")
                             .eq("rawg_id", value: rawgId)
                             .limit(1)
                             .execute()
@@ -739,7 +813,7 @@ struct GameDetailSheet: View {
                     if results.isEmpty {
                         results = try await SupabaseManager.shared.client
                             .from("games")
-                            .select("rawg_id, description")
+                            .select("rawg_id, description, metacritic_score")
                             .eq("id", value: game.gameId)
                             .limit(1)
                             .execute()
@@ -750,6 +824,8 @@ struct GameDetailSheet: View {
                         debugLog("⚠️ No games row found for gameId \(game.gameId)")
                         return
                     }
+                    
+                    metacriticScore = result.metacritic_score
                     
                     if let cached = result.description, !cached.isEmpty {
                         gameDescription = cached
@@ -1002,6 +1078,10 @@ struct DetailRow: View {
                 .padding(.leading, 36) // 24 (icon frame) + 12 (spacing)
         }
     }
+}
+
+extension Notification.Name {
+    static let profileNudgeTapped = Notification.Name("profileNudgeTapped")
 }
 
 #Preview {

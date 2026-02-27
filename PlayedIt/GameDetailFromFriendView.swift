@@ -92,60 +92,13 @@ struct GameDetailFromFriendView: View {
     
     // MARK: - Hero Section
     private var heroSection: some View {
-        VStack(spacing: 16) {
-            // Large cover art
-            CachedAsyncImage(url: userGame.gameCoverURL) {
-                Rectangle()
-                    .fill(Color.secondaryBackground)
-                    .overlay(
-                        Image(systemName: "gamecontroller")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color.adaptiveSilver)
-                    )
-            }
-            .frame(width: 160, height: 213)
-            .cornerRadius(12)
-            .clipped()
-            .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
-            
-            // Title
-            Text(userGame.gameTitle)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(Color.adaptiveSlate)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-            
-            // Release year + Metacritic
-            HStack(spacing: 16) {
-                if let year = userGame.gameReleaseDate?.prefix(4) {
-                    Label(String(year), systemImage: "calendar")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.adaptiveGray)
-                }
-                
-                if let score = metacriticScore ?? resolveMetacriticFromGame() {
-                    HStack(spacing: 4) {
-                        Text("Metacritic")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.adaptiveGray)
-                        
-                        Text("\(score)")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
-                            .foregroundColor(metacriticColor(score))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(metacriticColor(score).opacity(0.15))
-                            .cornerRadius(4)
-                    }
-                }
-            }
-                        
-            // Game description
-            if let desc = gameDescription, !desc.isEmpty {
-                GameDescriptionView(text: desc)
-                    .padding(.horizontal, 20)
-            }
-        }
+        GameInfoHeroView(
+            title: userGame.gameTitle,
+            coverURL: userGame.gameCoverURL,
+            releaseDate: userGame.gameReleaseDate,
+            metacriticScore: metacriticScore,
+            gameDescription: gameDescription
+        )
         .padding(.top, 20)
     }
     

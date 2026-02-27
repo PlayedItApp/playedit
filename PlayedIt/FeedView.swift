@@ -1393,10 +1393,13 @@ struct GroupedFeedRow: View {
     
     // MARK: - Cover Art Grid
     private var coverArtGrid: some View {
+        let itemsWithArt = group.collapsedItems.filter { $0.gameCoverURL != nil && !($0.gameCoverURL ?? "").isEmpty }
         let totalCount = group.collapsedItems.count
-        let showCount = totalCount <= 3 ? totalCount : (totalCount <= 5 ? 3 : min(totalCount, 6))
-        let displayItems = Array(group.collapsedItems.prefix(showCount))
-        let remaining = totalCount - showCount
+        let targetCount = totalCount <= 3 ? totalCount : (totalCount <= 5 ? 3 : min(totalCount, 6))
+        let displayItems = itemsWithArt.count >= targetCount
+            ? Array(itemsWithArt.prefix(targetCount))
+            : Array(group.collapsedItems.prefix(targetCount))
+        let remaining = totalCount - targetCount
         
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
             ForEach(Array(displayItems.enumerated()), id: \.element.id) { index, item in

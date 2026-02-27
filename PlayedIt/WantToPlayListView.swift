@@ -1492,34 +1492,21 @@ struct FirstTwoComparisonView: View {
         @State private var gameDescription: String? = nil
         @State private var metacriticScore: Int? = nil
         @State private var sourceFriendName: String? = nil
+        @State private var releaseDate: String? = nil
         
         var body: some View {
             NavigationStack {
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Cover art
-                        CachedAsyncImage(url: game.gameCoverUrl) {
-                            Rectangle()
-                                .fill(Color.secondaryBackground)
-                                .overlay(
-                                    Image(systemName: "gamecontroller")
-                                        .font(.system(size: 40))
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                )
-                        }
-                        .frame(width: 150, height: 200)
-                        .cornerRadius(12)
-                        .clipped()
-                        .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+                        GameInfoHeroView(
+                            title: game.gameTitle,
+                            coverURL: game.gameCoverUrl,
+                            releaseDate: releaseDate,
+                            metacriticScore: metacriticScore,
+                            gameDescription: gameDescription
+                        )
                         
-                        // Title
-                        Text(game.gameTitle)
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.adaptiveSlate)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                        
-                        // Priority position if ranked
+                        // Priority position
                         if let position = game.sortPosition {
                             Text("Priority #\(position)")
                                 .font(.system(size: 18, weight: .semibold, design: .rounded))
@@ -1528,31 +1515,6 @@ struct FirstTwoComparisonView: View {
                             Text("In your backlog")
                                 .font(.system(size: 16, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color.adaptiveGray)
-                        }
-                        
-                        // Metacritic
-                        if let score = metacriticScore, score > 0 {
-                            HStack(spacing: 4) {
-                                Text("Metacritic")
-                                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                                    .foregroundStyle(Color.adaptiveGray)
-                                Text("\(score)")
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundColor(metacriticColor(score))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(metacriticColor(score).opacity(0.15))
-                                    .cornerRadius(4)
-                            }
-                        }
-                        
-                        Divider()
-                            .padding(.horizontal, 40)
-                        
-                        // Game description
-                        if let desc = gameDescription, !desc.isEmpty {
-                            GameDescriptionView(text: desc)
-                                .padding(.horizontal, 24)
                         }
                         
                         // Prediction
@@ -1651,14 +1613,15 @@ struct FirstTwoComparisonView: View {
         private func fetchGameDetails() async {
         debugLog("🔍 WTP Detail: fetching gameId=\(game.gameId), title=\(game.gameTitle)")
         do {
-                struct GameInfo: Decodable {
-                    let rawg_id: Int
-                    let metacritic_score: Int?
-                    let description: String?
-                }
+            struct GameInfo: Decodable {
+                let rawg_id: Int
+                let metacritic_score: Int?
+                let description: String?
+                let release_date: String?
+            }
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description")
+                .select("rawg_id, metacritic_score, description, release_date")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
@@ -1672,6 +1635,7 @@ struct FirstTwoComparisonView: View {
             }
                 
                 metacriticScore = info.metacritic_score
+                releaseDate = info.release_date
                 
             let details = try await RAWGService.shared.getGameDetails(id: info.rawg_id)
                 gameDescription = details.gameDescription ?? details.gameDescriptionHtml

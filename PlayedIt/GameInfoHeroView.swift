@@ -1,0 +1,85 @@
+import SwiftUI
+
+struct GameInfoHeroView: View {
+    let title: String
+    let coverURL: String?
+    let releaseDate: String?
+    
+    var metacriticScore: Int? = nil
+    var gameDescription: String? = nil
+    var isLoadingDescription: Bool = false
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Cover art
+            CachedAsyncImage(url: coverURL) {
+                Rectangle()
+                    .fill(Color.secondaryBackground)
+                    .overlay(
+                        Image(systemName: "gamecontroller")
+                            .font(.system(size: 40))
+                            .foregroundStyle(Color.adaptiveSilver)
+                    )
+            }
+            .frame(width: 160, height: 213)
+            .cornerRadius(12)
+            .clipped()
+            .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+            
+            // Title
+            Text(title)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.adaptiveSlate)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+            
+            // Release year + Metacritic
+            if hasMetadata {
+                HStack(spacing: 16) {
+                    if let year = releaseDate?.prefix(4) {
+                        Label(String(year), systemImage: "calendar")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    
+                    if let score = metacriticScore, score > 0 {
+                        HStack(spacing: 4) {
+                            Text("Metacritic")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                            
+                            Text("\(score)")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(metacriticColor(score))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(metacriticColor(score).opacity(0.15))
+                                .cornerRadius(4)
+                        }
+                    }
+                }
+            }
+            
+            // Description
+            if isLoadingDescription {
+                ProgressView()
+                    .padding(.top, 4)
+            } else if let desc = gameDescription, !desc.isEmpty {
+                GameDescriptionView(text: desc)
+                    .padding(.horizontal, 20)
+            }
+        }
+    }
+    
+    private var hasMetadata: Bool {
+        (releaseDate?.prefix(4)) != nil || (metacriticScore ?? 0) > 0
+    }
+    
+    private func metacriticColor(_ score: Int) -> Color {
+        switch score {
+        case 75...100: return .success
+        case 50...74: return .accentOrange
+        default: return .error
+        }
+    }
+}

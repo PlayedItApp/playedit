@@ -409,25 +409,20 @@ struct RecommendationDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var gameDescription: String? = nil
     @State private var isLoadingDescription = true
+    @State private var metacriticScore: Int? = nil
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Cover art
-                    CachedAsyncImage(url: recommendation.gameCoverUrl, contentMode: .fit) {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .foregroundStyle(Color.adaptiveSilver)
-                                    .font(.system(size: 30))
-                            )
-                    }
-                    .frame(maxHeight: 300)
-                    .cornerRadius(12)
-                    .clipped()
-                    .padding(.horizontal, 20)
+                    GameInfoHeroView(
+                        title: recommendation.gameTitle,
+                        coverURL: recommendation.gameCoverUrl,
+                        releaseDate: nil,
+                        metacriticScore: metacriticScore,
+                        gameDescription: gameDescription,
+                        isLoadingDescription: isLoadingDescription
+                    )
                     .padding(.top, 12)
                     
                     // Genres
@@ -458,32 +453,10 @@ struct RecommendationDetailSheet: View {
                         .foregroundStyle(Color.adaptiveGray)
                     }
                     
-                    // Description
-                    if isLoadingDescription {
-                        ProgressView()
-                            .padding(.top, 10)
-                    } else if let desc = gameDescription, !desc.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("About")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color.adaptiveSlate)
-                            
-                            Text(desc)
-                                .font(.system(size: 14, design: .rounded))
-                                .foregroundStyle(Color.adaptiveGray)
-                                .lineSpacing(4)
-                        }
-                        .padding(.horizontal, 20)
-                    } else {
-                        Text("No description available")
-                            .font(.system(size: 14, design: .rounded))
-                            .foregroundStyle(Color.adaptiveSilver)
-                    }
-                    
                     Spacer(minLength: 40)
                 }
             }
-            .navigationTitle(recommendation.gameTitle)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -515,16 +488,21 @@ struct RecommendationDetailSheet: View {
         do {
             struct GameDesc: Decodable {
                 let description: String?
+                let metacritic_score: Int?
+                let release_date: String?
             }
             
             let infos: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description")
+                .select("description, metacritic_score, release_date")
                 .eq("rawg_id", value: recommendation.gameRawgId)
                 .limit(1)
                 .execute()
                 .value
             
+            if let score = infos.first?.metacritic_score {
+                metacriticScore = score
+            }
             if let desc = infos.first?.description, !desc.isEmpty {
                 let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
                 gameDescription = cleaned
