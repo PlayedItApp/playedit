@@ -683,7 +683,7 @@ struct SteamImportView: View {
                 let cover_url: String
                 let genres: [String]
                 let platforms: [String]
-                let release_date: String
+                let release_date: String?
                 let metacritic_score: Int
             }
             
@@ -693,7 +693,7 @@ struct SteamImportView: View {
                 cover_url: game.rawgCoverUrl ?? "",
                 genres: game.rawgGenres,
                 platforms: game.rawgPlatforms,
-                release_date: game.rawgReleaseDate ?? "",
+                release_date: game.rawgReleaseDate,
                 metacritic_score: game.rawgMetacriticScore ?? 0
             )
             

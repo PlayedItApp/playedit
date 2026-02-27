@@ -292,11 +292,7 @@ struct GameComparisonCard: View {
                         .fill(isHighlighted ? Color.primaryBlue.opacity(0.3) : Color.secondaryBackground)
                         .frame(width: 144, height: 191)
                     
-                    AsyncImage(url: URL(string: coverURL ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                    CachedAsyncImage(url: coverURL) {
                         Rectangle()
                             .fill(Color.secondaryBackground)
                             .overlay(

@@ -538,6 +538,7 @@ struct ProfileView: View {
             }
         }
         
+        ImageCache.shared.prefetch(urls: rankedGames.compactMap { $0.gameCoverURL })
         isLoadingGames = false
     }
     private func loadUnrankedAndResume() async {

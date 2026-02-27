@@ -509,6 +509,11 @@ struct FeedView: View {
             }
             
             combinedFeed = combined
+                        
+            // Prefetch cover art
+            let coverUrls = feedItems.compactMap { $0.gameCoverURL }
+            ImageCache.shared.prefetch(urls: coverUrls)
+            
             isLoading = false
             
         } catch {
@@ -656,11 +661,7 @@ struct FeedItemRow: View {
             } label: {
                 HStack(spacing: 12) {
                 // Cover art
-                AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+                CachedAsyncImage(url: item.gameCoverURL) {
                     Rectangle()
                         .fill(Color.secondaryBackground)
                         .overlay(
@@ -1401,10 +1402,7 @@ struct GroupedFeedRow: View {
             ForEach(Array(displayItems.enumerated()), id: \.element.id) { index, item in
                 ZStack {
                     GeometryReader { geo in
-                        AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
-                            image.resizable().scaledToFill()
-                                .frame(width: geo.size.width, height: geo.size.height)
-                        } placeholder: {
+                        CachedAsyncImage(url: item.gameCoverURL) {
                             Rectangle()
                                 .fill(Color.secondaryBackground)
                                 .overlay(
@@ -1442,9 +1440,7 @@ struct GroupedFeedRow: View {
                         VStack(spacing: 0) {
                             // Game info row - tappable for detail
                             HStack(spacing: 10) {
-                                AsyncImage(url: URL(string: item.gameCoverURL ?? "")) { image in
-                                    image.resizable().aspectRatio(contentMode: .fill)
-                                } placeholder: {
+                                CachedAsyncImage(url: item.gameCoverURL) {
                                     Rectangle()
                                         .fill(Color.secondaryBackground)
                                         .overlay(

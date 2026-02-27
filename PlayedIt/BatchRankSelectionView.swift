@@ -175,11 +175,7 @@ struct BatchGameRow: View {
                 }
                 
                 // Cover art
-                AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+                CachedAsyncImage(url: game.gameCoverURL) {
                     Rectangle()
                         .fill(Color.secondaryBackground)
                 }

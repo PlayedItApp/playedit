@@ -181,11 +181,7 @@ struct GameSearchRow: View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
                 // Cover Image
-                AsyncImage(url: URL(string: game.coverURL ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+                CachedAsyncImage(url: game.coverURL) {
                     Rectangle()
                         .fill(Color.secondaryBackground)
                         .overlay(

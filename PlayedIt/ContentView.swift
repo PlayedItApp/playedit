@@ -255,11 +255,7 @@ struct RankedGameRow: View {
                     .foregroundColor(rankColor)
                     .frame(width: 32)
                 
-                AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+                CachedAsyncImage(url: game.gameCoverURL) {
                     Rectangle()
                         .fill(Color.secondaryBackground)
                         .overlay(
@@ -361,11 +357,7 @@ struct GameDetailSheet: View {
             ScrollView {
                 VStack(spacing: 20) {
                     // Cover art
-                    AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                    CachedAsyncImage(url: game.gameCoverURL) {
                         Rectangle()
                             .fill(Color.secondaryBackground)
                             .overlay(
@@ -733,18 +725,29 @@ struct GameDetailSheet: View {
                         let rawg_id: Int
                         let description: String?
                     }
-                    let results: [GameInfo] = try await SupabaseManager.shared.client
-                        .from("games")
-                        .select("rawg_id, description")
-                        .eq("rawg_id", value: game.gameRawgId ?? game.gameId)
-                        .limit(1)
-                        .execute()
-                        .value
+                    // Try by rawg_id first, fall back to local id
+                    var results: [GameInfo] = []
+                    if let rawgId = game.gameRawgId {
+                        results = try await SupabaseManager.shared.client
+                            .from("games")
+                            .select("rawg_id, description")
+                            .eq("rawg_id", value: rawgId)
+                            .limit(1)
+                            .execute()
+                            .value
+                    }
+                    if results.isEmpty {
+                        results = try await SupabaseManager.shared.client
+                            .from("games")
+                            .select("rawg_id, description")
+                            .eq("id", value: game.gameId)
+                            .limit(1)
+                            .execute()
+                            .value
+                    }
                     
                     guard let result = results.first else {
-                        // Game not in cache, fetch directly from RAWG
-                        let details = try await RAWGService.shared.getGameDetails(id: game.gameId)
-                        gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+                        debugLog("⚠️ No games row found for gameId \(game.gameId)")
                         return
                     }
                     

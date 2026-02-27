@@ -52,11 +52,7 @@ struct OnboardingRankingFlowView: View {
                 if let game = currentGame {
                     // Current game card
                     VStack(spacing: 12) {
-                        AsyncImage(url: URL(string: game.coverUrl ?? "")) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
+                        CachedAsyncImage(url: game.coverUrl) {
                             Rectangle()
                                 .fill(Color.secondaryBackground)
                                 .overlay(
@@ -147,7 +143,7 @@ struct OnboardingRankingFlowView: View {
                 let cover_url: String
                 let genres: [String]
                 let platforms: [String]
-                let release_date: String
+                let release_date: String?
                 let metacritic_score: Int
             }
             
@@ -157,7 +153,7 @@ struct OnboardingRankingFlowView: View {
                 cover_url: game.coverUrl ?? "",
                 genres: game.genres,
                 platforms: game.platforms,
-                release_date: game.releaseDate ?? "",
+                release_date: game.releaseDate,
                 metacritic_score: game.metacritic ?? 0
             )
             
@@ -189,7 +185,7 @@ struct OnboardingRankingFlowView: View {
                             let cover_url: String
                             let genres: [String]
                             let platforms: [String]
-                            let release_date: String
+                            let release_date: String?
                             let metacritic_score: Int
                         }
                         
@@ -199,7 +195,7 @@ struct OnboardingRankingFlowView: View {
                             cover_url: rawgGame.coverURL ?? "",
                             genres: rawgGame.genres,
                             platforms: rawgGame.platforms,
-                            release_date: rawgGame.releaseDate ?? "",
+                            release_date: rawgGame.releaseDate,
                             metacritic_score: rawgGame.metacriticScore ?? 0
                         )
                         

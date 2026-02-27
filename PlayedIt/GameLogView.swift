@@ -17,6 +17,7 @@ struct GameLogView: View {
     @State private var existingUserGame: ExistingUserGame? = nil
     @State private var showReRankAlert = false
     @State private var showAllPlatforms = false
+    @State private var gameDescription: String? = nil
     
     static let allPlatforms = [
         "Android", "Apple TV", "Apple Vision Pro",
@@ -102,11 +103,7 @@ struct GameLogView: View {
                 VStack(spacing: 24) {
                     // Game Header
                     HStack(spacing: 16) {
-                        AsyncImage(url: URL(string: game.coverURL ?? "")) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
+                        CachedAsyncImage(url: game.coverURL) {
                             Rectangle()
                                 .fill(Color.secondaryBackground)
                                 .overlay(
@@ -135,6 +132,12 @@ struct GameLogView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
+                    
+                    // Game description
+                    if let desc = gameDescription, !desc.isEmpty {
+                        GameDescriptionView(text: desc)
+                            .padding(.horizontal, 20)
+                    }
                     
                     // Platform Selection
                     VStack(alignment: .leading, spacing: 12) {
@@ -297,6 +300,7 @@ struct GameLogView: View {
             }
             .task {
                 await checkIfAlreadyRanked()
+                await fetchDescription()
             }
             .alert("Already Ranked", isPresented: $showReRankAlert) {
                 Button("Re-rank") {
@@ -312,6 +316,16 @@ struct GameLogView: View {
                     Text("\(game.title) is already ranked at #\(existing.rank_position). Would you like to re-rank it?")
                 }
             }
+        }
+    }
+    
+    // MARK: - Fetch Description
+    private func fetchDescription() async {
+        do {
+            let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
+            gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+        } catch {
+            debugLog("⚠️ Could not fetch game description: \(error)")
         }
     }
     
@@ -388,7 +402,7 @@ struct GameLogView: View {
                 let cover_url: String
                 let genres: [String]
                 let platforms: [String]
-                let release_date: String
+                let release_date: String?
                 let metacritic_score: Int
                 let tags: [String]
             }
@@ -419,7 +433,7 @@ struct GameLogView: View {
                 cover_url: game.coverURL ?? "",
                 genres: game.genres,
                 platforms: game.platforms,
-                release_date: game.releaseDate ?? "",
+                release_date: game.releaseDate,
                 metacritic_score: game.metacriticScore ?? 0,
                 tags: gameTags
             )

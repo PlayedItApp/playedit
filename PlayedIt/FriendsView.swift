@@ -1412,6 +1412,7 @@ struct FriendProfileView: View {
                 )
             }
             
+            ImageCache.shared.prefetch(urls: friendGames.compactMap { $0.gameCoverURL })
             isLoading = false
                         
             friendWantToPlay = await WantToPlayManager.shared.fetchFriendList(friendId: friend.userId)
@@ -1436,9 +1437,7 @@ struct FriendWantToPlayRow: View {
                     .frame(width: 30, alignment: .leading)
             }
             
-            AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: game.gameCoverUrl) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
                     .overlay(
@@ -1486,9 +1485,7 @@ struct FriendWantToPlayDetailSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                    CachedAsyncImage(url: game.gameCoverUrl) {
                         Rectangle()
                             .fill(Color.secondaryBackground)
                             .overlay(
@@ -1582,7 +1579,7 @@ struct FriendWantToPlayDetailSheet: View {
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
                 .select("rawg_id, metacritic_score, description")
-                .eq("rawg_id", value: game.gameId)
+                .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
                 .value
@@ -1629,11 +1626,7 @@ struct ComparisonGameRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Cover art
-            AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: game.gameCoverURL) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
             }
@@ -1698,15 +1691,12 @@ struct FriendGameRow: View {
                 .frame(width: 36, alignment: .leading)
             
             // Cover art
-            AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: game.gameCoverURL) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
             }
             .frame(width: 50, height: 67)
+                .cornerRadius(6)
                 .cornerRadius(6)
                 .clipped()
                 .overlay(
@@ -1833,11 +1823,7 @@ struct SideBySideGameCell: View {
                 .foregroundStyle(Color.adaptiveGray)
                 .frame(width: 24)
             
-            AsyncImage(url: URL(string: game.gameCoverURL ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: game.gameCoverURL) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
             }

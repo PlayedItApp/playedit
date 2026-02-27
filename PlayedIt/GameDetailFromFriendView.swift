@@ -94,11 +94,7 @@ struct GameDetailFromFriendView: View {
     private var heroSection: some View {
         VStack(spacing: 16) {
             // Large cover art
-            AsyncImage(url: URL(string: userGame.gameCoverURL ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: userGame.gameCoverURL) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
                     .overlay(
@@ -413,17 +409,36 @@ struct GameDetailFromFriendView: View {
     }
     
     private func fetchGameDescription() async {
+        debugLog("📖 DESC DEBUG: gameId=\(userGame.gameId), gameRawgId=\(String(describing: userGame.gameRawgId)), title=\(userGame.gameTitle)")
         do {
-            struct GameRawgId: Decodable { let rawg_id: Int }
-            let result: GameRawgId = try await supabase.client
+            struct GameDesc: Decodable { let rawg_id: Int; let description: String? }
+            let results: [GameDesc] = try await supabase.client
                 .from("games")
-                .select("rawg_id")
-                .eq("id", value: userGame.gameId)
-                .single()
+                .select("rawg_id, description")
+                .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
+                .limit(1)
                 .execute()
                 .value
-            let game = try await RAWGService.shared.getGameDetails(id: result.rawg_id)
-            gameDescription = game.gameDescription
+            
+            guard let result = results.first else { return }
+            
+            if let cached = result.description, !cached.isEmpty {
+                gameDescription = cached
+                return
+            }
+            
+            debugLog("📖 Fetching RAWG details for rawg_id: \(result.rawg_id)")
+            let details = try await RAWGService.shared.getGameDetails(id: result.rawg_id)
+            debugLog("📖 RAWG returned title: \(details.title), desc prefix: \(String((details.gameDescription ?? "nil").prefix(60)))")
+            gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+            
+            if let desc = gameDescription, !desc.isEmpty {
+                _ = try? await SupabaseManager.shared.client
+                    .from("games")
+                    .update(["description": desc])
+                    .eq("rawg_id", value: result.rawg_id)
+                    .execute()
+            }
         } catch {
             debugLog("⚠️ Could not fetch game description: \(error)")
         }
@@ -442,13 +457,15 @@ struct GameDetailFromFriendView: View {
                 let metacritic_score: Int?
             }
             
-            let result: GameMeta = try await supabase.client
+            let results: [GameMeta] = try await supabase.client
                 .from("games")
                 .select("metacritic_score")
-                .eq("id", value: userGame.gameId)
-                .single()
+                .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
+                .limit(1)
                 .execute()
                 .value
+            
+            guard let result = results.first else { return }
             
             if let score = result.metacritic_score, score > 0 {
                 metacriticScore = score
@@ -641,13 +658,15 @@ struct GameDetailFromFriendView: View {
                 let description: String?
             }
             
-            let info: GameInfo = try await supabase.client
+            let infos: [GameInfo] = try await supabase.client
                 .from("games")
                 .select("rawg_id, genres, tags, metacritic_score")
-                .eq("id", value: userGame.gameId)
-                .single()
+                .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
+                .limit(1)
                 .execute()
                 .value
+            
+            guard let info = infos.first else { return }
             
             let target = PredictionTarget(
                 rawgId: info.rawg_id,

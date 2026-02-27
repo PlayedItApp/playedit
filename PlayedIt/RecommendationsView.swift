@@ -266,11 +266,7 @@ struct RecommendationCard: View {
             // Game info row
             HStack(spacing: 12) {
                 // Cover art
-                AsyncImage(url: URL(string: recommendation.gameCoverUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+                CachedAsyncImage(url: recommendation.gameCoverUrl) {
                     Rectangle()
                         .fill(Color.secondaryBackground)
                         .overlay(
@@ -419,11 +415,7 @@ struct RecommendationDetailSheet: View {
             ScrollView {
                 VStack(spacing: 20) {
                     // Cover art
-                    AsyncImage(url: URL(string: recommendation.gameCoverUrl ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
+                    CachedAsyncImage(url: recommendation.gameCoverUrl, contentMode: .fit) {
                         Rectangle()
                             .fill(Color.secondaryBackground)
                             .overlay(

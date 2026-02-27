@@ -31,11 +31,7 @@ struct CommentsSheet: View {
                 // Post header
                 HStack(spacing: 12) {
                     if feedItem.gameCoverURL != nil {
-                        AsyncImage(url: URL(string: feedItem.gameCoverURL ?? "")) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
+                        CachedAsyncImage(url: feedItem.gameCoverURL) {
                             Rectangle()
                                 .fill(Color.secondaryBackground)
                         }

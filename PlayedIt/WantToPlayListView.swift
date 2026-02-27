@@ -345,7 +345,7 @@ struct WantToPlayListView: View {
                 let infos: [GameInfo] = try await SupabaseManager.shared.client
                     .from("games")
                     .select("rawg_id, genres, tags, metacritic_score")
-                    .eq("rawg_id", value: game.gameId)
+                    .eq("id", value: game.gameId)
                     .limit(1)
                     .execute()
                     .value
@@ -380,6 +380,11 @@ struct WantToPlayListView: View {
     func loadGames() async {
         rankedGames = await manager.fetchRankedList()
         unrankedGames = await manager.fetchUnrankedList()
+        
+        // Prefetch cover art
+        let allCovers = (rankedGames + unrankedGames).compactMap { $0.gameCoverUrl }
+        ImageCache.shared.prefetch(urls: allCovers)
+        
         isLoading = false
         
         // Check ranked game count for recommendations eligibility
@@ -413,11 +418,7 @@ struct WantToPlayRankedRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Cover art
-            AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: game.gameCoverUrl) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
                     .overlay(
@@ -512,11 +513,7 @@ struct WantToPlayUnrankedRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Cover art
-            AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
+            CachedAsyncImage(url: game.gameCoverUrl) {
                 Rectangle()
                     .fill(Color.secondaryBackground)
                     .overlay(
@@ -825,11 +822,7 @@ struct PlaceAtPositionSheet: View {
             VStack(spacing: 0) {
                 // Header
                 HStack(spacing: 12) {
-                    AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                    CachedAsyncImage(url: game.gameCoverUrl) {
                         Rectangle()
                             .fill(Color.secondaryBackground)
                             .overlay(
@@ -860,11 +853,7 @@ struct PlaceAtPositionSheet: View {
                 List {
                     ForEach(orderedGames) { item in
                         HStack(spacing: 12) {
-                            AsyncImage(url: URL(string: item.gameCoverUrl ?? "")) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
+                            CachedAsyncImage(url: item.gameCoverUrl) {
                                 Rectangle()
                                     .fill(Color.secondaryBackground)
                                     .overlay(
@@ -941,11 +930,7 @@ struct ReorderPositionSheet: View {
         NavigationStack {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                    CachedAsyncImage(url: game.gameCoverUrl) {
                         Rectangle()
                             .fill(Color.secondaryBackground)
                             .overlay(
@@ -975,11 +960,7 @@ struct ReorderPositionSheet: View {
                 List {
                     ForEach(orderedGames) { item in
                         HStack(spacing: 12) {
-                            AsyncImage(url: URL(string: item.gameCoverUrl ?? "")) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
+                            CachedAsyncImage(url: item.gameCoverUrl) {
                                 Rectangle()
                                     .fill(Color.secondaryBackground)
                                     .overlay(
@@ -1517,11 +1498,7 @@ struct FirstTwoComparisonView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         // Cover art
-                        AsyncImage(url: URL(string: game.gameCoverUrl ?? "")) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
+                        CachedAsyncImage(url: game.gameCoverUrl) {
                             Rectangle()
                                 .fill(Color.secondaryBackground)
                                 .overlay(
@@ -1682,13 +1659,15 @@ struct FirstTwoComparisonView: View {
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
                 .select("rawg_id, metacritic_score, description")
-                .eq("rawg_id", value: game.gameId)
+                .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
                 .value
             
             guard let info = infos.first else {
-                debugLog("⚠️ No games row found for rawg_id \(game.gameId)")
+                debugLog("⚠️ No games row found for rawg_id \(game.gameId), fetching directly from RAWG")
+                let details = try await RAWGService.shared.getGameDetails(id: game.gameId)
+                gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                 return
             }
                 

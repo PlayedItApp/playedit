@@ -305,11 +305,7 @@ struct NotificationRow: View {
             
             // Icon or cover art
             if let coverURL = notification.gameCoverURL {
-                AsyncImage(url: URL(string: coverURL)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+                CachedAsyncImage(url: coverURL) {
                     Rectangle()
                         .fill(Color.secondaryBackground)
                 }

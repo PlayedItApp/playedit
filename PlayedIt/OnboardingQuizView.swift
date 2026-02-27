@@ -496,11 +496,7 @@ struct OnboardingQuizView: View {
         } label: {
             VStack(spacing: 6) {
                 ZStack(alignment: .topTrailing) {
-                    AsyncImage(url: URL(string: game.coverUrl ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            } placeholder: {
+                    CachedAsyncImage(url: game.coverUrl) {
                                 Rectangle()
                                     .fill(Color.secondaryBackground)
                             .overlay(
@@ -586,6 +582,7 @@ struct OnboardingQuizView: View {
             }
             
             filteredGames = Array(matched.prefix(60))
+            ImageCache.shared.prefetch(urls: filteredGames.compactMap { $0.coverUrl })
             isLoadingGames = false
             step = .gameGrid
             
@@ -713,9 +710,7 @@ struct OnboardingGameSearchSheet: View {
                                     }
                                 } label: {
                                     HStack(spacing: 12) {
-                                        AsyncImage(url: URL(string: game.coverURL ?? "")) { image in
-                                            image.resizable().scaledToFill()
-                                        } placeholder: {
+                                        CachedAsyncImage(url: game.coverURL) {
                                             Rectangle()
                                                 .fill(Color.secondaryBackground)
                                                 .overlay(
