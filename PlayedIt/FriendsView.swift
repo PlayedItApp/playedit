@@ -370,7 +370,8 @@ struct FriendsView: View {
                 .update(["status": "accepted"])
                 .eq("id", value: friend.friendshipId)
                 .execute()
-            
+
+            PredictionEngine.shared.invalidateContext()
             await fetchFriends()
             
         } catch {
@@ -1318,7 +1319,8 @@ struct FriendProfileView: View {
                 .delete()
                 .eq("id", value: friend.friendshipId)
                 .execute()
-            
+
+            PredictionEngine.shared.invalidateContext()
             dismiss()
         } catch {
             debugLog("❌ Error removing friend: \(error)")

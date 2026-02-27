@@ -288,6 +288,7 @@ struct GameLogView: View {
                     ComparisonView(
                         newGame: game,
                         existingGames: existingUserGames,
+                        predictedPosition: predictedPositionForGame(),
                         onComplete: { position in
                             Task {
                                 await saveUserGame(gameId: gameId, position: position)
@@ -372,6 +373,31 @@ struct GameLogView: View {
         // Just trigger the save flow - it will handle re-ranking
         // We pass a flag by keeping existingUserGame set
         await saveGame()
+    }
+    
+    // MARK: - Predicted Position for Comparison Bias
+    private func predictedPositionForGame() -> Int? {
+        guard existingUserGames.count >= 6 else { return nil }
+        
+        guard let context = PredictionEngine.shared.cachedContext else { return nil }
+        
+        let target = PredictionTarget(
+            rawgId: game.rawgId,
+            canonicalGameId: nil,
+            genres: game.genres,
+            tags: game.tags,
+            metacriticScore: game.metacriticScore
+        )
+        
+        guard let prediction = PredictionEngine.shared.predict(game: target, context: context) else { return nil }
+        
+        // Convert percentile to position (percentile is "top X%", so 90% = near #1)
+        let totalGames = existingUserGames.count + 1
+        let position = max(1, Int(round(Double(totalGames) * (1.0 - prediction.predictedPercentile / 100.0))))
+        
+        debugLog("🎯 Predicted position for \(game.title): #\(position) of \(totalGames) (percentile: \(Int(prediction.predictedPercentile))%)")
+        
+        return position
     }
     
     // MARK: - Save Game
@@ -520,9 +546,14 @@ struct GameLogView: View {
             if !selectedPlatforms.isEmpty {
                 Self.saveUsedPlatforms(selectedPlatforms, for: userId)
             }
+            // Build prediction context for comparison bias
+            if existingUserGames.count >= 6 {
+                let _ = await PredictionEngine.shared.refreshContext()
+            }
+
             isLoading = false
             self.savedGameId = gameId
-            
+
             if existingUserGames.isEmpty && existingUserGame == nil {
                 // First game ever - no comparison needed, save at #1
                 await saveUserGame(gameId: gameId, position: 1)
@@ -571,6 +602,7 @@ struct GameLogView: View {
                     
                     debugLog("✅ Re-ranked at position \(position)")
                     existingUserGame = nil
+                    PredictionEngine.shared.invalidateContext()
                 } else {
                     // New game — use insert RPC
                     let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
@@ -590,7 +622,8 @@ struct GameLogView: View {
                         ])
                         .execute()
                         
-                        debugLog("✅ Game logged at position \(position)")
+                    debugLog("✅ Game logged at position \(position)")
+                    PredictionEngine.shared.invalidateContext()
                 }
                 
             } catch {

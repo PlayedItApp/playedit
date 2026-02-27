@@ -118,7 +118,7 @@ class RecommendationManager: ObservableObject {
         let excludedGameIds = await buildExclusionSet(userId: userId.uuidString, existingPendingIds: existingGameIds)
         
         // 3. Build prediction context
-        guard let context = await PredictionEngine.buildContext() else {
+        guard let context = await PredictionEngine.shared.getContext() else {
             await buildDisplayList()
             return
         }
@@ -523,7 +523,7 @@ class RecommendationManager: ObservableObject {
     // MARK: - Build Display List
     
     func buildDisplayList() async {
-        guard let context = await PredictionEngine.buildContext() else { return }
+        guard let context = await PredictionEngine.shared.getContext() else { return }
         let pending = await fetchPending()
         
         var displays: [RecommendationDisplay] = []

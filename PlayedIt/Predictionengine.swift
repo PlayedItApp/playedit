@@ -127,6 +127,37 @@ class PredictionEngine {
     static let shared = PredictionEngine()
     private init() {}
     
+    // MARK: - Cached Context
+    private(set) var cachedContext: PredictionContext?
+    private var contextLastBuilt: Date?
+    
+    /// Returns cached context if fresh, otherwise rebuilds
+    func getContext(maxAge: TimeInterval = 300) async -> PredictionContext? {
+        if let cached = cachedContext,
+           let lastBuilt = contextLastBuilt,
+           Date().timeIntervalSince(lastBuilt) < maxAge {
+            return cached
+        }
+        return await refreshContext()
+    }
+    
+    /// Force rebuild and cache
+    @discardableResult
+    func refreshContext() async -> PredictionContext? {
+        let context = await PredictionEngine.buildContext()
+        cachedContext = context
+        contextLastBuilt = Date()
+        debugLog("🎯 Prediction context refreshed: \(context?.myGameCount ?? 0) games, \(context?.friends.count ?? 0) friends")
+        return context
+    }
+    
+    /// Invalidate cache (call when data changes)
+    func invalidateContext() {
+        cachedContext = nil
+        contextLastBuilt = nil
+        debugLog("🎯 Prediction context invalidated")
+    }
+    
     // MARK: - Main Prediction
     
     func predict(game: PredictionTarget, context: PredictionContext) -> GamePrediction? {

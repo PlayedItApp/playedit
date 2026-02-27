@@ -5,6 +5,7 @@ struct ComparisonView: View {
     let existingGames: [UserGame]
     var skipCelebration: Bool = false
     var hideCancel: Bool = false
+    var predictedPosition: Int? = nil
     let onComplete: (Int) -> Void
     
     @Environment(\.dismiss) var dismiss
@@ -165,8 +166,20 @@ struct ComparisonView: View {
             return
         }
         
-        lowIndex = 0
-        highIndex = existingGames.count - 1
+        if let predicted = predictedPosition, existingGames.count >= 6 {
+            // Bias the binary search window around the predicted position
+            // Convert predicted position (1-based) to 0-based index
+            let predictedIndex = max(0, min(predicted - 1, existingGames.count - 1))
+            
+            // Window size: enough room to be wrong by ~30% of list size
+            let windowSize = max(3, existingGames.count / 3)
+            lowIndex = max(0, predictedIndex - windowSize)
+            highIndex = min(existingGames.count - 1, predictedIndex + windowSize)
+            debugLog("🎯 Biased comparison: predicted=#\(predicted), window=[\(lowIndex)...\(highIndex)] of \(existingGames.count)")
+            } else {
+            lowIndex = 0
+            highIndex = existingGames.count - 1
+        }
         comparisonCount = 0
         
         nextComparison()
