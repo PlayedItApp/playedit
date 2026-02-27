@@ -11,6 +11,11 @@ struct FeedView: View {
     @State private var selectedItem: FeedItem?
     @State private var showNotifications = false
     @AppStorage("hideNotifications") private var hideNotifications = false
+    @State private var isLoadingMore = false
+    @State private var hasMorePosts = true
+    @State private var oldestPostDate: String? = nil
+    @State private var cachedFeedUserIds: [String]? = nil
+    private let pageSize = 30
     
     var body: some View {
         NavigationStack {
@@ -77,7 +82,9 @@ struct FeedView: View {
             }
         }
         .task {
-            await fetchFeed()
+            if combinedFeed.isEmpty {
+                await fetchFeed()
+            }
             if !hideNotifications {
                 await fetchUnreadCount()
             }
@@ -169,6 +176,16 @@ struct FeedView: View {
                 }
             }
             .padding(16)
+            
+            if hasMorePosts {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .onAppear {
+                        Task { await loadMorePosts() }
+                    }
+            }
         }
         .background(Color(.systemGroupedBackground))
         .refreshable {
@@ -280,26 +297,36 @@ struct FeedView: View {
             return
         }
         
+        // Reset pagination state for fresh load
+        hasMorePosts = true
+        oldestPostDate = nil
+        cachedFeedUserIds = nil
+        
         do {
-            struct Friendship: Decodable {
-                let user_id: String
-                let friend_id: String
-                let status: String
+            // Get friend IDs (cached after first fetch)
+            if cachedFeedUserIds == nil {
+                struct Friendship: Decodable {
+                    let user_id: String
+                    let friend_id: String
+                    let status: String
+                }
+                
+                let friendships: [Friendship] = try await supabase.client
+                    .from("friendships")
+                    .select("user_id, friend_id, status")
+                    .or("user_id.eq.\(userId.uuidString),friend_id.eq.\(userId.uuidString)")
+                    .eq("status", value: "accepted")
+                    .execute()
+                    .value
+                
+                var ids = friendships.map { f in
+                    f.user_id.lowercased() == userId.uuidString.lowercased() ? f.friend_id : f.user_id
+                }
+                ids.append(userId.uuidString)
+                cachedFeedUserIds = ids
             }
             
-            // Get friend IDs
-            let friendships: [Friendship] = try await supabase.client
-                .from("friendships")
-                .select("user_id, friend_id, status")
-                .or("user_id.eq.\(userId.uuidString),friend_id.eq.\(userId.uuidString)")
-                .eq("status", value: "accepted")
-                .execute()
-                .value
-            
-            var feedUserIds = friendships.map { f in
-                f.user_id.lowercased() == userId.uuidString.lowercased() ? f.friend_id : f.user_id
-            }
-            feedUserIds.append(userId.uuidString)
+            let feedUserIds = cachedFeedUserIds!
             
             // Fetch feed_posts
             struct FeedPostRow: Decodable {
@@ -344,21 +371,24 @@ struct FeedView: View {
                 .from("feed_posts")
                 .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
                 .in("user_id", values: feedUserIds)
+                .is("batch_post_id", value: nil)
                 .order("created_at", ascending: false)
-                .limit(100)
+                .limit(pageSize)
                 .execute()
                 .value
             
-            // Fetch any batch children that fell outside the limit
-            let batchParentIds = allPosts.filter { $0.post_type == "batch_ranked" }.map { $0.id }
-            let fetchedChildBatchIds = Set(allPosts.compactMap { $0.batch_post_id })
-            let missingBatchIds = batchParentIds.filter { !fetchedChildBatchIds.contains($0) }
+            // Track pagination state
+            hasMorePosts = allPosts.count >= pageSize
+            oldestPostDate = allPosts.last?.created_at
             
-            if !missingBatchIds.isEmpty {
+            // Fetch all batch children for any batch_ranked posts in this page
+            let batchParentIds = allPosts.filter { $0.post_type == "batch_ranked" }.map { $0.id }
+            
+            if !batchParentIds.isEmpty {
                 let missingChildren: [FeedPostRow] = try await supabase.client
                     .from("feed_posts")
                     .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
-                    .in("batch_post_id", values: missingBatchIds)
+                    .in("batch_post_id", values: batchParentIds)
                     .execute()
                     .value
                 allPosts.append(contentsOf: missingChildren)
@@ -373,18 +403,31 @@ struct FeedView: View {
                 return
             }
             
-            // Fetch reactions for all posts
+            // Fetch reactions and comments in parallel
             struct ReactionRow: Decodable {
                 let feed_post_id: String
                 let user_id: String
             }
             
-            let reactions: [ReactionRow] = try await supabase.client
+            struct CommentCountRow: Decodable {
+                let feed_post_id: String
+            }
+            
+            async let reactionsTask: [ReactionRow] = supabase.client
                 .from("feed_reactions")
                 .select("feed_post_id, user_id")
                 .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
+            
+            async let commentsTask: [CommentCountRow] = supabase.client
+                .from("feed_comments")
+                .select("feed_post_id")
+                .in("feed_post_id", values: feedPostIds)
+                .execute()
+                .value
+            
+            let (reactions, commentRows) = try await (reactionsTask, commentsTask)
             
             var likeCountMap: [String: Int] = [:]
             var myLikedIds: Set<String> = []
@@ -395,18 +438,6 @@ struct FeedView: View {
                     myLikedIds.insert(reaction.feed_post_id)
                 }
             }
-            
-            // Fetch comment counts
-            struct CommentCountRow: Decodable {
-                let feed_post_id: String
-            }
-            
-            let commentRows: [CommentCountRow] = try await supabase.client
-                .from("feed_comments")
-                .select("feed_post_id")
-                .in("feed_post_id", values: feedPostIds)
-                .execute()
-                .value
             
             var commentCountMap: [String: Int] = [:]
             for comment in commentRows {
@@ -528,6 +559,239 @@ struct FeedView: View {
             debugLog("❌ Error fetching feed: \(error)")
             isLoading = false
         }
+    }
+    
+    private func loadMorePosts() async {
+        guard !isLoadingMore, hasMorePosts, let cursor = oldestPostDate else { return }
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        isLoadingMore = true
+        
+        do {
+            guard let feedUserIds = cachedFeedUserIds else {
+                isLoadingMore = false
+                return
+            }
+            
+            struct FeedPostRow: Decodable {
+                let id: String
+                let user_id: String
+                let post_type: String
+                let user_game_id: String?
+                let activity_feed_id: String?
+                let batch_post_id: String?
+                let metadata: BatchMetadata?
+                let created_at: String
+                let users: UserInfo
+                let user_games: GamePostInfo?
+                
+                struct BatchMetadata: Decodable {
+                    let game_count: Int?
+                    let user_game_ids: [String]?
+                }
+                
+                struct UserInfo: Decodable {
+                    let username: String?
+                    let avatar_url: String?
+                }
+                
+                struct GamePostInfo: Decodable {
+                    let game_id: Int
+                    let rank_position: Int?
+                    let logged_at: String?
+                    let batch_source: String?
+                    let games: GameDetails
+                    
+                    struct GameDetails: Decodable {
+                        let title: String
+                        let cover_url: String?
+                        let release_date: String?
+                        let rawg_id: Int?
+                    }
+                }
+            }
+            
+            var olderPosts: [FeedPostRow] = try await supabase.client
+                .from("feed_posts")
+                .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                .in("user_id", values: feedUserIds)
+                .is("batch_post_id", value: nil)
+                .lt("created_at", value: cursor)
+                .order("created_at", ascending: false)
+                .limit(pageSize)
+                .execute()
+                .value
+            
+            guard !olderPosts.isEmpty else {
+                hasMorePosts = false
+                isLoadingMore = false
+                return
+            }
+            
+            // Update pagination cursor
+            hasMorePosts = olderPosts.count >= pageSize
+            oldestPostDate = olderPosts.last?.created_at
+            
+            // Fetch batch children
+            let batchParentIds = olderPosts.filter { $0.post_type == "batch_ranked" }.map { $0.id }
+            
+            if !batchParentIds.isEmpty {
+                let batchChildren: [FeedPostRow] = try await supabase.client
+                    .from("feed_posts")
+                    .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                    .in("batch_post_id", values: batchParentIds)
+                    .execute()
+                    .value
+                olderPosts.append(contentsOf: batchChildren)
+            }
+            
+            let feedPostIds = olderPosts.map { $0.id }
+            
+            // Fetch reactions and comments in parallel
+            struct ReactionRow: Decodable {
+                let feed_post_id: String
+                let user_id: String
+            }
+            
+            struct CommentCountRow: Decodable {
+                let feed_post_id: String
+            }
+            
+            async let reactionsTask: [ReactionRow] = supabase.client
+                .from("feed_reactions")
+                .select("feed_post_id, user_id")
+                .in("feed_post_id", values: feedPostIds)
+                .execute()
+                .value
+            
+            async let commentsTask: [CommentCountRow] = supabase.client
+                .from("feed_comments")
+                .select("feed_post_id")
+                .in("feed_post_id", values: feedPostIds)
+                .execute()
+                .value
+            
+            let (reactions, commentRows) = try await (reactionsTask, commentsTask)
+            
+            var likeCountMap: [String: Int] = [:]
+            var myLikedIds: Set<String> = []
+            
+            for reaction in reactions {
+                likeCountMap[reaction.feed_post_id, default: 0] += 1
+                if reaction.user_id.lowercased() == userId.uuidString.lowercased() {
+                    myLikedIds.insert(reaction.feed_post_id)
+                }
+            }
+            
+            var commentCountMap: [String: Int] = [:]
+            for comment in commentRows {
+                commentCountMap[comment.feed_post_id, default: 0] += 1
+            }
+            
+            // Build new entries
+            var newEntries: [FeedEntry] = []
+            
+            for post in olderPosts {
+                let likes = likeCountMap[post.id] ?? 0
+                let comments = commentCountMap[post.id] ?? 0
+                let isLiked = myLikedIds.contains(post.id)
+                
+                switch post.post_type {
+                case "ranked_game":
+                    if post.batch_post_id != nil { continue }
+                    guard let ug = post.user_games, ug.rank_position != nil else { continue }
+                    let item = FeedItem(
+                        id: post.user_game_id ?? post.id,
+                        feedPostId: post.id,
+                        userGameId: post.user_game_id ?? "",
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        gameId: ug.game_id,
+                        gameTitle: ug.games.title,
+                        gameCoverURL: ug.games.cover_url,
+                        rankPosition: ug.rank_position,
+                        loggedAt: ug.logged_at,
+                        batchSource: ug.batch_source,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    newEntries.append(.game(item))
+                    
+                case "batch_ranked":
+                    let childPosts = olderPosts.filter { $0.batch_post_id == post.id && $0.post_type == "ranked_game" }
+                    let childItems: [FeedItem] = childPosts.compactMap { child in
+                        guard let ug = child.user_games, ug.rank_position != nil else { return nil }
+                        return FeedItem(
+                            id: child.user_game_id ?? child.id,
+                            feedPostId: child.id,
+                            userGameId: child.user_game_id ?? "",
+                            userId: child.user_id,
+                            username: child.users.username ?? "Friend",
+                            avatarURL: child.users.avatar_url,
+                            gameId: ug.game_id,
+                            gameTitle: ug.games.title,
+                            gameCoverURL: ug.games.cover_url,
+                            rankPosition: ug.rank_position,
+                            loggedAt: ug.logged_at,
+                            batchSource: ug.batch_source,
+                            likeCount: likeCountMap[child.id] ?? 0,
+                            commentCount: commentCountMap[child.id] ?? 0,
+                            isLikedByMe: myLikedIds.contains(child.id)
+                        )
+                    }
+                    guard !childItems.isEmpty else { continue }
+                    let group = GroupedFeedItem(
+                        id: post.id,
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        items: childItems,
+                        batchSource: childItems.first?.batchSource,
+                        mostRecentDate: post.created_at,
+                        feedPostId: post.id,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    newEntries.append(.groupedGames(group))
+                    
+                case "reset_rankings":
+                    let item = ActivityFeedItem(
+                        id: post.activity_feed_id ?? post.id,
+                        feedPostId: post.id,
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        activityType: post.post_type,
+                        createdAt: post.created_at,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    newEntries.append(.activity(item))
+                    
+                default:
+                    continue
+                }
+            }
+            
+            // Append to existing feed
+            combinedFeed.append(contentsOf: newEntries)
+            
+            // Prefetch new cover art
+            let newCoverUrls = newEntries.compactMap { entry -> String? in
+                if case .game(let item) = entry { return item.gameCoverURL }
+                return nil
+            }
+            ImageCache.shared.prefetch(urls: newCoverUrls)
+            
+        } catch {
+            debugLog("❌ Error loading more feed posts: \(error)")
+        }
+        
+        isLoadingMore = false
     }
     
     private func fetchUnreadCount() async {
