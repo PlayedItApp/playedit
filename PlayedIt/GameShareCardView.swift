@@ -35,35 +35,34 @@ struct GameShareCardView: View {
                 Spacer()
                 Text("playedit.app")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundColor(Color(hex: "C4CDD4"))
+                    .foregroundColor(.white.opacity(0.7))
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 28)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
             
             // Rank — big and bold (only if ranked)
             if let rank = rankPosition {
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text("#\(rank)")
-                        .font(.system(size: 60, weight: .heavy, design: .rounded))
+                        .font(.system(size: 56, weight: .heavy, design: .rounded))
                         .foregroundColor(rankColor)
                     
                     if totalGames > 0 {
                         Text("of \(totalGames)")
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundColor(Color(hex: "6B7280"))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.7))
                             .padding(.leading, 4)
                     }
                     
                     Spacer()
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 10)
             }
             
             // Game info row
             HStack(alignment: .top, spacing: 14) {
-                // Cover art — small accent
                 Group {
                     if let img = coverImage {
                         Image(uiImage: img)
@@ -71,7 +70,7 @@ struct GameShareCardView: View {
                             .aspectRatio(contentMode: .fill)
                     } else {
                         Rectangle()
-                            .fill(Color(hex: "F5F6F7"))
+                            .fill(Color.white.opacity(0.15))
                             .overlay(
                                 Text("🎮")
                                     .font(.system(size: 24))
@@ -81,12 +80,12 @@ struct GameShareCardView: View {
                 .frame(width: 72, height: 96)
                 .cornerRadius(10)
                 .clipped()
-                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.black.opacity(0.3), radius: 6, x: 0, y: 3)
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(gameTitle)
                         .font(.system(size: titleSize, weight: .heavy, design: .rounded))
-                        .foregroundColor(Color(hex: "3D5A73"))
+                        .foregroundColor(.white)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                     
@@ -95,10 +94,10 @@ struct GameShareCardView: View {
                             ForEach(platforms.prefix(3), id: \.self) { platform in
                                 Text(platform)
                                     .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                    .foregroundColor(Color(hex: "6B7280"))
+                                    .foregroundColor(.white.opacity(0.7))
                                     .padding(.horizontal, 9)
                                     .padding(.vertical, 3)
-                                    .background(Color(hex: "F5F6F7"))
+                                    .background(Color.white.opacity(0.15))
                                     .cornerRadius(6)
                             }
                         }
@@ -107,55 +106,50 @@ struct GameShareCardView: View {
                 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 28)
-            
-            Spacer()
+            .padding(.horizontal, 24)
             
             // User attribution
             HStack(spacing: 10) {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "4A7FB5"), Color(hex: "6BC5B8")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 36, height: 36)
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 32, height: 32)
                     .overlay(
                         Text(String(username.prefix(1)).uppercased())
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                     )
                 
                 HStack(spacing: 0) {
                     Text(username)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
-                        .foregroundColor(Color(hex: "3D5A73"))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
                     Text(rankPosition != nil ? " ranked this" : " shared this")
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(Color(hex: "6B7280"))
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(.white.opacity(0.8))
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(hex: "F5F6F7"))
-            .cornerRadius(14)
-            .padding(.horizontal, 28)
+            .padding(.top, 16)
+            .padding(.horizontal, 24)
             
             // CTA
             HStack {
                 Spacer()
                 Text("See the full list & rank it yourself →")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundColor(Color(hex: "4A7FB5"))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(Color(hex: "E07B4C"))
                 Spacer()
             }
-            .padding(.top, 14)
-            .padding(.bottom, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
         }
-        .frame(width: 390, height: 520)
-        .background(Color.white)
+        .frame(width: 390)
+        .background(
+            LinearGradient(
+                colors: [Color(hex: "2C4A63"), Color(hex: "1A3347")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .cornerRadius(24)
     }
 }
@@ -192,8 +186,8 @@ struct PlayedItShareWordmark: View {
     var body: some View {
         HStack(spacing: 0) {
             Text("played")
-                .font(.custom("Nunito-Bold", size: size))
-                .foregroundColor(Color(hex: "3D5A73"))
+                .font(.system(size: size, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
             Text("it")
                 .font(.system(size: size, weight: .bold, design: .rounded))
                 .foregroundColor(Color(hex: "E07B4C"))
