@@ -986,7 +986,7 @@ struct FeedView: View {
 }
 
 // MARK: - Want to Play Feed Models
-struct WantToPlayFeedItem: Identifiable {
+struct WantToPlayFeedItem: Identifiable, Hashable {
     let id: String
     let feedPostId: String
     let gameId: Int
@@ -1435,9 +1435,9 @@ struct ActivityFeedRow: View {
             .padding(.vertical, 10)
         }
         .background(Color.cardBackground)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        }
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
             
         private var avatarPlaceholder: some View {
         Circle()
@@ -1908,6 +1908,16 @@ struct GroupedFeedRow: View {
                             .foregroundColor(.white)
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if index == displayItems.count - 1 && remaining > 0 {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isExpanded = true
+                        }
+                    } else {
+                        selectedItem = item
+                    }
+                }
             }
         }
     }
@@ -2117,8 +2127,7 @@ struct WantToPlayFeedRow: View {
     let onLikeTapped: () -> Void
     let onCommentTapped: () -> Void
     @State private var isExpanded = false
-    @State private var selectedGameId: Int?
-    @State private var showGameDetail = false
+    @State private var selectedWtpItem: WantToPlayFeedItem?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -2247,6 +2256,23 @@ struct WantToPlayFeedRow: View {
         .background(Color.cardBackground)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .sheet(item: $selectedWtpItem) { wtpItem in
+            WantToPlayDetailSheet(
+                game: WantToPlayGame(
+                    id: UUID().uuidString,
+                    userId: group.userId,
+                    gameId: wtpItem.gameId,
+                    gameTitle: wtpItem.gameTitle,
+                    gameCoverUrl: wtpItem.gameCoverURL,
+                    source: nil,
+                    sourceFriendId: nil,
+                    note: nil,
+                    isVisible: true,
+                    createdAt: nil,
+                    sortPosition: nil
+                )
+            )
+        }
     }
     
     // MARK: - Cover Art Grid
@@ -2283,6 +2309,16 @@ struct WantToPlayFeedRow: View {
                         Text("+\(remaining)")
                             .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if index == displayItems.count - 1 && remaining > 0 {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isExpanded = true
+                        }
+                    } else {
+                        selectedWtpItem = item
                     }
                 }
             }

@@ -26,9 +26,9 @@ async function createAPNsJWT(): Promise<string> {
     .replace(/=+$/, "");
 
   const pemBody = privateKeyPem
-    .replace("-----BEGIN PRIVATE KEY-----", "")
-    .replace("-----END PRIVATE KEY-----", "")
-    .replace(/\s/g, "");
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/[\s\n\r]/g, "");
 
   const keyData = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
   const key = await crypto.subtle.importKey(
@@ -46,36 +46,49 @@ async function createAPNsJWT(): Promise<string> {
     data
   );
 
-  // Convert DER signature to raw r||s format for JWT
-  const sig = derToRaw(new Uint8Array(signatureBuffer));
-  const encodedSig = btoa(String.fromCharCode(...sig))
+  const sigBytes = new Uint8Array(signatureBuffer);
+  
+  // Check if signature is DER-encoded (starts with 0x30) or already raw
+  let rawSig: Uint8Array;
+  if (sigBytes[0] === 0x30) {
+    rawSig = derToRaw(sigBytes);
+  } else if (sigBytes.length === 64) {
+    rawSig = sigBytes;
+  } else {
+    rawSig = derToRaw(sigBytes);
+  }
+
+  const encodedSig = btoa(String.fromCharCode(...rawSig))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+
+  console.log("JWT generated, sig length:", sigBytes.length, "raw:", rawSig.length);
 
   return `${header}.${claims}.${encodedSig}`;
 }
 
 // ECDSA signatures from Web Crypto are DER-encoded, but JWT needs raw r||s
 function derToRaw(der: Uint8Array): Uint8Array {
-  // DER: 0x30 [total-len] 0x02 [r-len] [r] 0x02 [s-len] [s]
   const raw = new Uint8Array(64);
-
-  let offset = 2; // skip 0x30 and total length
-  // r
+  let offset = 2;
+  
   const rLen = der[offset + 1];
   offset += 2;
-  const rStart = rLen > 32 ? offset + (rLen - 32) : offset;
-  const rDest = rLen < 32 ? 32 - rLen : 0;
-  raw.set(der.slice(rStart, offset + rLen), rDest);
+  if (rLen <= 32) {
+    raw.set(der.slice(offset, offset + rLen), 32 - rLen);
+  } else {
+    raw.set(der.slice(offset + rLen - 32, offset + rLen), 0);
+  }
   offset += rLen;
 
-  // s
   const sLen = der[offset + 1];
   offset += 2;
-  const sStart = sLen > 32 ? offset + (sLen - 32) : offset;
-  const sDest = sLen < 32 ? 64 - sLen : 32;
-  raw.set(der.slice(sStart, offset + sLen), sDest);
+  if (sLen <= 32) {
+    raw.set(der.slice(offset, offset + sLen), 64 - sLen);
+  } else {
+    raw.set(der.slice(offset + sLen - 32, offset + sLen), 32);
+  }
 
   return raw;
 }
@@ -87,6 +100,13 @@ serve(async (req) => {
 
   try {
     const { user_id, title, body, data } = await req.json();
+    
+    console.log("APNS_KEY_ID:", Deno.env.get("APNS_KEY_ID"));
+    console.log("APNS_TEAM_ID:", Deno.env.get("APNS_TEAM_ID"));
+    console.log("APNS_BUNDLE_ID:", Deno.env.get("APNS_BUNDLE_ID"));
+    const pk = Deno.env.get("APNS_PRIVATE_KEY") || "";
+    console.log("APNS_PRIVATE_KEY starts with:", pk.substring(0, 30));
+    console.log("APNS_PRIVATE_KEY length:", pk.length);
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -112,7 +132,7 @@ serve(async (req) => {
     const bundleId = Deno.env.get("APNS_BUNDLE_ID")!;
 
     // Use sandbox for TestFlight, production for App Store
-    const apnsHost = "https://api.sandbox.push.apple.com";
+    const apnsHost = "https://api.push.apple.com";
 
     let sent = 0;
     for (const { token } of tokens) {

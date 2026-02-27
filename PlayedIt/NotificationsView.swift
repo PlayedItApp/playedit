@@ -149,7 +149,7 @@ struct NotificationsView: View {
             // Collect feed_post_ids for batch posts so we can fetch game titles
             let batchPostIds = rows
                 .filter { $0.feed_posts?.post_type == "batch_ranked" && $0.feed_post_id != nil }
-                .compactMap { $0.feed_post_id }
+                .compactMap { $0.feed_post_id?.lowercased() }
             
             // Fetch child game titles for batch posts
             var batchGameTitles: [String: (title: String, coverURL: String?, count: Int)] = [:]
@@ -169,7 +169,7 @@ struct NotificationsView: View {
                 let children: [BatchChild] = try await supabase.client
                     .from("feed_posts")
                     .select("batch_post_id, user_games(games(title, cover_url))")
-                    .in("batch_post_id", values: batchPostIds)
+                    .in("batch_post_id", values: batchPostIds.map { $0.lowercased() })
                     .eq("post_type", value: "ranked_game")
                     .order("created_at", ascending: true)
                     .execute()
