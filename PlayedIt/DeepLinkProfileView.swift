@@ -11,6 +11,7 @@ struct DeepLinkProfileView: View {
     @State private var isSendingRequest = false
     @State private var requestSent = false
     @State private var gameCount = 0
+    @State private var mutualFriends: [Friend] = []
     @Environment(\.dismiss) private var dismiss
     
     enum FriendshipResult {
@@ -108,6 +109,49 @@ struct DeepLinkProfileView: View {
                 Text("\(gameCount) games ranked")
                     .font(.subheadline)
                     .foregroundStyle(Color.adaptiveGray)
+            }
+            
+            // Mutual friends
+            if !mutualFriends.isEmpty {
+                VStack(spacing: 8) {
+                    HStack(spacing: -8) {
+                        ForEach(mutualFriends.prefix(3)) { friend in
+                            Group {
+                                if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                                    AsyncImage(url: url) { image in
+                                        image.resizable().aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Circle()
+                                            .fill(Color.primaryBlue.opacity(0.2))
+                                            .overlay(
+                                                Text(String(friend.username.prefix(1)).uppercased())
+                                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                                    .foregroundColor(.primaryBlue)
+                                            )
+                                    }
+                                } else {
+                                    Circle()
+                                        .fill(Color.primaryBlue.opacity(0.2))
+                                        .overlay(
+                                            Text(String(friend.username.prefix(1)).uppercased())
+                                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                                .foregroundColor(.primaryBlue)
+                                        )
+                                }
+                            }
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.cardBackground, lineWidth: 2))
+                        }
+                    }
+                    
+                    let names = mutualFriends.map { $0.username }
+                    Text(mutualFriendsText(names: names))
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
             }
             
             // Action area
@@ -233,6 +277,13 @@ struct DeepLinkProfileView: View {
             }
             
             isLoading = false
+                        
+            // Fetch mutual friends if not already friends
+            if case .accepted = friendshipStatus {
+                // Already friends, no need to show mutual
+            } else {
+                await fetchMutualFriends(targetUserId: foundUser.id)
+            }
             
         } catch {
             debugLog("❌ Error looking up user: \(error)")
@@ -269,5 +320,57 @@ struct DeepLinkProfileView: View {
         }
         
         isSendingRequest = false
+    }
+    
+    // MARK: - Mutual Friends Text
+    private func mutualFriendsText(names: [String]) -> String {
+        switch names.count {
+        case 1:
+            return "Friends with \(names[0])"
+        case 2:
+            return "Friends with \(names[0]) and \(names[1])"
+        case 3:
+            return "Friends with \(names[0]), \(names[1]), and \(names[2])"
+        default:
+            let extra = names.count - 2
+            return "Friends with \(names[0]), \(names[1]), and \(extra) other\(extra == 1 ? "" : "s")"
+        }
+    }
+    
+    // MARK: - Fetch Mutual Friends
+    private func fetchMutualFriends(targetUserId: String) async {
+        guard let myId = supabase.currentUser?.id else { return }
+        
+        do {
+            struct MutualFriendRow: Decodable {
+                let user_id: String
+                let username: String?
+                let avatar_url: String?
+            }
+            
+            let rows: [MutualFriendRow] = try await supabase.client
+                .rpc("get_mutual_friends", params: [
+                    "requesting_user_id": myId.uuidString.lowercased(),
+                    "target_user_id": targetUserId.lowercased()
+                ])
+                .execute()
+                .value
+            
+            mutualFriends = rows.map { row in
+                Friend(
+                    id: row.user_id,
+                    friendshipId: "",
+                    username: row.username ?? "Unknown",
+                    userId: row.user_id,
+                    avatarURL: row.avatar_url,
+                    status: "accepted"
+                )
+            }
+            
+            debugLog("🔍 Found \(mutualFriends.count) mutual friends")
+            
+        } catch {
+            debugLog("❌ Error fetching mutual friends: \(error)")
+        }
     }
 }

@@ -11,6 +11,7 @@ struct FriendsView: View {
     @State private var searchError: String?
     @State private var searchSuccess: String?
     @State private var sentRequests: [Friend] = []
+    @State private var suggestedFriends: [(friend: Friend, mutualCount: Int)] = []
     
     var body: some View {
         NavigationStack {
@@ -115,7 +116,30 @@ struct FriendsView: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .padding(.horizontal, 40)
                     }
-                } else if !friends.isEmpty {
+                }
+                
+                // Suggested friends (shown regardless of friend count)
+                if !suggestedFriends.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("People You May Know")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                            .padding(.horizontal, 16)
+                        
+                        ForEach(suggestedFriends, id: \.friend.userId) { suggestion in
+                            NavigationLink(destination: DeepLinkProfileView(username: suggestion.friend.username)) {
+                                SuggestedFriendRow(
+                                    friend: suggestion.friend,
+                                    mutualCount: suggestion.mutualCount
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                }
+                
+                if !friends.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your Friends")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -300,6 +324,7 @@ struct FriendsView: View {
             isLoading = false
             
             debugLog("🔍 Final: \(friends.count) friends, \(pendingRequests.count) pending")
+            await fetchSuggestedFriends()
             
         } catch {
             debugLog("❌ Error fetching friends: \(error)")
@@ -395,20 +420,59 @@ struct FriendsView: View {
     }
     
     private func cancelFriendRequest(_ friend: Friend) async {
-            do {
-                try await supabase.client
-                    .from("friendships")
-                    .delete()
-                    .eq("id", value: friend.friendshipId)
-                    .execute()
-                
-                await fetchFriends()
-                
-            } catch {
-                debugLog("❌ Error cancelling friend request: \(error)")
-            }
+        do {
+            try await supabase.client
+                .from("friendships")
+                .delete()
+                .eq("id", value: friend.friendshipId)
+                .execute()
+            
+            await fetchFriends()
+            
+        } catch {
+            debugLog("❌ Error cancelling friend request: \(error)")
         }
+    }
+    
+    private func fetchSuggestedFriends() async {
+        guard supabase.currentUser?.id != nil else { return }
+        
+        do {
+            let suggestions: [SuggestedFriendResponse] = try await supabase.client
+                .rpc("get_my_suggested_friends")
+                .execute()
+                .value
+            
+            suggestedFriends = suggestions.map { row in
+                let friend = Friend(
+                    id: row.user_id,
+                    friendshipId: "",
+                    username: row.username ?? "Unknown",
+                    userId: row.user_id,
+                    avatarURL: row.avatar_url,
+                    status: "suggestion"
+                )
+                return (friend: friend, mutualCount: row.mutual_count)
+            }
+            
+            debugLog("🔍 Found \(suggestedFriends.count) suggested friends")
+            
+        } catch {
+            debugLog("❌ Error fetching suggested friends: \(error)")
+            suggestedFriends = []
+        }
+    }
 }
+
+// MARK: - Suggested Friends Model
+struct SuggestedFriendResponse: Decodable, Sendable {
+    let user_id: String
+    let username: String?
+    let avatar_url: String?
+    let mutual_count: Int
+}
+
+// MARK: - Friend Model
 
 // MARK: - Friend Model
 struct Friend: Identifiable, Hashable {
@@ -625,6 +689,61 @@ struct SentRequestRow: View {
         .background(Color.cardBackground) 
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - Suggested Friend Row
+struct SuggestedFriendRow: View {
+    let friend: Friend
+    let mutualCount: Int
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Group {
+                if let avatarURL = friend.avatarURL, let url = URL(string: avatarURL) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        initialCircle
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                } else {
+                    initialCircle
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(friend.username)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                
+                Text("\(mutualCount) mutual friend\(mutualCount == 1 ? "" : "s")")
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.adaptiveSilver)
+        }
+        .padding(12)
+        .background(Color.cardBackground)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var initialCircle: some View {
+        Circle()
+            .fill(Color.primaryBlue.opacity(0.2))
+            .frame(width: 44, height: 44)
+            .overlay(
+                Text(String(friend.username.prefix(1)).uppercased())
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primaryBlue)
+            )
     }
 }
 
