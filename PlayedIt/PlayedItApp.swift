@@ -7,6 +7,8 @@ import Supabase
 struct PlayedItApp: App {
     @State private var deepLinkUsername: String?
     @State private var pendingDeepLinkUsername: String?
+    @State private var deepLinkGameId: Int?
+    @State private var pendingDeepLinkGameId: Int?
     @ObservedObject private var supabase = SupabaseManager.shared
     @StateObject private var appearanceManager = AppearanceManager()
     
@@ -46,6 +48,10 @@ struct PlayedItApp: App {
                         deepLinkUsername = pendingDeepLinkUsername
                         pendingDeepLinkUsername = nil
                     }
+                    if newUser != nil && pendingDeepLinkGameId != nil {
+                        deepLinkGameId = pendingDeepLinkGameId
+                        pendingDeepLinkGameId = nil
+                    }
                 }
                 .sheet(item: $deepLinkUsername) { username in
                     NavigationStack {
@@ -59,12 +65,44 @@ struct PlayedItApp: App {
                             }
                     }
                 }
+                .sheet(item: $deepLinkGameId) { gameId in
+                    NavigationStack {
+                        DeepLinkGameView(gameId: gameId)
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Close") {
+                                        deepLinkGameId = nil
+                                    }
+                                }
+                            }
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
     }
     
     private func handleDeepLink(_ url: URL) {
         debugLog("🔗 Deep link received: \(url)")
+        // Handle Universal Links (https://playedit.app/...) and custom scheme (playedit://...)
+        if url.scheme == "https" && url.host == "playedit.app" {
+            if url.pathComponents.count >= 3 && url.pathComponents[1] == "game",
+               let gId = Int(url.pathComponents.last ?? "") {
+                if supabase.currentUser != nil {
+                    deepLinkGameId = gId
+                } else {
+                    pendingDeepLinkGameId = gId
+                }
+            } else if url.pathComponents.count >= 3 && url.pathComponents[1] == "profile" {
+                let uname = url.pathComponents[2]
+                if supabase.currentUser != nil {
+                    deepLinkUsername = uname
+                } else {
+                    pendingDeepLinkUsername = uname
+                }
+            }
+            return
+        }
+        
         guard url.scheme == "playedit" else { return }
         
         // Handle auth callback (email confirmation auto-login)
@@ -76,6 +114,17 @@ struct PlayedItApp: App {
                 } catch {
                     debugLog("❌ Auto-login from confirmation failed: \(error)")
                 }
+            }
+            return
+        }
+        
+        if url.host == "game",
+           let gameIdString = url.pathComponents.dropFirst().first,
+           let gameId = Int(gameIdString) {
+            if supabase.currentUser != nil {
+                deepLinkGameId = gameId
+            } else {
+                pendingDeepLinkGameId = gameId
             }
             return
         }
@@ -94,4 +143,8 @@ struct PlayedItApp: App {
 
 extension String: @retroactive Identifiable {
     public var id: String { self }
+}
+
+extension Int: @retroactive Identifiable {
+    public var id: Int { self }
 }

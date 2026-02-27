@@ -1601,12 +1601,28 @@ struct FirstTwoComparisonView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundStyle(Color.adaptiveSilver)
+                        HStack(spacing: 12) {
+                            Button {
+                                Task {
+                                    await GameShareService.shared.shareGame(
+                                        gameTitle: game.gameTitle,
+                                        coverURL: game.gameCoverUrl,
+                                        gameId: game.gameId
+                                    )
+                                }
+                            } label: {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.primaryBlue)
+                            }
+                            
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundStyle(Color.adaptiveSilver)
+                            }
                         }
                     }
                 }

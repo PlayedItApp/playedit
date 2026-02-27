@@ -460,12 +460,28 @@ struct RecommendationDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.adaptiveGray)
+                    HStack(spacing: 12) {
+                        Button {
+                            Task {
+                                await GameShareService.shared.shareGame(
+                                    gameTitle: recommendation.gameTitle,
+                                    coverURL: recommendation.gameCoverUrl,
+                                    gameId: recommendation.gameRawgId
+                                )
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16))
+                                .foregroundColor(.primaryBlue)
+                        }
+                        
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
                     }
                 }
             }

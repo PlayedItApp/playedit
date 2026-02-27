@@ -446,6 +446,8 @@ struct GameDetailSheet: View {
     @State private var notesError: String?
     @State private var gameDescription: String? = nil
     @State private var metacriticScore: Int? = nil
+    @State private var totalRankedGames: Int = 0
+    @State private var isSharing = false
     
     
     private var quickPlatforms: [String] {
@@ -797,6 +799,18 @@ struct GameDetailSheet: View {
                 }
             }
             .task {
+                // Fetch total ranked game count for share card
+                if let userId = supabase.currentUser?.id {
+                    let count: Int = (try? await supabase.client
+                        .from("user_games")
+                        .select("*", head: true, count: .exact)
+                        .eq("user_id", value: userId.uuidString)
+                        .not("rank_position", operator: .is, value: "null")
+                        .execute()
+                        .count) ?? 0
+                    totalRankedGames = count
+                }
+                
                 do {
                     struct GameInfo: Decodable {
                         let rawg_id: Int
@@ -853,12 +867,40 @@ struct GameDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(Color.adaptiveSilver)
+                    HStack(spacing: 12) {
+                        Button {
+                            isSharing = true
+                            Task {
+                                await GameShareService.shared.shareGame(
+                                    gameTitle: game.gameTitle,
+                                    coverURL: game.gameCoverURL,
+                                    rankPosition: rank,
+                                    platforms: displayedPlatforms,
+                                    totalGames: totalRankedGames,
+                                    gameId: game.gameRawgId ?? game.gameId
+                                )
+                                isSharing = false
+                            }
+                        } label: {
+                            if isSharing {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .adaptiveSilver))
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(Color.primaryBlue)
+                            }
+                        }
+                        .disabled(isSharing)
+                        
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(Color.adaptiveSilver)
+                        }
                     }
                 }
             }

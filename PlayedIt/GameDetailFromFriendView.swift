@@ -48,17 +48,33 @@ struct GameDetailFromFriendView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if userGame.userId.lowercased() != (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
-                    Menu {
-                        Button(role: .destructive) {
-                            showReportSheet = true
-                        } label: {
-                            Label("Report", systemImage: "flag")
+                HStack(spacing: 12) {
+                    Button {
+                        Task {
+                            await GameShareService.shared.shareGame(
+                                gameTitle: userGame.gameTitle,
+                                coverURL: userGame.gameCoverURL,
+                                gameId: userGame.gameRawgId ?? userGame.gameId
+                            )
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16))
                             .foregroundColor(.primaryBlue)
+                    }
+                    
+                    if userGame.userId.lowercased() != (supabase.currentUser?.id.uuidString.lowercased() ?? "") {
+                        Menu {
+                            Button(role: .destructive) {
+                                showReportSheet = true
+                            } label: {
+                                Label("Report", systemImage: "flag")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 16))
+                                .foregroundColor(.primaryBlue)
+                        }
                     }
                 }
             }
