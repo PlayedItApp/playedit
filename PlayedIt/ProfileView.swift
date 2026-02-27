@@ -27,6 +27,10 @@ struct ProfileView: View {
     @State private var showGameSearch = false
     @State private var selectedListTab = 0
     @State private var showResetRankings = false
+    @State private var showDiagnosticSheet = false
+    @State private var diagnosticNotes = ""
+    @State private var isSendingLogs = false
+    @State private var logsSent = false
     @State private var showResetFlow = false
     @State private var hasUnrankedGames = false
     @State private var unrankedCount = 0
@@ -284,6 +288,87 @@ struct ProfileView: View {
             } message: {
                 Text("This will reset all your rankings and take you through the comparison flow again from the top. Your games, notes, and platforms stay. Just the order gets wiped. This can't be undone!")
             }
+            .sheet(isPresented: $showDiagnosticSheet) {
+                NavigationStack {
+                    VStack(spacing: 20) {
+                        Image(systemName: "ladybug")
+                            .font(.system(size: 40))
+                            .foregroundStyle(Color.accentOrange)
+                        
+                        Text("Send Diagnostic Logs")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
+                        
+                        Text("This sends your recent session logs to the dev team to help debug issues. No personal data is included beyond your username.")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.adaptiveGray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Text("\(LogCollector.shared.entryCount()) log entries this session")
+                            .font(.caption)
+                            .foregroundStyle(Color.adaptiveGray)
+                        
+                        TextEditor(text: $diagnosticNotes)
+                            .frame(height: 100)
+                            .padding(12)
+                            .background(Color.secondaryBackground)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.adaptiveSilver, lineWidth: 1)
+                            )
+                            .overlay(
+                                Group {
+                                    if diagnosticNotes.isEmpty {
+                                        Text("What went wrong? (optional)")
+                                            .foregroundStyle(Color.adaptiveGray)
+                                            .padding(.leading, 16)
+                                            .padding(.top, 20)
+                                    }
+                                },
+                                alignment: .topLeading
+                            )
+                            .padding(.horizontal)
+                        
+                        Button {
+                            Task {
+                                isSendingLogs = true
+                                let success = await SupabaseManager.shared.submitDiagnosticLogs(notes: diagnosticNotes)
+                                isSendingLogs = false
+                                if success {
+                                    logsSent = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                        showDiagnosticSheet = false
+                                        logsSent = false
+                                        diagnosticNotes = ""
+                                    }
+                                }
+                            }
+                        } label: {
+                            if isSendingLogs {
+                                ProgressView()
+                            } else if logsSent {
+                                Label("Sent!", systemImage: "checkmark.circle.fill")
+                            } else {
+                                Text("Send Logs")
+                            }
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(isSendingLogs || logsSent)
+                        .padding(.horizontal)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 30)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showDiagnosticSheet = false }
+                                .foregroundColor(.primaryBlue)
+                        }
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $showResetFlow, onDismiss: {
                 Task { await fetchRankedGames() }
             }) {
@@ -309,6 +394,11 @@ struct ProfileView: View {
                             showSteamImport = true
                         } label: {
                             Label(hasSteamConnected ? "Import from Steam (Connected ✓)" : "Import from Steam", systemImage: "arrow.down.circle")
+                        }
+                        Button {
+                            showDiagnosticSheet = true
+                        } label: {
+                            Label("Send Diagnostic Logs", systemImage: "ladybug")
                         }
                         
                         if !hasAppleLinked {

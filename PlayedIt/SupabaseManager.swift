@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Combine
 import Supabase
 
@@ -15,6 +16,60 @@ class SupabaseManager: ObservableObject {
     @Published var errorMessage: String?
     @Published var needsEmailConfirmation = false
     @Published var pendingEmail: String?
+    
+    // MARK: - Diagnostic Logs
+    func submitDiagnosticLogs(notes: String = "") async -> Bool {
+        guard let userId = currentUser?.id else { return false }
+        
+        let username = try? await client.from("users")
+            .select("username")
+            .eq("id", value: userId.uuidString)
+            .single()
+            .execute()
+        
+        let usernameStr = (try? JSONDecoder().decode([String: String].self, from: username?.data ?? Data()))? ["username"] ?? "unknown"
+        
+        let device = UIDevice.current
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        
+        struct DiagnosticLog: Encodable {
+            let user_id: String
+            let username: String
+            let app_version: String
+            let ios_version: String
+            let device_model: String
+            let logs: String
+            let notes: String
+        }
+        
+        let log = DiagnosticLog(
+            user_id: userId.uuidString,
+            username: usernameStr,
+            app_version: "\(appVersion) (\(buildNumber))",
+            ios_version: "\(device.systemName) \(device.systemVersion)",
+            device_model: getDeviceModel(),
+            logs: LogCollector.shared.export(),
+            notes: notes
+        )
+        
+        do {
+            try await client.from("diagnostic_logs").insert(log).execute()
+            debugLog("✅ Diagnostic logs submitted")
+            return true
+        } catch {
+            debugLog("❌ Failed to submit logs: \(error)")
+            return false
+        }
+    }
+
+    private func getDeviceModel() -> String {
+        var size = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        var machine = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.machine", &machine, &size, nil, 0)
+        return String(cString: machine)
+    }
     
     private init() {
         self.client = SupabaseClient(
