@@ -172,6 +172,30 @@ struct FeedView: View {
                                 )
                             }
                         )
+                    case .wantToPlay(let wtp):
+                        WantToPlayFeedRow(
+                            group: wtp,
+                            onLikeTapped: { toggleWantToPlayLike(for: wtp) },
+                            onCommentTapped: {
+                                selectedItem = FeedItem(
+                                    id: wtp.id,
+                                    feedPostId: wtp.feedPostId,
+                                    userGameId: "",
+                                    userId: wtp.userId,
+                                    username: wtp.username,
+                                    avatarURL: wtp.avatarURL,
+                                    gameId: 0,
+                                    gameTitle: wtp.displayLabel,
+                                    gameCoverURL: nil,
+                                    rankPosition: nil,
+                                    loggedAt: nil,
+                                    batchSource: nil,
+                                    likeCount: wtp.likeCount,
+                                    commentCount: wtp.commentCount,
+                                    isLikedByMe: wtp.isLikedByMe
+                                )
+                            }
+                        )
                     }
                 }
             }
@@ -255,6 +279,36 @@ struct FeedView: View {
                 
             } catch {
                 debugLog("❌ Error toggling group like: \(error)")
+            }
+        }
+    }
+    
+    private func toggleWantToPlayLike(for wtp: WantToPlayGroupItem) {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        Task {
+            do {
+                if wtp.isLikedByMe {
+                    try await supabase.client
+                        .from("feed_reactions")
+                        .delete()
+                        .eq("feed_post_id", value: wtp.feedPostId)
+                        .eq("user_id", value: userId.uuidString)
+                        .execute()
+                } else {
+                    try await supabase.client
+                        .from("feed_reactions")
+                        .insert([
+                            "feed_post_id": wtp.feedPostId,
+                            "user_id": userId.uuidString,
+                            "emoji": "❤️"
+                        ])
+                        .execute()
+                }
+                
+                await fetchFeed()
+            } catch {
+                debugLog("❌ Error toggling want to play like: \(error)")
             }
         }
     }
@@ -344,6 +398,9 @@ struct FeedView: View {
                 struct BatchMetadata: Decodable {
                     let game_count: Int?
                     let user_game_ids: [String]?
+                    let game_id: Int?
+                    let game_title: String?
+                    let game_cover_url: String?
                 }
                 
                 struct UserInfo: Decodable {
@@ -382,7 +439,7 @@ struct FeedView: View {
             oldestPostDate = allPosts.last?.created_at
             
             // Fetch all batch children for any batch_ranked posts in this page
-            let batchParentIds = allPosts.filter { $0.post_type == "batch_ranked" }.map { $0.id }
+            let batchParentIds = allPosts.filter { $0.post_type == "batch_ranked" || $0.post_type == "batch_want_to_play" }.map { $0.id }
             
             if !batchParentIds.isEmpty {
                 let missingChildren: [FeedPostRow] = try await supabase.client
@@ -527,6 +584,63 @@ struct FeedView: View {
                     debugLog("🔍 Batch \(post.id) — \(childItems.count) children, covers: \(childItems.map { $0.gameCoverURL ?? "nil" })")
                     combined.append(.groupedGames(group))
                     
+                case "batch_want_to_play":
+                    let childPosts = allPosts.filter { p in
+                        p.batch_post_id == post.id && p.post_type == "want_to_play"
+                    }
+                    
+                    let wtpItems: [WantToPlayFeedItem] = childPosts.compactMap { child in
+                        guard let meta = child.metadata else { return nil }
+                        return WantToPlayFeedItem(
+                            id: child.id,
+                            feedPostId: child.id,
+                            gameId: meta.game_id ?? 0,
+                            gameTitle: meta.game_title ?? "Unknown",
+                            gameCoverURL: meta.game_cover_url
+                        )
+                    }
+                    
+                    guard !wtpItems.isEmpty else { continue }
+                    
+                    let wtpGroup = WantToPlayGroupItem(
+                        id: post.id,
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        items: wtpItems,
+                        mostRecentDate: post.created_at,
+                        feedPostId: post.id,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    combined.append(.wantToPlay(wtpGroup))
+                    
+                case "want_to_play":
+                    // Solo want_to_play (no batch parent) — show as single item
+                    if post.batch_post_id != nil { continue }
+                    guard let meta = post.metadata else { continue }
+                    
+                    let soloItem = WantToPlayGroupItem(
+                        id: post.id,
+                        userId: post.user_id,
+                        username: post.users.username ?? "Friend",
+                        avatarURL: post.users.avatar_url,
+                        items: [WantToPlayFeedItem(
+                            id: post.id,
+                            feedPostId: post.id,
+                            gameId: meta.game_id ?? 0,
+                            gameTitle: meta.game_title ?? "Unknown",
+                            gameCoverURL: meta.game_cover_url
+                        )],
+                        mostRecentDate: post.created_at,
+                        feedPostId: post.id,
+                        likeCount: likes,
+                        commentCount: comments,
+                        isLikedByMe: isLiked
+                    )
+                    combined.append(.wantToPlay(soloItem))
+                    
                 case "reset_rankings":
                     let item = ActivityFeedItem(
                         id: post.activity_feed_id ?? post.id,
@@ -588,6 +702,9 @@ struct FeedView: View {
                 struct BatchMetadata: Decodable {
                     let game_count: Int?
                     let user_game_ids: [String]?
+                    let game_id: Int?
+                    let game_title: String?
+                    let game_cover_url: String?
                 }
                 
                 struct UserInfo: Decodable {
@@ -633,7 +750,7 @@ struct FeedView: View {
             oldestPostDate = olderPosts.last?.created_at
             
             // Fetch batch children
-            let batchParentIds = olderPosts.filter { $0.post_type == "batch_ranked" }.map { $0.id }
+            let batchParentIds = olderPosts.filter { $0.post_type == "batch_ranked" || $0.post_type == "batch_want_to_play" }.map { $0.id }
             
             if !batchParentIds.isEmpty {
                 let batchChildren: [FeedPostRow] = try await supabase.client
@@ -757,23 +874,75 @@ struct FeedView: View {
                     )
                     newEntries.append(.groupedGames(group))
                     
-                case "reset_rankings":
-                    let item = ActivityFeedItem(
-                        id: post.activity_feed_id ?? post.id,
-                        feedPostId: post.id,
-                        userId: post.user_id,
-                        username: post.users.username ?? "Friend",
-                        avatarURL: post.users.avatar_url,
-                        activityType: post.post_type,
-                        createdAt: post.created_at,
-                        likeCount: likes,
-                        commentCount: comments,
-                        isLikedByMe: isLiked
-                    )
-                    newEntries.append(.activity(item))
-                    
-                default:
-                    continue
+                case "batch_want_to_play":
+                        let childPosts = olderPosts.filter { p in
+                            p.batch_post_id == post.id && p.post_type == "want_to_play"
+                        }
+                        let wtpItems: [WantToPlayFeedItem] = childPosts.compactMap { child in
+                            guard let meta = child.metadata else { return nil }
+                            return WantToPlayFeedItem(
+                                id: child.id,
+                                feedPostId: child.id,
+                                gameId: meta.game_id ?? 0,
+                                gameTitle: meta.game_title ?? "Unknown",
+                                gameCoverURL: meta.game_cover_url
+                            )
+                        }
+                        guard !wtpItems.isEmpty else { continue }
+                        let wtpGroup = WantToPlayGroupItem(
+                            id: post.id,
+                            userId: post.user_id,
+                            username: post.users.username ?? "Friend",
+                            avatarURL: post.users.avatar_url,
+                            items: wtpItems,
+                            mostRecentDate: post.created_at,
+                            feedPostId: post.id,
+                            likeCount: likes,
+                            commentCount: comments,
+                            isLikedByMe: isLiked
+                        )
+                        newEntries.append(.wantToPlay(wtpGroup))
+                        
+                    case "want_to_play":
+                        if post.batch_post_id != nil { continue }
+                        guard let meta = post.metadata else { continue }
+                        let soloItem = WantToPlayGroupItem(
+                            id: post.id,
+                            userId: post.user_id,
+                            username: post.users.username ?? "Friend",
+                            avatarURL: post.users.avatar_url,
+                            items: [WantToPlayFeedItem(
+                                id: post.id,
+                                feedPostId: post.id,
+                                gameId: meta.game_id ?? 0,
+                                gameTitle: meta.game_title ?? "Unknown",
+                                gameCoverURL: meta.game_cover_url
+                            )],
+                            mostRecentDate: post.created_at,
+                            feedPostId: post.id,
+                            likeCount: likes,
+                            commentCount: comments,
+                            isLikedByMe: isLiked
+                        )
+                        newEntries.append(.wantToPlay(soloItem))
+                        
+                    case "reset_rankings":
+                        let item = ActivityFeedItem(
+                            id: post.activity_feed_id ?? post.id,
+                            feedPostId: post.id,
+                            userId: post.user_id,
+                            username: post.users.username ?? "Friend",
+                            avatarURL: post.users.avatar_url,
+                            activityType: post.post_type,
+                            createdAt: post.created_at,
+                            likeCount: likes,
+                            commentCount: comments,
+                            isLikedByMe: isLiked
+                        )
+                        newEntries.append(.activity(item))
+                        
+                    default:
+                        continue
                 }
             }
             
@@ -814,6 +983,38 @@ struct FeedView: View {
     }
 }
 
+// MARK: - Want to Play Feed Models
+struct WantToPlayFeedItem: Identifiable {
+    let id: String
+    let feedPostId: String
+    let gameId: Int
+    let gameTitle: String
+    let gameCoverURL: String?
+}
+
+struct WantToPlayGroupItem: Identifiable {
+    let id: String
+    let userId: String
+    let username: String
+    let avatarURL: String?
+    let items: [WantToPlayFeedItem]
+    let mostRecentDate: String
+    let feedPostId: String
+    let likeCount: Int
+    let commentCount: Int
+    let isLikedByMe: Bool
+    
+    var gameCount: Int { items.count }
+    
+    var displayLabel: String {
+        if items.count == 1 {
+            return "\(username) wants to play \(items.first?.gameTitle ?? "a game")"
+        } else {
+            return "\(username) added \(items.count) games to their backlog"
+        }
+    }
+}
+
 // MARK: - Activity Feed Item Model
 struct ActivityFeedItem: Identifiable {
     let id: String
@@ -833,12 +1034,14 @@ enum FeedEntry: Identifiable {
     case game(FeedItem)
     case activity(ActivityFeedItem)
     case groupedGames(GroupedFeedItem)
+    case wantToPlay(WantToPlayGroupItem)
     
     var id: String {
         switch self {
         case .game(let item): return "game-\(item.id)"
         case .activity(let item): return "activity-\(item.id)"
         case .groupedGames(let group): return "group-\(group.id)"
+        case .wantToPlay(let wtp): return "wtp-\(wtp.id)"
         }
     }
     
@@ -847,6 +1050,7 @@ enum FeedEntry: Identifiable {
         case .game(let item): return item.loggedAt ?? ""
         case .activity(let item): return item.createdAt
         case .groupedGames(let group): return group.mostRecentDate
+        case .wantToPlay(let wtp): return wtp.mostRecentDate
         }
     }
     
@@ -855,6 +1059,7 @@ enum FeedEntry: Identifiable {
         case .game(let item): return item.userId
         case .activity(let item): return item.userId
         case .groupedGames(let group): return group.userId
+        case .wantToPlay(let wtp): return wtp.userId
         }
     }
 }
@@ -1740,6 +1945,17 @@ struct GroupedFeedRow: View {
                                 }
                                 
                                 Spacer()
+                                                                
+                                // Bookmark button (only on friends' posts)
+                                if group.userId.lowercased() != (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") {
+                                    BookmarkButton(
+                                        gameId: item.gameId,
+                                        gameTitle: item.gameTitle,
+                                        gameCoverUrl: item.gameCoverURL,
+                                        source: "feed_batch",
+                                        sourceFriendId: group.userId
+                                    )
+                                }
                                 
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 11))
@@ -1890,6 +2106,459 @@ struct GroupedFeedRow: View {
         else if interval < 3600 { return "\(Int(interval / 60))m ago" }
         else if interval < 86400 { return "\(Int(interval / 3600))h ago" }
         else { return "\(Int(interval / 86400))d ago" }
+    }
+}
+
+// MARK: - Want to Play Feed Row
+struct WantToPlayFeedRow: View {
+    let group: WantToPlayGroupItem
+    let onLikeTapped: () -> Void
+    let onCommentTapped: () -> Void
+    @State private var isExpanded = false
+    @State private var selectedGameId: Int?
+    @State private var showGameDetail = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 12) {
+                NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                    if let avatarURL = group.avatarURL, let url = URL(string: avatarURL) {
+                        AsyncImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            avatarPlaceholder
+                        }
+                        .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        avatarPlaceholder
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
+                            Text(group.username).fontWeight(.semibold)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        if group.items.count == 1 {
+                            Text("wants to play")
+                        } else {
+                            Text("added \(group.gameCount) to their backlog")
+                        }
+                    }
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                    
+                    Text(timeAgo(from: group.mostRecentDate))
+                        .font(.caption)
+                        .foregroundStyle(Color.adaptiveGray)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.accentOrange)
+            }
+            .padding(12)
+            
+            // Cover art grid (collapsed view)
+            if !isExpanded {
+                coverArtGrid
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                
+                Divider()
+                    .padding(.horizontal, 12)
+                
+                // Like/Comment bar
+                HStack(spacing: 24) {
+                    Button(action: onLikeTapped) {
+                        HStack(spacing: 6) {
+                            Image(systemName: group.isLikedByMe ? "heart.fill" : "heart")
+                                .font(.system(size: 18))
+                                .foregroundStyle(group.isLikedByMe ? Color.orange : Color.adaptiveGray)
+                            if group.likeCount > 0 {
+                                Text("\(group.likeCount)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(group.isLikedByMe ? Color.orange : Color.adaptiveGray)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: onCommentTapped) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bubble.right")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color.adaptiveGray)
+                            if group.commentCount > 0 {
+                                Text("\(group.commentCount)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.adaptiveGray)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                
+                Divider()
+                    .padding(.horizontal, 12)
+            }
+            
+            // Expand/collapse button
+            if group.items.count > 1 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Text(isExpanded ? "Collapse" : "See all \(group.items.count) games")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primaryBlue)
+                        Spacer()
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.primaryBlue)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            
+            // Expanded list
+            if isExpanded {
+                expandedList
+            }
+        }
+        .background(Color.cardBackground)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    // MARK: - Cover Art Grid
+    private var coverArtGrid: some View {
+        let itemsWithArt = group.items.filter { $0.gameCoverURL != nil && !($0.gameCoverURL ?? "").isEmpty }
+        let totalCount = group.items.count
+        let targetCount = totalCount <= 3 ? totalCount : (totalCount <= 5 ? 3 : min(totalCount, 6))
+        let displayItems = itemsWithArt.count >= targetCount
+            ? Array(itemsWithArt.prefix(targetCount))
+            : Array(group.items.prefix(targetCount))
+        let remaining = totalCount - targetCount
+        
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: min(3, totalCount)), spacing: 8) {
+            ForEach(Array(displayItems.enumerated()), id: \.element.id) { index, item in
+                ZStack {
+                    GeometryReader { geo in
+                        CachedAsyncImage(url: item.gameCoverURL) {
+                            Rectangle()
+                                .fill(Color.secondaryBackground)
+                                .overlay(
+                                    Image(systemName: "gamecontroller")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.adaptiveSilver)
+                                )
+                        }
+                    }
+                    .frame(height: 60)
+                    .cornerRadius(6)
+                    .clipped()
+                    
+                    if index == displayItems.count - 1 && remaining > 0 {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.black.opacity(0.5))
+                        Text("+\(remaining)")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Expanded List
+    private var expandedList: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .padding(.horizontal, 12)
+            
+            LazyVStack(spacing: 0) {
+                ForEach(group.items) { item in
+                    WantToPlayExpandedRow(
+                        item: item,
+                        groupUserId: group.userId,
+                        groupUsername: group.username
+                    )
+                }
+            }
+        }
+    }
+    
+    private var avatarPlaceholder: some View {
+        Circle()
+            .fill(Color.primaryBlue.opacity(0.2))
+            .frame(width: 36, height: 36)
+            .overlay(
+                Text(String(group.username.prefix(1)).uppercased())
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primaryBlue)
+            )
+    }
+    
+    private func timeAgo(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = formatter.date(from: dateString) else { return "" }
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 { return "Just now" }
+        else if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        else if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        else { return "\(Int(interval / 86400))d ago" }
+    }
+}
+
+// MARK: - Want to Play Expanded Row
+struct WantToPlayExpandedRow: View {
+    let item: WantToPlayFeedItem
+    let groupUserId: String
+    let groupUsername: String
+    @State private var isLiked = false
+    @State private var likeCount = 0
+    @State private var commentCount = 0
+    @State private var showComments = false
+    @State private var toastMessage = ""
+    @State private var showToast = false
+    @State private var showDetail = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Game info row
+            HStack(spacing: 10) {
+                CachedAsyncImage(url: item.gameCoverURL) {
+                    Rectangle()
+                        .fill(Color.secondaryBackground)
+                        .overlay(
+                            Image(systemName: "gamecontroller")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Color.adaptiveSilver)
+                        )
+                }
+                .frame(width: 36, height: 48)
+                .clipped()
+                .cornerRadius(4)
+                .onTapGesture { showDetail = true }
+                
+                Text(item.gameTitle)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                    .lineLimit(1)
+                    .onTapGesture { showDetail = true }
+                
+                Spacer()
+                
+                // Bookmark button (only on friends' posts)
+                if groupUserId.lowercased() != (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") {
+                    HStack(spacing: 4) {
+                        if showToast {
+                            Text(toastMessage)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                                .transition(.opacity)
+                        }
+                        BookmarkButton(
+                            gameId: item.gameId,
+                            gameTitle: item.gameTitle,
+                            gameCoverUrl: item.gameCoverURL,
+                            source: "feed_batch",
+                            sourceFriendId: groupUserId,
+                            onToast: { message in
+                                toastMessage = message
+                                withAnimation { showToast = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation { showToast = false }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            
+            // Like/comment buttons
+            HStack(spacing: 0) {
+                Button {
+                    toggleLike()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 14))
+                            .foregroundStyle(isLiked ? Color.orange : Color.adaptiveGray)
+                        if likeCount > 0 {
+                            Text("\(likeCount)")
+                                .font(.caption)
+                                .foregroundStyle(isLiked ? Color.orange : Color.adaptiveGray)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                
+                Button {
+                    showComments = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.right")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.adaptiveGray)
+                        if commentCount > 0 {
+                            Text("\(commentCount)")
+                                .font(.caption)
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+            }
+            .padding(.leading, 46)
+            .padding(.bottom, 4)
+            
+            Divider()
+                .padding(.horizontal, 12)
+        }
+        .sheet(isPresented: $showDetail) {
+            WantToPlayDetailSheet(
+                game: WantToPlayGame(
+                    id: UUID().uuidString,
+                    userId: groupUserId,
+                    gameId: item.gameId,
+                    gameTitle: item.gameTitle,
+                    gameCoverUrl: item.gameCoverURL,
+                    source: nil,
+                    sourceFriendId: nil,
+                    note: nil,
+                    isVisible: true,
+                    createdAt: nil,
+                    sortPosition: nil
+                )
+            )
+        }
+        .task {
+            await fetchReactionData()
+        }
+        .sheet(isPresented: $showComments) {
+            CommentsSheet(
+                feedItem: FeedItem(
+                    id: item.id,
+                    feedPostId: item.feedPostId,
+                    userGameId: "",
+                    userId: groupUserId,
+                    username: groupUsername,
+                    avatarURL: nil,
+                    gameId: item.gameId,
+                    gameTitle: item.gameTitle,
+                    gameCoverURL: item.gameCoverURL,
+                    rankPosition: nil,
+                    loggedAt: nil,
+                    batchSource: nil,
+                    likeCount: likeCount,
+                    commentCount: commentCount,
+                    isLikedByMe: isLiked
+                ),
+                onDismiss: {
+                    showComments = false
+                    Task { await fetchReactionData() }
+                }
+            )
+        }
+    }
+    
+    private func fetchReactionData() async {
+        guard let userId = SupabaseManager.shared.currentUser?.id else { return }
+        
+        do {
+            struct ReactionRow: Decodable {
+                let user_id: String
+            }
+            let reactions: [ReactionRow] = try await SupabaseManager.shared.client
+                .from("feed_reactions")
+                .select("user_id")
+                .eq("feed_post_id", value: item.feedPostId)
+                .execute()
+                .value
+            
+            likeCount = reactions.count
+            isLiked = reactions.contains { $0.user_id.lowercased() == userId.uuidString.lowercased() }
+            
+            struct CommentRow: Decodable {
+                let id: String
+            }
+            let comments: [CommentRow] = try await SupabaseManager.shared.client
+                .from("feed_comments")
+                .select("id")
+                .eq("feed_post_id", value: item.feedPostId)
+                .execute()
+                .value
+            
+            commentCount = comments.count
+        } catch {
+            debugLog("❌ Error fetching WTP reaction data: \(error)")
+        }
+    }
+    
+    private func toggleLike() {
+        guard let userId = SupabaseManager.shared.currentUser?.id else { return }
+        
+        let wasLiked = isLiked
+        let oldCount = likeCount
+        
+        isLiked = !wasLiked
+        likeCount = wasLiked ? oldCount - 1 : oldCount + 1
+        
+        Task {
+            do {
+                if wasLiked {
+                    try await SupabaseManager.shared.client
+                        .from("feed_reactions")
+                        .delete()
+                        .eq("feed_post_id", value: item.feedPostId)
+                        .eq("user_id", value: userId.uuidString)
+                        .execute()
+                } else {
+                    try await SupabaseManager.shared.client
+                        .from("feed_reactions")
+                        .insert([
+                            "feed_post_id": item.feedPostId,
+                            "user_id": userId.uuidString,
+                            "emoji": "❤️"
+                        ])
+                        .execute()
+                }
+            } catch {
+                isLiked = wasLiked
+                likeCount = oldCount
+                debugLog("❌ Error toggling WTP like: \(error)")
+            }
+        }
     }
 }
 

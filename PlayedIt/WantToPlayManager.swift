@@ -111,13 +111,125 @@ class WantToPlayManager: ObservableObject {
                 .execute()
             
             myWantToPlayIds.insert(localGameId)
-            debugLog("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
-            return true
-        } catch {
-            debugLog("❌ Error adding to want to play: \(error)")
-            return false
+                debugLog("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
+                
+                // Post to activity feed (batched)
+                await postWantToPlayFeedEntry(
+                    userId: userId.uuidString,
+                    gameId: localGameId,
+                    gameTitle: gameTitle,
+                    gameCoverUrl: gameCoverUrl
+                )
+                
+                return true
+            } catch {
+                debugLog("❌ Error adding to want to play: \(error)")
+                return false
+            }
         }
-    }
+        
+        // MARK: - Post Want to Play Feed Entry (Batched)
+        private func postWantToPlayFeedEntry(userId: String, gameId: Int, gameTitle: String, gameCoverUrl: String?) async {
+            do {
+                // Check for a recent batch parent (within last 10 minutes)
+                struct RecentBatch: Decodable {
+                    let id: String
+                    let metadata: BatchMeta?
+                    struct BatchMeta: Decodable {
+                        let game_count: Int?
+                    }
+                }
+                
+                let tenMinutesAgo = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-600))
+                
+                let recentBatches: [RecentBatch] = try await supabase.client
+                    .from("feed_posts")
+                    .select("id, metadata")
+                    .eq("user_id", value: userId)
+                    .eq("post_type", value: "batch_want_to_play")
+                    .gte("created_at", value: tenMinutesAgo)
+                    .order("created_at", ascending: false)
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                let batchParentId: String
+                
+                if let existingBatch = recentBatches.first {
+                    batchParentId = existingBatch.id
+                    
+                    // Update parent's game_count
+                    let newCount = (existingBatch.metadata?.game_count ?? 1) + 1
+                    struct MetadataUpdate: Encodable {
+                        let metadata: MetaPayload
+                        struct MetaPayload: Encodable {
+                            let game_count: Int
+                        }
+                    }
+                    try await supabase.client
+                        .from("feed_posts")
+                        .update(MetadataUpdate(metadata: .init(game_count: newCount)))
+                        .eq("id", value: batchParentId)
+                        .execute()
+                } else {
+                    // Create new batch parent
+                    struct BatchParentInsert: Encodable {
+                        let user_id: String
+                        let post_type: String
+                        let metadata: MetaPayload
+                        struct MetaPayload: Encodable {
+                            let game_count: Int
+                        }
+                    }
+                    struct InsertedPost: Decodable { let id: String }
+                    
+                    let inserted: InsertedPost = try await supabase.client
+                        .from("feed_posts")
+                        .insert(BatchParentInsert(
+                            user_id: userId,
+                            post_type: "batch_want_to_play",
+                            metadata: .init(game_count: 1)
+                        ))
+                        .select("id")
+                        .single()
+                        .execute()
+                        .value
+                    
+                    batchParentId = inserted.id
+                }
+                
+                // Create child post
+                struct ChildPostInsert: Encodable {
+                    let user_id: String
+                    let post_type: String
+                    let batch_post_id: String
+                    let metadata: ChildMeta
+                    struct ChildMeta: Encodable {
+                        let game_id: Int
+                        let game_title: String
+                        let game_cover_url: String?
+                    }
+                }
+                
+                try await supabase.client
+                    .from("feed_posts")
+                    .insert(ChildPostInsert(
+                        user_id: userId,
+                        post_type: "want_to_play",
+                        batch_post_id: batchParentId,
+                        metadata: .init(
+                            game_id: gameId,
+                            game_title: gameTitle,
+                            game_cover_url: gameCoverUrl
+                        )
+                    ))
+                    .execute()
+                
+                debugLog("✅ Posted want_to_play feed entry for \(gameTitle) (batch: \(batchParentId))")
+            } catch {
+                debugLog("⚠️ Failed to post want_to_play feed entry: \(error)")
+            }
+        }
     
     // MARK: - Resolve Local Game ID
     /// Given an ID that might be a RAWG ID or a local games table ID,
