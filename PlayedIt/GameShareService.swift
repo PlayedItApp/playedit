@@ -21,7 +21,7 @@ class GameShareService {
         // Pre-fetch cover image so ImageRenderer doesn't deal with async loading
         let coverImage = await fetchCoverImage(urlString: coverURL)
         
-        let cardView = GameShareCardView(
+        _ = GameShareCardView(
             gameTitle: gameTitle,
             coverURL: coverURL,
             rankPosition: rankPosition,

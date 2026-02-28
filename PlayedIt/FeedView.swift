@@ -2272,9 +2272,13 @@ struct WantToPlayFeedRow: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(12)
-                } else {
-                    coverArtGrid
+                        .padding(12)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedWtpItem = game
+                        }
+                    } else {
+                        coverArtGrid
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                 }
