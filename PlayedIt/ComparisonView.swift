@@ -108,7 +108,7 @@ struct ComparisonView: View {
                         }
                     } else {
                         Spacer()
-                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1) {
+                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1, predictedPosition: predictedPosition) {
                             onComplete(position)
                             dismiss()
                         }
@@ -352,6 +352,7 @@ struct RetroCompletionView: View {
     let game: Game
     let position: Int
     let totalGames: Int
+    var predictedPosition: Int? = nil
     let onDone: () -> Void
     
     @State private var showContent = false
@@ -396,6 +397,17 @@ struct RetroCompletionView: View {
                         .opacity(showContent ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.45), value: showContent)
                     
+                    if let predicted = predictedPosition {
+                        Text(predictionComparisonMessage(predicted: predicted, actual: position))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                            .opacity(showContent ? 1 : 0)
+                            .offset(y: showContent ? 0 : 10)
+                            .animation(.easeOut(duration: 0.4).delay(0.5), value: showContent)
+                    }
+                    
                     Button("Done") {
                         onDone()
                     }
@@ -408,6 +420,7 @@ struct RetroCompletionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear {
+                debugLog("🎉 RetroCompletionView: position=\(position), predictedPosition=\(String(describing: predictedPosition))")
                 generateConfetti(in: geometry.size)
                 
                 let notification = UINotificationFeedbackGenerator()
@@ -435,6 +448,24 @@ struct RetroCompletionView: View {
                 delay: Double.random(in: 0...0.8)
             )
             confettiParticles.append(particle)
+        }
+    }
+    
+    private func predictionComparisonMessage(predicted: Int, actual: Int) -> String {
+        let delta = abs(predicted - actual)
+        switch delta {
+        case 0:
+            return "We called it! Predicted #\(predicted). Nailed it. 🎯"
+        case 1...2:
+            return "Pretty close! We predicted ~#\(predicted) 🎯"
+        case 3...5:
+            return "Not bad! We predicted ~#\(predicted)"
+        default:
+            if predicted < actual {
+                return "We thought you'd love this more 😅 Predicted ~#\(predicted)"
+            } else {
+                return "Higher than we expected! We predicted ~#\(predicted) 🫢"
+            }
         }
     }
     

@@ -9,6 +9,93 @@ struct WhatsNewManager {
     
     static let features: [WhatsNewFeature] = [
         WhatsNewFeature(
+            icon: "square.and.arrow.up.fill",
+            title: "Share Games",
+            description: "Found your new #1? Share any game with a slick card that shows your ranking and cover art. Send it to friends, post it wherever. Let the world know."
+        ),
+        WhatsNewFeature(
+            icon: "bell.badge.fill",
+            title: "Push Notifications",
+            description: "Get notified when someone comments on your ranking or sends a friend request, even when the app is closed. Your phone will let you know."
+        ),
+        WhatsNewFeature(
+            icon: "person.2.fill",
+            title: "Suggested Friends",
+            description: "PlayedIt now suggests people you might know based on mutual friends. Growing your circle just got easier."
+        ),
+        WhatsNewFeature(
+            icon: "sparkle.magnifyingglass",
+            title: "Prediction Comparison",
+            description: "Rank a game that had a prediction? We'll show you how close we were. See your predicted rank side by side with where it actually landed."
+        ),
+        WhatsNewFeature(
+            icon: "bookmark.fill",
+            title: "Want to Play in the Feed",
+            description: "When you add a game to your Want to Play list, your friends will see it in the feed. They can also add games to Want to Play directly from batched posts."
+        ),
+        WhatsNewFeature(
+            icon: "person.crop.circle.badge.plus",
+            title: "New User Onboarding",
+            description: "New users are now prompted to set a profile picture and update their username right after signing up. First impressions matter."
+        ),
+        WhatsNewFeature(
+            icon: "gamecontroller.fill",
+            title: "Consoles in Rankings",
+            description: "Your ranked list now shows which platform you played each game on. Plus, more console options and alphabetized platforms under Played On."
+        ),
+        WhatsNewFeature(
+            icon: "bolt.fill",
+            title: "Speed Improvements",
+            description: "Game art loads way faster across onboarding, profiles, and the feed. Predictions and game details are snappier too. Less waiting, more ranking."
+        )
+    ]
+    
+    static let minorImprovements: [String] = [
+        "Bookmark games directly from the game detail view",
+        "The feed now loads older posts, no more hitting a wall",
+        "Ranking a game from Want to Play now closes the sheet, refreshes your profile, and removes it from the list automatically",
+        "Comment notifications now include the game name: \"commented on your ranking of Halo 3\"",
+        "\"How Friends Ranked This\" is now sorted on the game detail sheet",
+        "Friends' rankings and the ability to rank a game are now available in the Want to Play detail view",
+        "Artwork in batched feed posts is now tappable",
+        "Tapping a name in a feed post now goes to that person's profile",
+        "Clear all notifications with one tap",
+        "Reorganized profile menu for easier navigation",
+        "Feed grouping logic updated, no more arbitrary time constraints on batched posts",
+        "Games with missing artwork are no longer highlighted in batched posts",
+        "Profile refreshes immediately after any changes to Want to Play or rankings",
+        "Optionally hide notifications entirely, including the red badge on the feed icon (you're welcome, Alex)",
+        "App icon badge for unread comments and friend requests",
+        "Removed the toast when adding to Want to Play from search",
+        "Send error logs directly from your profile to help us squash bugs faster"
+    ]
+    
+    static let bugFixes: [String] = [
+        "Fixed close button placement on Want to Play view and game view from recommendations. Now consistently on the left",
+        "Fixed spacing between the bottom of the ranked list and the navigation bar on profiles",
+        "Fixed comment text readability in dark mode",
+        "Fixed excessive vertical spacing between activity items and comments when opening from a notification",
+        "Fixed icon and text alignment on game detail views",
+        "Fixed inconsistent spacing between elements in recommendations and notifications",
+        "Fixed insufficient separation between cards in light mode",
+        "Game descriptions no longer return results for the wrong game. Backfilled the database to correct existing entries",
+        "Game descriptions now load properly for games only in Want to Play",
+        "Fixed silent ranking failures when logging too many games within 12 hours",
+        "Fixed onboarding rankings not numbering correctly causing games to skip positions or not start at #1",
+        "Games with null or empty release dates can now be ranked",
+        "Descriptions now show for all games in search, even if no one has ranked them yet",
+        "Fixed \"ranked at #0\" displaying when opening a game from notifications",
+        "You can now rank games directly from recommendations",
+        "Rotating your phone during the ranking process no longer cancels it",
+        "Game detail view now shows the same information everywhere: predictions, friends' rankings, and descriptions are consistent no matter where you open it",
+        "Fixed inability to add games to Want to Play from batched feed posts",
+        "Fixed broken \"user commented\" notification navigation"
+    ]
+    
+    // MARK: - Previous Version (1.2.5)
+    
+    static let previousFeatures_1_2_5: [WhatsNewFeature] = [
+        WhatsNewFeature(
             icon: "moon.stars.fill",
             title: "Dark Mode",
             description: "Your rankings look even better in the dark. Full dark mode support with true black backgrounds for OLED displays. Your eyes (and your battery) will thank you."
@@ -45,7 +132,7 @@ struct WhatsNewManager {
         )
     ]
     
-    static let minorImprovements: [String] = [
+    static let previousMinorImprovements_1_2_5: [String] = [
         "Feed posts are now condensed when someone logs a bunch of games at once. No more scrolling past 47 Steam imports",
         "Tap any game in your Want to Play list to open its detail view",
         "Rank games directly from a friend's profile, no more dead-end taps",
@@ -60,7 +147,7 @@ struct WhatsNewManager {
         "Friend request confirmation text no longer sticks around after you go back to send another"
     ]
     
-    static let bugFixes: [String] = [
+    static let previousBugFixes_1_2_5: [String] = [
         "Fixed icon alignment on the changelog across different device sizes",
         "Clicking a profile image on re-ranked posts now navigates correctly",
         "Friend request confirmation no longer persists when sending multiple requests"

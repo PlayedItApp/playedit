@@ -18,6 +18,7 @@ struct GameLogView: View {
     @State private var showReRankAlert = false
     @State private var showAllPlatforms = false
     @State private var gameDescription: String? = nil
+    @State private var computedPredictedPosition: Int? = nil
     
     static let allPlatforms = [
         "Android", "Apple TV", "Apple Vision Pro",
@@ -288,7 +289,7 @@ struct GameLogView: View {
                     ComparisonView(
                         newGame: game,
                         existingGames: existingUserGames,
-                        predictedPosition: predictedPositionForGame(),
+                        predictedPosition: computedPredictedPosition,
                         onComplete: { position in
                             Task {
                                 await saveUserGame(gameId: gameId, position: position)
@@ -376,27 +377,41 @@ struct GameLogView: View {
     }
     
     // MARK: - Predicted Position for Comparison Bias
-    private func predictedPositionForGame() -> Int? {
-        guard existingUserGames.count >= 6 else { return nil }
-        
-        guard let context = PredictionEngine.shared.cachedContext else { return nil }
-        
+    private func predictedPositionForGame(
+        genres: [String],
+        tags: [String],
+        metacriticScore: Int?
+    ) -> Int? {
+        if existingUserGames.count < 6 {
+            debugLog("🎯 predictedPositionForGame: bail (not enough games) existingGames=\(existingUserGames.count)")
+            return nil
+        }
+
+        debugLog("🎯 predictedPositionForGame: existingGames=\(existingUserGames.count), cachedContext=\(PredictionEngine.shared.cachedContext != nil)")
+
+        guard let context = PredictionEngine.shared.cachedContext else {
+            debugLog("🎯 predictedPositionForGame: bail (context=nil)")
+            return nil
+        }
+
         let target = PredictionTarget(
             rawgId: game.rawgId,
             canonicalGameId: nil,
-            genres: game.genres,
-            tags: game.tags,
-            metacriticScore: game.metacriticScore
+            genres: genres,
+            tags: tags,
+            metacriticScore: metacriticScore
         )
-        
-        guard let prediction = PredictionEngine.shared.predict(game: target, context: context) else { return nil }
-        
-        // Convert percentile to position (percentile is "top X%", so 90% = near #1)
+
+        guard let prediction = PredictionEngine.shared.predict(game: target, context: context) else {
+            debugLog("🎯 predictedPositionForGame: bail (prediction=nil) rawgId=\(game.rawgId) genres=\(genres.count) tags=\(tags.count) metacritic=\(String(describing: metacriticScore))")
+            return nil
+        }
+
         let totalGames = existingUserGames.count + 1
         let position = max(1, Int(round(Double(totalGames) * (1.0 - prediction.predictedPercentile / 100.0))))
-        
+
         debugLog("🎯 Predicted position for \(game.title): #\(position) of \(totalGames) (percentile: \(Int(prediction.predictedPercentile))%)")
-        
+
         return position
     }
     
@@ -433,13 +448,25 @@ struct GameLogView: View {
                 let tags: [String]
             }
             
-            // Fetch tags from RAWG detail endpoint (search results don't include them)
-            var gameTags = game.tags
-            if gameTags.isEmpty {
+            // Fetch prediction inputs from RAWG detail endpoint (search results don't include them reliably)
+            var predictionGenres = game.genres
+            var predictionTags = game.tags
+            var predictionMetacritic = game.metacriticScore
+
+            if predictionGenres.isEmpty || predictionTags.isEmpty || predictionMetacritic == nil {
                 if let details = try? await RAWGService.shared.getGameDetails(id: game.rawgId) {
-                    gameTags = details.tags
+                    if predictionGenres.isEmpty {
+                        predictionGenres = details.genres
+                    }
+                    if predictionTags.isEmpty {
+                        predictionTags = details.tags
+                    }
+                    if predictionMetacritic == nil {
+                        predictionMetacritic = details.metacriticScore
+                    }
                 }
             }
+
             // Filter out non-useful tags for taste prediction
             let excludedTags: Set<String> = [
                 "Steam Achievements", "Steam Cloud", "Full controller support",
@@ -448,20 +475,23 @@ struct GameLogView: View {
                 "achievements", "stats", "console", "offline",
                 "Includes level editor", "Early Access", "Free to Play"
             ]
-            gameTags = gameTags.filter { tag in
+
+            predictionTags = predictionTags.filter { tag in
                 !excludedTags.contains(tag) &&
                 tag.allSatisfy { $0.isASCII || $0 == " " || $0 == "-" }
             }
+
+            debugLog("🏷️ Prediction inputs for \(game.title): genres=\(predictionGenres.count) tags=\(predictionTags.count) metacritic=\(String(describing: predictionMetacritic))")
             
             let gameInsert = GameInsert(
                 rawg_id: game.rawgId,
                 title: game.title,
                 cover_url: game.coverURL ?? "",
-                genres: game.genres,
+                genres: predictionGenres,
                 platforms: game.platforms,
                 release_date: game.releaseDate,
-                metacritic_score: game.metacriticScore ?? 0,
-                tags: gameTags
+                metacritic_score: predictionMetacritic ?? 0,
+                tags: predictionTags
             )
             
             try await supabase.client.from("games")
@@ -553,6 +583,13 @@ struct GameLogView: View {
 
             isLoading = false
             self.savedGameId = gameId
+            debugLog("🎯 About to compute predictedPosition: existingUserGames=\(existingUserGames.count), genres=\(predictionGenres.count), tags=\(predictionTags.count), metacritic=\(String(describing: predictionMetacritic))")
+            self.computedPredictedPosition = predictedPositionForGame(
+                genres: predictionGenres,
+                tags: predictionTags,
+                metacriticScore: predictionMetacritic
+            )
+            debugLog("🎯 Stored computedPredictedPosition: \(String(describing: computedPredictedPosition))")
 
             if existingUserGames.isEmpty && existingUserGame == nil {
                 // First game ever - no comparison needed, save at #1
