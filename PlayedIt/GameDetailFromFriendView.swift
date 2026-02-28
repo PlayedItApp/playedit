@@ -421,10 +421,10 @@ struct GameDetailFromFriendView: View {
     private func fetchGameDescription() async {
         debugLog("📖 DESC DEBUG: gameId=\(userGame.gameId), gameRawgId=\(String(describing: userGame.gameRawgId)), title=\(userGame.gameTitle)")
         do {
-            struct GameDesc: Decodable { let rawg_id: Int; let description: String? }
+            struct GameDesc: Decodable { let rawg_id: Int; let description: String?; let curated_description: String? }
             let results: [GameDesc] = try await supabase.client
                 .from("games")
-                .select("rawg_id, description")
+                .select("rawg_id, description, curated_description")
                 .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
                 .limit(1)
                 .execute()
@@ -432,8 +432,8 @@ struct GameDetailFromFriendView: View {
             
             guard let result = results.first else { return }
             
-            if let cached = result.description, !cached.isEmpty {
-                gameDescription = cached
+            if let desc = result.curated_description ?? result.description, !desc.isEmpty {
+                gameDescription = desc
                 return
             }
             

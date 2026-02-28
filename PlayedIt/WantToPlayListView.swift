@@ -1780,11 +1780,12 @@ struct FirstTwoComparisonView: View {
                 let rawg_id: Int
                 let metacritic_score: Int?
                 let description: String?
+                let curated_description: String?
                 let release_date: String?
             }
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description, release_date")
+                .select("rawg_id, metacritic_score, description, curated_description, release_date")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
@@ -1801,7 +1802,7 @@ struct FirstTwoComparisonView: View {
             releaseDate = info.release_date
             
             // Use cached description if available — skip RAWG entirely
-            if let desc = info.description, !desc.isEmpty {
+            if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                 gameDescription = desc
                 GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date)
                 return

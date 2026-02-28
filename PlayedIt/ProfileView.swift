@@ -614,17 +614,32 @@ struct ProfileView: View {
                     let cover_url: String?
                     let release_date: String?
                     let rawg_id: Int?
+                    let description: String?
+                    let curated_description: String?
+                    let metacritic_score: Int?
                 }
             }
             
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id)")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
                 .execute()
                 .value
+            
+            for row in rows {
+                let desc = row.games.curated_description ?? row.games.description
+                if desc != nil || row.games.metacritic_score != nil {
+                    GameMetadataCache.shared.set(
+                        gameId: row.game_id,
+                        description: desc,
+                        metacriticScore: row.games.metacritic_score,
+                        releaseDate: row.games.release_date
+                    )
+                }
+            }
             
             rankedGames = rows.map { row in
                 UserGame(

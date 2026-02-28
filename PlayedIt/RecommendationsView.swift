@@ -503,13 +503,14 @@ struct RecommendationDetailSheet: View {
         do {
             struct GameDesc: Decodable {
                 let description: String?
+                let curated_description: String?
                 let metacritic_score: Int?
                 let release_date: String?
             }
             
             let infos: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description, metacritic_score, release_date")
+                .select("description, curated_description, metacritic_score, release_date")
                 .eq("rawg_id", value: recommendation.gameRawgId)
                 .limit(1)
                 .execute()
@@ -518,7 +519,7 @@ struct RecommendationDetailSheet: View {
             if let score = infos.first?.metacritic_score {
                 metacriticScore = score
             }
-            if let desc = infos.first?.description, !desc.isEmpty {
+            if let desc = infos.first?.curated_description ?? infos.first?.description, !desc.isEmpty {
                 let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
                 gameDescription = cleaned
                 isLoadingDescription = false

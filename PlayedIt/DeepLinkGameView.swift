@@ -270,12 +270,13 @@ struct DeepLinkGameView: View {
                 let cover_url: String?
                 let release_date: String?
                 let description: String?
+                let curated_description: String?
                 let metacritic_score: Int?
             }
             
             let gameRows: [GameRow] = try await supabase.client
                 .from("games")
-                .select("id, rawg_id, title, cover_url, release_date, description, metacritic_score")
+                .select("id, rawg_id, title, cover_url, release_date, description, curated_description, metacritic_score")
                 .eq("rawg_id", value: gameId)
                 .limit(1)
                 .execute()
@@ -312,7 +313,7 @@ struct DeepLinkGameView: View {
             metacriticScore = game.metacritic_score
             
             // 3. Fetch description if not cached
-            if let desc = game.description, !desc.isEmpty {
+            if let desc = game.curated_description ?? game.description, !desc.isEmpty {
                 gameDescription = desc
             } else {
                 do {

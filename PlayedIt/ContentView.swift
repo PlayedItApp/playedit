@@ -896,13 +896,14 @@ struct GameDetailSheet: View {
                     struct GameInfo: Decodable {
                         let rawg_id: Int
                         let description: String?
+                        let curated_description: String?
                         let metacritic_score: Int?
                     }
                     var results: [GameInfo] = []
                     if let rawgId = game.gameRawgId {
                         results = try await SupabaseManager.shared.client
                             .from("games")
-                            .select("rawg_id, description, metacritic_score")
+                            .select("rawg_id, description, curated_description, metacritic_score")
                             .eq("rawg_id", value: rawgId)
                             .limit(1)
                             .execute()
@@ -911,7 +912,7 @@ struct GameDetailSheet: View {
                     if results.isEmpty {
                         results = try await SupabaseManager.shared.client
                             .from("games")
-                            .select("rawg_id, description, metacritic_score")
+                            .select("rawg_id, description, curated_description, metacritic_score")
                             .eq("id", value: game.gameId)
                             .limit(1)
                             .execute()
@@ -925,9 +926,9 @@ struct GameDetailSheet: View {
                     
                     metacriticScore = result.metacritic_score
                     
-                    if let cached = result.description, !cached.isEmpty {
-                        gameDescription = cached
-                        GameMetadataCache.shared.set(gameId: game.gameId, description: cached, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate)
+                    if let desc = result.curated_description ?? result.description, !desc.isEmpty {
+                        gameDescription = desc
+                        GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate)
                         return
                     }
                     

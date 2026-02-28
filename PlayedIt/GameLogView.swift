@@ -327,17 +327,17 @@ struct GameLogView: View {
     private func fetchDescription() async {
         // Check Supabase cache first
         do {
-            struct GameDesc: Decodable { let description: String? }
+            struct GameDesc: Decodable { let description: String?; let curated_description: String? }
             let results: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description")
+                .select("description, curated_description")
                 .eq("rawg_id", value: game.rawgId)
                 .limit(1)
                 .execute()
                 .value
             
-            if let cached = results.first?.description, !cached.isEmpty {
-                gameDescription = cached
+            if let desc = results.first?.curated_description ?? results.first?.description, !desc.isEmpty {
+                gameDescription = desc
                 return
             }
         } catch {

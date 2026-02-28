@@ -1477,13 +1477,16 @@ struct FriendProfileView: View {
                     let cover_url: String?
                     let release_date: String?
                     let rawg_id: Int?
+                    let description: String?
+                    let curated_description: String?
+                    let metacritic_score: Int?
                 }
             }
             
             // Fetch friend's games with join
             let friendRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id)")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score)")
                 .eq("user_id", value: friend.userId)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -1510,7 +1513,7 @@ struct FriendProfileView: View {
             // Fetch my games with join
             let myRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id)")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -1535,6 +1538,19 @@ struct FriendProfileView: View {
             }
             
             ImageCache.shared.prefetch(urls: friendGames.compactMap { $0.gameCoverURL })
+                        
+            for row in (friendRows + myRows) {
+                let desc = row.games.curated_description ?? row.games.description
+                if desc != nil || row.games.metacritic_score != nil {
+                    GameMetadataCache.shared.set(
+                        gameId: row.game_id,
+                        description: desc,
+                        metacriticScore: row.games.metacritic_score,
+                        releaseDate: row.games.release_date
+                    )
+                }
+            }
+            
             isLoading = false
                         
             friendWantToPlay = await WantToPlayManager.shared.fetchFriendList(friendId: friend.userId)
@@ -1697,10 +1713,11 @@ struct FriendWantToPlayDetailSheet: View {
                 let rawg_id: Int
                 let metacritic_score: Int?
                 let description: String?
+                let curated_description: String?
             }
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description")
+                .select("rawg_id, metacritic_score, description, curated_description")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
@@ -1709,8 +1726,8 @@ struct FriendWantToPlayDetailSheet: View {
             guard let info = infos.first else { return }
             metacriticScore = info.metacritic_score
 
-            if let cached = info.description, !cached.isEmpty {
-                gameDescription = cached
+            if let desc = info.curated_description ?? info.description, !desc.isEmpty {
+                gameDescription = desc
                 return
             }
             
