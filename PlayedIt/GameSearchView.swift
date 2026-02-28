@@ -118,7 +118,7 @@ struct GameSearchView: View {
                     }
                 }
             }) { game in
-                GameLogView(game: game)
+                GameLogView(game: game, source: "search")
             }
             .task {
                 await fetchRankedGameIds()

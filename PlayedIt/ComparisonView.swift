@@ -6,6 +6,7 @@ struct ComparisonView: View {
     var skipCelebration: Bool = false
     var hideCancel: Bool = false
     var predictedPosition: Int? = nil
+    var predictedRange: (lower: Int, upper: Int)? = nil
     let onComplete: (Int) -> Void
     
     @Environment(\.dismiss) var dismiss
@@ -108,7 +109,7 @@ struct ComparisonView: View {
                         }
                     } else {
                         Spacer()
-                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1, predictedPosition: predictedPosition) {
+                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1, predictedRange: predictedRange) {
                             onComplete(position)
                             dismiss()
                         }
@@ -352,7 +353,7 @@ struct RetroCompletionView: View {
     let game: Game
     let position: Int
     let totalGames: Int
-    var predictedPosition: Int? = nil
+    var predictedRange: (lower: Int, upper: Int)? = nil
     let onDone: () -> Void
     
     @State private var showContent = false
@@ -397,8 +398,8 @@ struct RetroCompletionView: View {
                         .opacity(showContent ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.45), value: showContent)
                     
-                    if let predicted = predictedPosition {
-                        Text(predictionComparisonMessage(predicted: predicted, actual: position))
+                    if let range = predictedRange {
+                        Text(predictionComparisonMessage(range: range, actual: position))
                             .font(.system(size: 14, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.adaptiveGray)
                             .multilineTextAlignment(.center)
@@ -420,7 +421,7 @@ struct RetroCompletionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear {
-                debugLog("🎉 RetroCompletionView: position=\(position), predictedPosition=\(String(describing: predictedPosition))")
+                debugLog("🎉 RetroCompletionView: position=\(position), predictedRange=\(String(describing: predictedRange))")
                 generateConfetti(in: geometry.size)
                 
                 let notification = UINotificationFeedbackGenerator()
@@ -451,20 +452,24 @@ struct RetroCompletionView: View {
         }
     }
     
-    private func predictionComparisonMessage(predicted: Int, actual: Int) -> String {
-        let delta = abs(predicted - actual)
+    private func predictionComparisonMessage(range: (lower: Int, upper: Int), actual: Int) -> String {
+        if actual >= range.lower && actual <= range.upper {
+            return "We called it! Predicted ~#\(range.lower)–\(range.upper) 🎯"
+        }
+        
+        let closestEdge = actual < range.lower ? range.lower : range.upper
+        let delta = abs(actual - closestEdge)
+        
         switch delta {
-        case 0:
-            return "We called it! Predicted #\(predicted). Nailed it. 🎯"
         case 1...2:
-            return "Pretty close! We predicted ~#\(predicted) 🎯"
+            return "Pretty close! We predicted ~#\(range.lower)–\(range.upper) 🎯"
         case 3...5:
-            return "Not bad! We predicted ~#\(predicted)"
+            return "Not bad! We predicted ~#\(range.lower)–\(range.upper)"
         default:
-            if predicted < actual {
-                return "We thought you'd love this more 😅 Predicted ~#\(predicted)"
+            if actual > range.upper {
+                return "We thought you'd love this more 😅 Predicted ~#\(range.lower)–\(range.upper)"
             } else {
-                return "Higher than we expected! We predicted ~#\(predicted) 🫢"
+                return "Higher than we expected! We predicted ~#\(range.lower)–\(range.upper) 🫢"
             }
         }
     }

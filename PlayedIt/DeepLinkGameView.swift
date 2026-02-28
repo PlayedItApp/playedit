@@ -70,7 +70,7 @@ struct DeepLinkGameView: View {
                 rating: nil,
                 gameDescription: gameDescription,
                 tags: []
-            ))
+            ), source: "deep_link")
         }
     }
     
@@ -129,7 +129,7 @@ struct DeepLinkGameView: View {
                                         .foregroundStyle(Color.adaptiveSlate)
                                 }
                                 
-                                Text("Estimated rank: ~#\(range.lower)–\(range.upper)")
+                                Text("Estimated rank: ~#\(range.lower)-\(range.upper)")
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundColor(.primaryBlue)
                                 

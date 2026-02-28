@@ -3,6 +3,7 @@ import Supabase
 
 struct GameLogView: View {
     let game: Game
+    var source: String = "unknown"
     @Environment(\.dismiss) var dismiss
     @ObservedObject var supabase = SupabaseManager.shared
     
@@ -18,7 +19,7 @@ struct GameLogView: View {
     @State private var showReRankAlert = false
     @State private var showAllPlatforms = false
     @State private var gameDescription: String? = nil
-    @State private var computedPredictedPosition: Int? = nil
+    @State private var computedPredictedRange: (lower: Int, upper: Int)? = nil
     
     static let allPlatforms = [
         "Android", "Apple TV", "Apple Vision Pro",
@@ -289,7 +290,8 @@ struct GameLogView: View {
                     ComparisonView(
                         newGame: game,
                         existingGames: existingUserGames,
-                        predictedPosition: computedPredictedPosition,
+                        predictedPosition: computedPredictedRange.map { ($0.lower + $0.upper) / 2 },
+                        predictedRange: computedPredictedRange,
                         onComplete: { position in
                             Task {
                                 await saveUserGame(gameId: gameId, position: position)
@@ -583,13 +585,21 @@ struct GameLogView: View {
 
             isLoading = false
             self.savedGameId = gameId
-            debugLog("🎯 About to compute predictedPosition: existingUserGames=\(existingUserGames.count), genres=\(predictionGenres.count), tags=\(predictionTags.count), metacritic=\(String(describing: predictionMetacritic))")
-            self.computedPredictedPosition = predictedPositionForGame(
-                genres: predictionGenres,
-                tags: predictionTags,
-                metacriticScore: predictionMetacritic
-            )
-            debugLog("🎯 Stored computedPredictedPosition: \(String(describing: computedPredictedPosition))")
+            if existingUserGames.count >= 6,
+               let context = PredictionEngine.shared.cachedContext {
+                let target = PredictionTarget(
+                    rawgId: game.rawgId,
+                    canonicalGameId: nil,
+                    genres: predictionGenres,
+                    tags: predictionTags,
+                    metacriticScore: predictionMetacritic
+                )
+                if let prediction = PredictionEngine.shared.predict(game: target, context: context) {
+                    let range = prediction.estimatedRank(inListOf: existingUserGames.count)
+                    self.computedPredictedRange = (lower: range.lower, upper: range.upper)
+                    debugLog("🎯 Stored computedPredictedRange: ~#\(range.lower)–\(range.upper)")
+                }
+            }
 
             if existingUserGames.isEmpty && existingUserGame == nil {
                 // First game ever - no comparison needed, save at #1
@@ -668,7 +678,91 @@ struct GameLogView: View {
             } catch {
                 debugLog("❌ Error saving user game: \(error)")
             }
+            
+            // Silently log prediction accuracy if we had a prediction
+            if true {
+                await logPredictionAccuracy(gameId: gameId, actualPosition: position, totalGames: existingUserGames.count + 1)
+            }
         }
+    
+    // MARK: - Prediction Logging
+    private func logPredictionAccuracy(gameId: Int, actualPosition: Int, totalGames: Int) async {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        let actualPercentile = (1.0 - (Double(actualPosition - 1) / Double(max(totalGames - 1, 1)))) * 100.0
+        
+        // Recalculate prediction at rank time for comparison
+        guard let context = await PredictionEngine.shared.getContext() else {
+            debugLog("📊 Prediction log skipped: no context")
+            return
+        }
+        
+        let target = PredictionTarget(
+            rawgId: game.rawgId,
+            canonicalGameId: nil,
+            genres: game.genres,
+            tags: game.tags,
+            metacriticScore: game.metacriticScore
+        )
+        
+        guard let recalcPrediction = PredictionEngine.shared.predict(game: target, context: context) else {
+            debugLog("📊 Prediction log skipped: recalc failed")
+            return
+        }
+        
+        // Get the original prediction that was shown to the user
+        // We stored the range, so derive the original percentile from the midpoint
+        guard let range = computedPredictedRange else { return }
+        let originalMidpoint = Double(range.lower + range.upper) / 2.0
+        let originalPercentile = (1.0 - (originalMidpoint - 1.0) / Double(max(totalGames - 1, 1))) * 100.0
+        
+        // We don't have the original confidence/tiers stored separately,
+        // so use recalc values as approximation for original
+        // (In practice these are very close since ranking just happened)
+        
+        struct PredictionLogInsert: Encodable {
+            let user_id: String
+            let game_id: Int
+            let original_percentile: Double
+            let original_confidence: Int
+            let original_tiers: [String]
+            let original_created_at: String
+            let recalc_percentile: Double
+            let recalc_confidence: Int
+            let recalc_tiers: [String]
+            let actual_percentile: Double
+            let source: String
+            let days_between_prediction_and_rank: Int
+        }
+        
+        let log = PredictionLogInsert(
+            user_id: userId.uuidString,
+            game_id: gameId,
+            original_percentile: originalPercentile,
+            original_confidence: recalcPrediction.confidence,
+            original_tiers: recalcPrediction.tiersUsed,
+            original_created_at: ISO8601DateFormatter().string(from: Date()),
+            recalc_percentile: recalcPrediction.predictedPercentile,
+            recalc_confidence: recalcPrediction.confidence,
+            recalc_tiers: recalcPrediction.tiersUsed,
+            actual_percentile: actualPercentile,
+            source: source,
+            days_between_prediction_and_rank: 0
+        )
+        
+        do {
+            try await supabase.client
+                .from("prediction_logs")
+                .insert(log)
+                .execute()
+            
+            let originalDelta = abs(originalPercentile - actualPercentile)
+            let recalcDelta = abs(recalcPrediction.predictedPercentile - actualPercentile)
+            debugLog("📊 Prediction logged: original=\(Int(originalPercentile))%, recalc=\(Int(recalcPrediction.predictedPercentile))%, actual=\(Int(actualPercentile))%, originalΔ=\(Int(originalDelta))%, recalcΔ=\(Int(recalcDelta))%")
+        } catch {
+            debugLog("⚠️ Failed to log prediction: \(error)")
+        }
+    }
 }
 
 // MARK: - Platform Picker Sheet

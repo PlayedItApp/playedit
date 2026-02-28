@@ -135,7 +135,7 @@ struct BatchRankFlowView: View {
             }
             .sheet(isPresented: $showCurrentGame) {
                 if let game = currentGame {
-                    GameLogView(game: game.toGame())
+                    GameLogView(game: game.toGame(), source: "batch_rank")
                 }
             }
             .onChange(of: showCurrentGame) { _, isShowing in

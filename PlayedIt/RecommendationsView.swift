@@ -397,7 +397,7 @@ struct RecommendationLogGameSheet: View {
     }
     
     var body: some View {
-        GameLogView(game: game)
+        GameLogView(game: game, source: "recommendation")
     }
 }
 

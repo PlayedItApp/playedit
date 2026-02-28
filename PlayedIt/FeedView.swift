@@ -582,7 +582,7 @@ struct FeedView: View {
                         commentCount: comments,
                         isLikedByMe: isLiked
                     )
-                    debugLog("🔍 Batch \(post.id) — \(childItems.count) children, covers: \(childItems.map { $0.gameCoverURL ?? "nil" })")
+                    debugLog("🔍 Batch \(post.id) - \(childItems.count) children, covers: \(childItems.map { $0.gameCoverURL ?? "nil" })")
                     combined.append(.groupedGames(group))
                     
                 case "batch_want_to_play":

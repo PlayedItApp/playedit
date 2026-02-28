@@ -1752,7 +1752,7 @@ struct FirstTwoComparisonView: View {
                         }
                     }
                 }) {
-                    GameLogView(game: game.toGame())
+                    GameLogView(game: game.toGame(), source: "want_to_play")
                 }
                 .task {
                     async let details: () = fetchGameDetails()

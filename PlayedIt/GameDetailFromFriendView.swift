@@ -93,7 +93,7 @@ struct GameDetailFromFriendView: View {
                 await refreshMyGame()
             }
         }) {
-            GameLogView(game: userGame.toGame())
+            GameLogView(game: userGame.toGame(), source: "friend_list")
         }
         .sheet(isPresented: $showReportSheet) {
             ReportView(
