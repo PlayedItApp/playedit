@@ -9,7 +9,7 @@ struct GameDetailFromFriendView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @Environment(\.dismiss) private var dismiss
     
-    @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?)] = []
+    @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
     @State private var myUserGame: UserGame? = nil
     @State private var isLoadingFriendRankings = true
     @State private var showLogGame = false
@@ -36,6 +36,8 @@ struct GameDetailFromFriendView: View {
                 // MARK: - Friend's Perspective
                 friendPerspectiveSection
             }
+                // MARK: - My Perspective
+                myPerspectiveSection
                 
                 // MARK: - Social Context
                 if !friendRankings.isEmpty {
@@ -340,9 +342,19 @@ struct GameDetailFromFriendView: View {
                                 initialsCircle(ranking.username, size: 32)
                             }
                             
-                            Text(ranking.username)
-                                .font(.system(size: 15, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color.adaptiveSlate)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(ranking.username)
+                                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveSlate)
+                                
+                                if ranking.username != "You",
+                                   ranking.tasteMatch == friendRankings.filter({ $0.username != "You" }).map({ $0.tasteMatch }).max(),
+                                   ranking.tasteMatch >= 50 {
+                                    Text("Closest taste · \(ranking.tasteMatch)%")
+                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .foregroundColor(.teal)
+                                }
+                            }
                             
                             Spacer()
                             
@@ -443,6 +455,49 @@ struct GameDetailFromFriendView: View {
         }
     }
     
+    private func quickTasteMatch(myGames: [(canonicalId: Int, rank: Int)], theirGames: [(canonicalId: Int, rank: Int)]) -> Int {
+            // Find shared games
+            let theirDict = Dictionary(uniqueKeysWithValues: theirGames.map { ($0.canonicalId, $0.rank) })
+            var shared: [(myRank: Int, theirRank: Int)] = []
+            for myGame in myGames {
+                if let theirRank = theirDict[myGame.canonicalId] {
+                    shared.append((myRank: myGame.rank, theirRank: theirRank))
+                }
+            }
+            
+            guard shared.count >= 2 else {
+                if shared.count == 1 {
+                    let maxDiff = max(myGames.count, theirGames.count)
+                    guard maxDiff > 0 else { return 100 }
+                    let diff = abs(shared[0].myRank - shared[0].theirRank)
+                    return max(0, min(100, 100 - Int((Double(diff) / Double(maxDiff)) * 100)))
+                }
+                return 0
+            }
+            
+            // Re-rank shared games relative to each other
+            let sortedByMine = shared.indices.sorted { shared[$0].myRank < shared[$1].myRank }
+            let sortedByTheirs = shared.indices.sorted { shared[$0].theirRank < shared[$1].theirRank }
+            
+            var myRelative = Array(repeating: 0, count: shared.count)
+            var theirRelative = Array(repeating: 0, count: shared.count)
+            
+            for (rank, idx) in sortedByMine.enumerated() { myRelative[idx] = rank + 1 }
+            for (rank, idx) in sortedByTheirs.enumerated() { theirRelative[idx] = rank + 1 }
+            
+            let n = Double(shared.count)
+            var sumDSquared: Double = 0
+            for i in shared.indices {
+                let d = Double(myRelative[i] - theirRelative[i])
+                sumDSquared += d * d
+            }
+            
+            let denom = n * (n * n - 1)
+            guard denom != 0 else { return 50 }
+            let rho = 1 - (6 * sumDSquared) / denom
+            return max(0, min(100, Int(((rho + 1) / 2) * 100)))
+        }
+    
     private func fetchFriendRankings() async {
         guard let userId = supabase.currentUser?.id else {
             isLoadingFriendRankings = false
@@ -523,30 +578,59 @@ struct GameDetailFromFriendView: View {
             
             let userMap = Dictionary(uniqueKeysWithValues: users.map { ($0.id.lowercased(), $0) })
             
-            var results: [(username: String, rank: Int, avatarURL: String?)] = []
+            // Fetch current user's games for taste match calculation
+            struct MyGameRow: Decodable {
+                let game_id: Int
+                let rank_position: Int
+                let canonical_game_id: Int?
+            }
+            let myGameRows: [MyGameRow] = try await supabase.client
+                .from("user_games")
+                .select("game_id, rank_position, canonical_game_id")
+                .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
+                .execute()
+                .value
+            
+            // Fetch each friend's games for taste match
+            var friendGameCache: [String: [MyGameRow]] = [:]
+            for friendId in rankedUserIds where friendId.lowercased() != userId.uuidString.lowercased() {
+                let fGames: [MyGameRow] = try await supabase.client
+                    .from("user_games")
+                    .select("game_id, rank_position, canonical_game_id")
+                    .eq("user_id", value: friendId)
+                    .not("rank_position", operator: .is, value: "null")
+                    .execute()
+                    .value
+                friendGameCache[friendId.lowercased()] = fGames
+            }
+            
+            var results: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
             
             for ranking in matchedRankings {
                 if let user = userMap[ranking.user_id.lowercased()] {
                     let displayName: String
+                    let tasteMatch: Int
                     if ranking.user_id.lowercased() == userId.uuidString.lowercased() {
                         displayName = "You"
+                        tasteMatch = 100
                     } else {
                         displayName = user.username ?? "Unknown"
+                        let theirGames = friendGameCache[ranking.user_id.lowercased()] ?? []
+                        let myMapped = myGameRows.map { (canonicalId: $0.canonical_game_id ?? $0.game_id, rank: $0.rank_position) }
+                        let theirMapped = theirGames.map { (canonicalId: $0.canonical_game_id ?? $0.game_id, rank: $0.rank_position) }
+                        tasteMatch = quickTasteMatch(myGames: myMapped, theirGames: theirMapped)
                     }
                     results.append((
                         username: displayName,
                         rank: ranking.rank_position,
-                        avatarURL: user.avatar_url
+                        avatarURL: user.avatar_url,
+                        tasteMatch: tasteMatch
                     ))
                 }
             }
             
-            // Sort: "You" first, then by rank
-            friendRankings = results.sorted { a, b in
-                if a.username == "You" { return true }
-                if b.username == "You" { return false }
-                return a.rank < b.rank
-            }
+            friendRankings = results.sorted { $0.rank < $1.rank }
             
         } catch {
             debugLog("❌ Error fetching friend rankings: \(error)")
