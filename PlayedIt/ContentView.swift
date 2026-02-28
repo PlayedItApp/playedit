@@ -1006,7 +1006,7 @@ struct GameDetailSheet: View {
     }
     
     private func quickTasteMatch(myGames: [(canonicalId: Int, rank: Int)], theirGames: [(canonicalId: Int, rank: Int)]) -> Int {
-            let theirDict = Dictionary(uniqueKeysWithValues: theirGames.map { ($0.canonicalId, $0.rank) })
+            let theirDict = Dictionary(theirGames.map { ($0.canonicalId, $0.rank) }, uniquingKeysWith: { first, _ in first })
             var shared: [(myRank: Int, theirRank: Int)] = []
             for myGame in myGames {
                 if let theirRank = theirDict[myGame.canonicalId] {

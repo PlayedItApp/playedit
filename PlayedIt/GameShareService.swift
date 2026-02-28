@@ -31,14 +31,6 @@ class GameShareService {
             coverImage: coverImage
         )
         
-        let renderer = ImageRenderer(content: cardView)
-        renderer.scale = 3.0
-        
-        guard let image = renderer.uiImage else {
-            debugLog("❌ Failed to render share card image")
-            return
-        }
-        
         // Build URL with share context for OG image generation
         var urlString = "https://playedit.app/game/\(gameId)"
         var params: [String] = []
@@ -49,10 +41,17 @@ class GameShareService {
         
         let shareURL = URL(string: urlString)!
         
-        let activityVC = UIActivityViewController(
-            activityItems: [shareURL],
-            applicationActivities: nil
-        )
+        let shareText: String
+            if let rank = rankPosition {
+                shareText = "I ranked \(gameTitle) #\(rank) on PlayedIt! Check it out 🎮"
+            } else {
+                shareText = "Check out \(gameTitle) on PlayedIt! 🎮"
+            }
+            
+            let activityVC = UIActivityViewController(
+                activityItems: [shareText, shareURL],
+                applicationActivities: nil
+            )
         
         // Present
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,

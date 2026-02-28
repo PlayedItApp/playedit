@@ -290,15 +290,44 @@ struct GameDetailFromFriendView: View {
                             .foregroundStyle(Color.adaptiveGray)
                     }
                     
-                    Button {
-                        showLogGame = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "gamecontroller.fill")
-                            Text("Log This Game")
+                    HStack(spacing: 10) {
+                        Button {
+                            showLogGame = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "gamecontroller.fill")
+                                Text("Log This Game")
+                            }
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.accentOrange)
+                            .cornerRadius(12)
                         }
+                        
+                        BookmarkButton(
+                            gameId: userGame.gameRawgId ?? userGame.gameId,
+                            gameTitle: userGame.gameTitle,
+                            gameCoverUrl: userGame.gameCoverURL,
+                            source: "friend_profile",
+                            sourceFriendId: friend.userId
+                        )
+                        .frame(width: 48, height: 48)
+                        .background(Color.primaryBlue.opacity(0.1))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.primaryBlue.opacity(0.3), lineWidth: 1)
+                        )
+                        .frame(width: 48, height: 48)
+                        .background(Color.accentOrange.opacity(0.1))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.accentOrange.opacity(0.3), lineWidth: 1)
+                        )
                     }
-                    .buttonStyle(PrimaryButtonStyle())
                     .padding(.horizontal, 20)
                 }
                 .padding(24)
@@ -458,7 +487,7 @@ struct GameDetailFromFriendView: View {
     
     private func quickTasteMatch(myGames: [(canonicalId: Int, rank: Int)], theirGames: [(canonicalId: Int, rank: Int)]) -> Int {
             // Find shared games
-            let theirDict = Dictionary(uniqueKeysWithValues: theirGames.map { ($0.canonicalId, $0.rank) })
+            let theirDict = Dictionary(theirGames.map { ($0.canonicalId, $0.rank) }, uniquingKeysWith: { first, _ in first })
             var shared: [(myRank: Int, theirRank: Int)] = []
             for myGame in myGames {
                 if let theirRank = theirDict[myGame.canonicalId] {

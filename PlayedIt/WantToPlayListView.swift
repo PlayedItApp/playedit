@@ -1597,22 +1597,43 @@ struct FirstTwoComparisonView: View {
                             .padding(.horizontal, 24)
                         }
                         
-                        // MARK: - Rank This Game
+                        // MARK: - Rank / Bookmark Actions
                         if !isAlreadyRanked {
                             VStack(spacing: 12) {
                                 Text("Played it?")
                                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                                     .foregroundStyle(Color.adaptiveSlate)
                                 
-                                Button {
-                                    showLogGame = true
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "gamecontroller.fill")
-                                        Text("Rank This Game")
+                                HStack(spacing: 10) {
+                                    Button {
+                                        showLogGame = true
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "gamecontroller.fill")
+                                            Text("Rank This Game")
+                                        }
+                                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .background(Color.primaryBlue)
+                                        .cornerRadius(12)
                                     }
+                                    
+                                    BookmarkButton(
+                                        gameId: game.gameId,
+                                        gameTitle: game.gameTitle,
+                                        gameCoverUrl: game.gameCoverUrl,
+                                        source: "want_to_play_detail"
+                                    )
+                                    .frame(width: 48, height: 48)
+                                    .background(Color.accentOrange.opacity(0.1))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.accentOrange.opacity(0.3), lineWidth: 1)
+                                    )
                                 }
-                                .buttonStyle(PrimaryButtonStyle())
                                 .padding(.horizontal, 20)
                             }
                             .padding(20)
@@ -2003,7 +2024,7 @@ struct FirstTwoComparisonView: View {
         }
         
         private func quickTasteMatch(myGames: [(canonicalId: Int, rank: Int)], theirGames: [(canonicalId: Int, rank: Int)]) -> Int {
-            let theirDict = Dictionary(uniqueKeysWithValues: theirGames.map { ($0.canonicalId, $0.rank) })
+            let theirDict = Dictionary(theirGames.map { ($0.canonicalId, $0.rank) }, uniquingKeysWith: { first, _ in first })
             var shared: [(myRank: Int, theirRank: Int)] = []
             for myGame in myGames {
                 if let theirRank = theirDict[myGame.canonicalId] {
