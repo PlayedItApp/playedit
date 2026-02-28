@@ -325,9 +325,60 @@ struct GameLogView: View {
     
     // MARK: - Fetch Description
     private func fetchDescription() async {
+        // Check Supabase cache first
+        do {
+            struct GameDesc: Decodable { let description: String? }
+            let results: [GameDesc] = try await SupabaseManager.shared.client
+                .from("games")
+                .select("description")
+                .eq("rawg_id", value: game.rawgId)
+                .limit(1)
+                .execute()
+                .value
+            
+            if let cached = results.first?.description, !cached.isEmpty {
+                gameDescription = cached
+                return
+            }
+        } catch {
+            debugLog("⚠️ Could not check cached description: \(error)")
+        }
+        
+        // Fall back to RAWG
         do {
             let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+            
+            // Upsert game row so description is cached even if user doesn't rank
+            let desc = details.gameDescriptionHtml ?? details.gameDescription
+            
+            struct GameUpsert: Encodable {
+                let rawg_id: Int
+                let title: String
+                let cover_url: String
+                let genres: [String]
+                let platforms: [String]
+                let release_date: String?
+                let metacritic_score: Int
+                let description: String?
+            }
+            
+            let upsert = GameUpsert(
+                rawg_id: game.rawgId,
+                title: game.title,
+                cover_url: game.coverURL ?? "",
+                genres: game.genres,
+                platforms: game.platforms,
+                release_date: game.releaseDate,
+                metacritic_score: game.metacriticScore ?? 0,
+                description: desc
+            )
+            
+            _ = try? await SupabaseManager.shared.client
+                .from("games")
+                .upsert(upsert, onConflict: "rawg_id")
+                .execute()
+            debugLog("📖 Upserted game + description for \(game.title)")
         } catch {
             debugLog("⚠️ Could not fetch game description: \(error)")
         }
@@ -513,9 +564,24 @@ struct GameLogView: View {
             
             let gameId = gameRecord.id
                         
-            // Cache game description in background
+            // Cache game description in background (only if not already cached)
             Task {
                 do {
+                    struct DescCheck: Decodable { let description: String? }
+                    let existing: [DescCheck] = try await supabase.client
+                        .from("games")
+                        .select("description")
+                        .eq("rawg_id", value: game.rawgId)
+                        .limit(1)
+                        .execute()
+                        .value
+                    
+                    // Skip if description already exists
+                    if let cached = existing.first?.description, !cached.isEmpty {
+                        debugLog("📖 Description already cached for \(game.title), skipping RAWG call")
+                        return
+                    }
+                    
                     let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
                     if let desc = details.gameDescriptionHtml ?? details.gameDescription, !desc.isEmpty {
                         _ = try? await supabase.client
