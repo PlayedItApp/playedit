@@ -33,10 +33,22 @@ struct NotificationsView: View {
                 
                 if !notifications.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Mark All Read") {
-                            markAllAsRead()
+                        Menu {
+                            Button {
+                                markAllAsRead()
+                            } label: {
+                                Label("Mark All Read", systemImage: "envelope.open")
+                            }
+                            
+                            Button(role: .destructive) {
+                                clearAllNotifications()
+                            } label: {
+                                Label("Clear All", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.body)
                         }
-                        .font(.subheadline)
                     }
                 }
             }
@@ -69,21 +81,27 @@ struct NotificationsView: View {
     }
     
     private var notificationsList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(notifications) { notification in
-                    NotificationRow(notification: notification)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            markAsRead(notification)
-                            handleNotificationTap(notification)
+        List {
+            ForEach(notifications) { notification in
+                NotificationRow(notification: notification)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        markAsRead(notification)
+                        handleNotificationTap(notification)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteNotification(notification)
+                        } label: {
+                            Label("Clear", systemImage: "trash")
                         }
-                    
-                    Divider()
-                        .padding(.leading, 60)
-                }
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.visible)
+                    .listRowSeparatorTint(Color.adaptiveDivider)
             }
         }
+        .listStyle(.plain)
         .refreshable {
             await fetchNotifications()
         }
@@ -295,6 +313,46 @@ struct NotificationsView: View {
                                 
             } catch {
                 debugLog("❌ Error marking all as read: \(error)")
+            }
+        }
+    }
+    
+    private func deleteNotification(_ notification: AppNotification) {
+        Task {
+            do {
+                try await supabase.client
+                    .from("notifications")
+                    .delete()
+                    .eq("id", value: notification.id)
+                    .execute()
+                
+                notifications.removeAll { $0.id == notification.id }
+                
+                let newUnreadCount = notifications.filter { !$0.isRead }.count
+                try? await UNUserNotificationCenter.current().setBadgeCount(newUnreadCount)
+                
+            } catch {
+                debugLog("❌ Error deleting notification: \(error)")
+            }
+        }
+    }
+
+    private func clearAllNotifications() {
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        Task {
+            do {
+                try await supabase.client
+                    .from("notifications")
+                    .delete()
+                    .eq("user_id", value: userId.uuidString)
+                    .execute()
+                
+                notifications.removeAll()
+                try? await UNUserNotificationCenter.current().setBadgeCount(0)
+                
+            } catch {
+                debugLog("❌ Error clearing all notifications: \(error)")
             }
         }
     }

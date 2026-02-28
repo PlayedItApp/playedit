@@ -601,9 +601,10 @@ struct GameLogView: View {
                         .execute()
                     
                     debugLog("✅ Re-ranked at position \(position)")
-                    existingUserGame = nil
-                    PredictionEngine.shared.invalidateContext()
-                } else {
+                        existingUserGame = nil
+                        PredictionEngine.shared.invalidateContext()
+                        await WantToPlayManager.shared.removeGameIfPresent(rawgId: game.rawgId)
+                    } else {
                     // New game — use insert RPC
                     let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
                     debugLog("🔗 Game: \(game.title), rawgId: \(game.rawgId), canonicalId: \(canonicalId)")
@@ -622,9 +623,10 @@ struct GameLogView: View {
                         ])
                         .execute()
                         
-                    debugLog("✅ Game logged at position \(position)")
-                    PredictionEngine.shared.invalidateContext()
-                }
+                        debugLog("✅ Game logged at position \(position)")
+                        PredictionEngine.shared.invalidateContext()
+                        await WantToPlayManager.shared.removeGameIfPresent(rawgId: game.rawgId)
+                    }
                 
             } catch {
                 debugLog("❌ Error saving user game: \(error)")

@@ -1500,6 +1500,10 @@ struct FirstTwoComparisonView: View {
         @State private var metacriticScore: Int? = nil
         @State private var sourceFriendName: String? = nil
         @State private var releaseDate: String? = nil
+        @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?)] = []
+        @State private var isLoadingFriendRankings = true
+        @State private var showLogGame = false
+        @State private var isAlreadyRanked = false
         
         var body: some View {
             NavigationStack {
@@ -1594,6 +1598,87 @@ struct FirstTwoComparisonView: View {
                             .padding(.horizontal, 24)
                         }
                         
+                        // MARK: - Rank This Game
+                        if !isAlreadyRanked {
+                            VStack(spacing: 12) {
+                                Text("Played it?")
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveSlate)
+                                
+                                Button {
+                                    showLogGame = true
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "gamecontroller.fill")
+                                        Text("Rank This Game")
+                                    }
+                                }
+                                .buttonStyle(PrimaryButtonStyle())
+                                .padding(.horizontal, 20)
+                            }
+                            .padding(20)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.primaryBlue.opacity(0.05))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.primaryBlue.opacity(0.2), lineWidth: 1)
+                            )
+                            .padding(.horizontal, 16)
+                        }
+                        
+                        // MARK: - Friends' Rankings
+                        if !friendRankings.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("How friends ranked this")
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.adaptiveSlate)
+                                
+                                VStack(spacing: 0) {
+                                    ForEach(Array(friendRankings.enumerated()), id: \.offset) { index, ranking in
+                                        HStack(spacing: 12) {
+                                            if let avatarURL = ranking.avatarURL, let url = URL(string: avatarURL) {
+                                                AsyncImage(url: url) { image in
+                                                    image.resizable().aspectRatio(contentMode: .fill)
+                                                } placeholder: {
+                                                    friendInitialsCircle(ranking.username, size: 32)
+                                                }
+                                                .frame(width: 32, height: 32)
+                                                .clipShape(Circle())
+                                            } else {
+                                                friendInitialsCircle(ranking.username, size: 32)
+                                            }
+                                            
+                                            Text(ranking.username)
+                                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                                .foregroundStyle(Color.adaptiveSlate)
+                                            
+                                            Spacer()
+                                            
+                                            Text("#\(ranking.rank)")
+                                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                                .foregroundColor(ranking.rank <= 3 ? .accentOrange : .primaryBlue)
+                                        }
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 16)
+                                        
+                                        if index < friendRankings.count - 1 {
+                                            Divider()
+                                                .padding(.horizontal, 16)
+                                        }
+                                    }
+                                }
+                                .background(Color.cardBackground)
+                                .cornerRadius(12)
+                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                            }
+                            .padding(.horizontal, 16)
+                        } else if isLoadingFriendRankings {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                                .padding(.vertical, 12)
+                        }
+                        
                         Spacer()
                     }
                     .padding(.top, 24)
@@ -1626,9 +1711,20 @@ struct FirstTwoComparisonView: View {
                         }
                     }
                 }
+                .sheet(isPresented: $showLogGame, onDismiss: {
+                    // Refresh ranked status after logging
+                    Task {
+                        await checkIfAlreadyRanked()
+                        NotificationCenter.default.post(name: .wantToPlayShouldRefresh, object: nil)
+                    }
+                }) {
+                    GameLogView(game: game.toGame())
+                }
                 .task {
                     await fetchGameDetails()
                     await fetchSourceFriend()
+                    await fetchFriendRankings()
+                    await checkIfAlreadyRanked()
                 }
             }
         }
@@ -1716,5 +1812,158 @@ struct FirstTwoComparisonView: View {
             case 50...74: return .accentOrange
             default: return .error
             }
+        }
+        
+        private func checkIfAlreadyRanked() async {
+            guard let userId = SupabaseManager.shared.currentUser?.id else { return }
+            do {
+                struct RankedCheck: Decodable { let game_id: Int; let games: GameRawg?; struct GameRawg: Decodable { let rawg_id: Int } }
+                let rows: [RankedCheck] = try await SupabaseManager.shared.client
+                    .from("user_games")
+                    .select("game_id, games(rawg_id)")
+                    .eq("user_id", value: userId.uuidString)
+                    .not("rank_position", operator: .is, value: "null")
+                    .execute()
+                    .value
+                let rankedRawgIds = Set(rows.compactMap { $0.games?.rawg_id })
+                isAlreadyRanked = rankedRawgIds.contains(game.gameId)
+            } catch {
+                debugLog("⚠️ Error checking ranked status: \(error)")
+            }
+        }
+        
+        private func fetchFriendRankings() async {
+            guard let userId = SupabaseManager.shared.currentUser?.id else {
+                isLoadingFriendRankings = false
+                return
+            }
+            
+            do {
+                // 1. Get friend IDs
+                struct Friendship: Decodable {
+                    let user_id: String
+                    let friend_id: String
+                }
+                let friendships: [Friendship] = try await SupabaseManager.shared.client
+                    .from("friendships")
+                    .select("user_id, friend_id")
+                    .or("user_id.eq.\(userId.uuidString),friend_id.eq.\(userId.uuidString)")
+                    .eq("status", value: "accepted")
+                    .execute()
+                    .value
+                
+                let friendIds = friendships.map { f in
+                    f.user_id.lowercased() == userId.uuidString.lowercased() ? f.friend_id : f.user_id
+                }
+                let allUserIds = friendIds + [userId.uuidString]
+                
+                // 2. Find the game's canonical ID
+                struct GameLookup: Decodable { let id: Int; let rawg_id: Int }
+                let gameLookups: [GameLookup] = try await SupabaseManager.shared.client
+                    .from("games")
+                    .select("id, rawg_id")
+                    .eq("rawg_id", value: game.gameId)
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                // Also check if game.gameId is a local ID
+                let localLookups: [GameLookup] = try await SupabaseManager.shared.client
+                    .from("games")
+                    .select("id, rawg_id")
+                    .eq("id", value: game.gameId)
+                    .limit(1)
+                    .execute()
+                    .value
+                
+                let allGameIds = Set((gameLookups + localLookups).map { $0.id })
+                let _ = Set((gameLookups + localLookups).map { $0.rawg_id })
+                
+                guard !allGameIds.isEmpty else {
+                    isLoadingFriendRankings = false
+                    return
+                }
+                
+                // 3. Fetch rankings from friends + self
+                struct RankingRow: Decodable {
+                    let user_id: String
+                    let rank_position: Int
+                    let game_id: Int
+                    let canonical_game_id: Int?
+                }
+                
+                // Build OR filter for game matching
+                let gameIdFilters = allGameIds.map { "game_id.eq.\($0)" }
+                let canonicalFilters = allGameIds.map { "canonical_game_id.eq.\($0)" }
+                let allFilters = (gameIdFilters + canonicalFilters).joined(separator: ",")
+                
+                let rankings: [RankingRow] = try await SupabaseManager.shared.client
+                    .from("user_games")
+                    .select("user_id, rank_position, game_id, canonical_game_id")
+                    .in("user_id", values: allUserIds)
+                    .or(allFilters)
+                    .not("rank_position", operator: .is, value: "null")
+                    .order("rank_position", ascending: true)
+                    .execute()
+                    .value
+                
+                // Filter to actual matches
+                let matchedRankings = rankings.filter { r in
+                    allGameIds.contains(r.game_id) ||
+                    (r.canonical_game_id != nil && allGameIds.contains(r.canonical_game_id!))
+                }
+                
+                guard !matchedRankings.isEmpty else {
+                    isLoadingFriendRankings = false
+                    return
+                }
+                
+                // 4. Get usernames
+                let rankedUserIds = Array(Set(matchedRankings.map { $0.user_id }))
+                struct UserInfo: Decodable {
+                    let id: String
+                    let username: String?
+                    let avatar_url: String?
+                }
+                let users: [UserInfo] = try await SupabaseManager.shared.client
+                    .from("users")
+                    .select("id, username, avatar_url")
+                    .in("id", values: rankedUserIds)
+                    .execute()
+                    .value
+                
+                let userMap = Dictionary(uniqueKeysWithValues: users.map { ($0.id.lowercased(), $0) })
+                
+                var results: [(username: String, rank: Int, avatarURL: String?)] = []
+                for ranking in matchedRankings {
+                    if let user = userMap[ranking.user_id.lowercased()] {
+                        let displayName = ranking.user_id.lowercased() == userId.uuidString.lowercased() ? "You" : (user.username ?? "Unknown")
+                        results.append((username: displayName, rank: ranking.rank_position, avatarURL: user.avatar_url))
+                    }
+                }
+                
+                // Sort: "You" first, then by rank
+                friendRankings = results.sorted { a, b in
+                    if a.username == "You" { return true }
+                    if b.username == "You" { return false }
+                    return a.rank < b.rank
+                }
+                
+            } catch {
+                debugLog("⚠️ Error fetching friend rankings: \(error)")
+            }
+            
+            isLoadingFriendRankings = false
+        }
+        
+        private func friendInitialsCircle(_ name: String, size: CGFloat) -> some View {
+            Circle()
+                .fill(Color.primaryBlue.opacity(0.2))
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(String(name.prefix(1)).uppercased())
+                        .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primaryBlue)
+                )
         }
     }

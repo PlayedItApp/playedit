@@ -186,7 +186,7 @@ struct RecommendationsView: View {
                     }
                     .foregroundStyle(Color.adaptiveGray)
                     .padding(10)
-                    .background(Color.cardBackground) 
+                    .background(Color.cardBackground)
                     .cornerRadius(10)
                 }
                 .padding(.bottom, 4)
@@ -227,7 +227,7 @@ struct RecommendationsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .background(Color.secondaryBackground)
+        .background(Color(.systemBackground))
     }
     
     // MARK: - Toast
@@ -237,7 +237,7 @@ struct RecommendationsView: View {
             .foregroundColor(.white)
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(Color.secondaryBackground)
+            .background(Color(.systemBackground))
             .cornerRadius(12)
             .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
             .padding(.bottom, 20)
@@ -357,9 +357,9 @@ struct RecommendationCard: View {
             }
         }
         .padding(16)
-        .background(Color.cardBackground) 
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
     }
     
     private var predictionColor: Color {
@@ -459,29 +459,28 @@ struct RecommendationDetailSheet: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-                        Button {
-                            Task {
-                                await GameShareService.shared.shareGame(
-                                    gameTitle: recommendation.gameTitle,
-                                    coverURL: recommendation.gameCoverUrl,
-                                    gameId: recommendation.gameRawgId
-                                )
-                            }
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 16))
-                                .foregroundColor(.primaryBlue)
+                    Button {
+                        Task {
+                            await GameShareService.shared.shareGame(
+                                gameTitle: recommendation.gameTitle,
+                                coverURL: recommendation.gameCoverUrl,
+                                gameId: recommendation.gameRawgId
+                            )
                         }
-                        
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Color.adaptiveGray)
-                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16))
+                            .foregroundColor(.primaryBlue)
                     }
                 }
             }
@@ -631,7 +630,6 @@ struct RecommendationDetailSheet: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
                 }
-                .background(Color.secondaryBackground)
                 .navigationTitle("How It Works")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
