@@ -52,8 +52,8 @@ struct CommentsSheet: View {
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color.adaptiveSlate)
                         } else if feedItem.rankPosition == nil && feedItem.userGameId.isEmpty {
-                            // Batch post
-                            Text(feedItem.gameTitle)
+                            // Batch or want-to-play post
+                            Text(feedItem.gameTitle == "Unknown Game" ? "\(feedItem.username)'s post" : feedItem.gameTitle)
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color.adaptiveSlate)
                                 .lineLimit(2)

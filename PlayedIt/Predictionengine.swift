@@ -570,43 +570,50 @@ class PredictionEngine {
                 f.user_id.lowercased() == userId.uuidString.lowercased() ? f.friend_id : f.user_id
             }
             
-            // Fetch each friend's data
+            // Batch fetch all friend usernames in one query
+            struct UserInfo: Decodable {
+                let id: String
+                let username: String?
+            }
+            
+            let allUserInfos: [UserInfo] = friendIds.isEmpty ? [] : try await SupabaseManager.shared.client
+                .from("users")
+                .select("id, username")
+                .in("id", values: friendIds)
+                .execute()
+                .value
+            
+            let usernameMap = Dictionary(uniqueKeysWithValues: allUserInfos.map { ($0.id.lowercased(), $0.username ?? "Friend") })
+            
+            // Batch fetch all friends' ranked games in one query
+            struct FriendGameRow: Decodable {
+                let user_id: String
+                let game_id: Int
+                let rank_position: Int
+                let canonical_game_id: Int?
+                let games: FriendGameData
+                
+                struct FriendGameData: Decodable {
+                    let rawg_id: Int
+                }
+            }
+            
+            let allFriendRows: [FriendGameRow] = friendIds.isEmpty ? [] : try await SupabaseManager.shared.client
+                .from("user_games")
+                .select("user_id, game_id, rank_position, canonical_game_id, games(rawg_id)")
+                .in("user_id", values: friendIds)
+                .not("rank_position", operator: .is, value: "null")
+                .order("rank_position", ascending: true)
+                .execute()
+                .value
+            
+            // Group by friend
+            let rowsByFriend = Dictionary(grouping: allFriendRows, by: { $0.user_id.lowercased() })
+            
             var friends: [FriendData] = []
             
             for friendId in friendIds {
-                // Get friend username
-                struct UserInfo: Decodable {
-                    let username: String?
-                }
-                
-                let userInfo: UserInfo = try await SupabaseManager.shared.client
-                    .from("users")
-                    .select("username")
-                    .eq("id", value: friendId)
-                    .single()
-                    .execute()
-                    .value
-                
-                // Get friend's ranked games
-                struct FriendGameRow: Decodable {
-                    let game_id: Int
-                    let rank_position: Int
-                    let canonical_game_id: Int?
-                    let games: FriendGameData
-                    
-                    struct FriendGameData: Decodable {
-                        let rawg_id: Int
-                    }
-                }
-                
-                let friendRows: [FriendGameRow] = try await SupabaseManager.shared.client
-                    .from("user_games")
-                    .select("game_id, rank_position, canonical_game_id, games(rawg_id)")
-                    .eq("user_id", value: friendId)
-                    .not("rank_position", operator: .is, value: "null")
-                    .order("rank_position", ascending: true)
-                    .execute()
-                    .value
+                let friendRows = rowsByFriend[friendId.lowercased()] ?? []
                 
                 let friendGames = friendRows.map { row in
                     FriendRankedGame(
@@ -618,7 +625,6 @@ class PredictionEngine {
                     )
                 }
                 
-                // Compute taste match using same Spearman logic
                 let tasteMatch = computeTasteMatch(
                     myGames: myGames,
                     friendGames: friendGames
@@ -626,7 +632,7 @@ class PredictionEngine {
                 
                 friends.append(FriendData(
                     userId: friendId,
-                    username: userInfo.username ?? "Friend",
+                    username: usernameMap[friendId.lowercased()] ?? "Friend",
                     tasteMatch: tasteMatch,
                     games: friendGames
                 ))

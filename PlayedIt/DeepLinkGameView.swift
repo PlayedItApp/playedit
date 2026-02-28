@@ -209,6 +209,7 @@ struct DeepLinkGameView: View {
                                             .foregroundStyle(Color.adaptiveSlate)
                                         
                                         if ranking.username != "You",
+                                           friendRankings.filter({ $0.username != "You" }).count >= 2,
                                            ranking.tasteMatch == friendRankings.filter({ $0.username != "You" }).map({ $0.tasteMatch }).max(),
                                            ranking.tasteMatch >= 50 {
                                             Text("Closest taste · \(ranking.tasteMatch)%")

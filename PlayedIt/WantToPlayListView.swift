@@ -1654,6 +1654,7 @@ struct FirstTwoComparisonView: View {
                                                     .foregroundStyle(Color.adaptiveSlate)
                                                 
                                                 if ranking.username != "You",
+                                                   friendRankings.filter({ $0.username != "You" }).count >= 2,
                                                    ranking.tasteMatch == friendRankings.filter({ $0.username != "You" }).map({ $0.tasteMatch }).max(),
                                                    ranking.tasteMatch >= 50 {
                                                     Text("Closest taste · \(ranking.tasteMatch)%")
@@ -1694,37 +1695,40 @@ struct FirstTwoComparisonView: View {
                 }
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(Color.adaptiveSilver)
+                        }
+                    }
+
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        HStack(spacing: 12) {
-                            Button {
-                                Task {
-                                    await GameShareService.shared.shareGame(
-                                        gameTitle: game.gameTitle,
-                                        coverURL: game.gameCoverUrl,
-                                        gameId: game.gameId
-                                    )
-                                }
-                            } label: {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.primaryBlue)
+                        Button {
+                            Task {
+                                await GameShareService.shared.shareGame(
+                                    gameTitle: game.gameTitle,
+                                    coverURL: game.gameCoverUrl,
+                                    gameId: game.gameId
+                                )
                             }
-                            
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16))
+                                .foregroundColor(.primaryBlue)
                         }
                     }
                 }
                 .sheet(isPresented: $showLogGame, onDismiss: {
-                    // Refresh ranked status after logging
                     Task {
                         await checkIfAlreadyRanked()
                         NotificationCenter.default.post(name: .wantToPlayShouldRefresh, object: nil)
+                        if isAlreadyRanked {
+                            NotificationCenter.default.post(name: NSNotification.Name("profileShouldRefresh"), object: nil)
+                            dismiss()
+                        }
                     }
                 }) {
                     GameLogView(game: game.toGame())

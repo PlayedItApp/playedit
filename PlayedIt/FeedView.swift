@@ -203,7 +203,7 @@ struct FeedView: View {
             }
             .padding(16)
             
-            if hasMorePosts {
+            if hasMorePosts && !isLoading {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
                     .frame(maxWidth: .infinity)
@@ -473,21 +473,19 @@ struct FeedView: View {
                 let feed_post_id: String
             }
             
-            async let reactionsTask: [ReactionRow] = supabase.client
+            let reactions: [ReactionRow] = try await supabase.client
                 .from("feed_reactions")
                 .select("feed_post_id, user_id")
                 .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
             
-            async let commentsTask: [CommentCountRow] = supabase.client
+            let commentRows: [CommentCountRow] = try await supabase.client
                 .from("feed_comments")
                 .select("feed_post_id")
                 .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
-            
-            let (reactions, commentRows) = try await (reactionsTask, commentsTask)
             
             var likeCountMap: [String: Int] = [:]
             var myLikedIds: Set<String> = []
@@ -685,8 +683,10 @@ struct FeedView: View {
         isLoadingMore = true
         
         do {
-            guard let feedUserIds = cachedFeedUserIds else {
+            guard let feedUserIds = cachedFeedUserIds, !feedUserIds.isEmpty else {
+                debugLog("📄 loadMorePosts: no cached feed user IDs, skipping")
                 isLoadingMore = false
+                hasMorePosts = false
                 return
             }
             
@@ -780,21 +780,19 @@ struct FeedView: View {
                 let feed_post_id: String
             }
             
-            async let reactionsTask: [ReactionRow] = supabase.client
+            let reactions: [ReactionRow] = try await supabase.client
                 .from("feed_reactions")
                 .select("feed_post_id, user_id")
                 .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
             
-            async let commentsTask: [CommentCountRow] = supabase.client
+            let commentRows: [CommentCountRow] = try await supabase.client
                 .from("feed_comments")
                 .select("feed_post_id")
                 .in("feed_post_id", values: feedPostIds)
                 .execute()
                 .value
-            
-            let (reactions, commentRows) = try await (reactionsTask, commentsTask)
             
             var likeCountMap: [String: Int] = [:]
             var myLikedIds: Set<String> = []

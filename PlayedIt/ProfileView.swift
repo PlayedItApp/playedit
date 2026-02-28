@@ -260,6 +260,7 @@ struct ProfileView: View {
                     }
                     .padding(.top, 8)
                 }
+                .padding(.bottom, 32)
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Profile")
@@ -521,6 +522,9 @@ struct ProfileView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .profileNudgeTapped)) { _ in
                 isEditing = true
+            }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("profileShouldRefresh"))) { _ in
+                Task { await fetchRankedGames() }
             }
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {

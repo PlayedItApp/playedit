@@ -165,9 +165,15 @@ struct NotificationsView: View {
                 .value
             
             // Collect feed_post_ids for batch posts so we can fetch game titles
-            let batchPostIds = rows
+            let batchRankedPostIds = rows
                 .filter { $0.feed_posts?.post_type == "batch_ranked" && $0.feed_post_id != nil }
                 .compactMap { $0.feed_post_id?.lowercased() }
+            
+            let batchWtpPostIds = rows
+                .filter { $0.feed_posts?.post_type == "batch_want_to_play" && $0.feed_post_id != nil }
+                .compactMap { $0.feed_post_id?.lowercased() }
+            
+            let batchPostIds = batchRankedPostIds
             
             // Fetch child game titles for batch posts
             var batchGameTitles: [String: (title: String, coverURL: String?, count: Int)] = [:]
@@ -207,8 +213,41 @@ struct NotificationsView: View {
                 }
             }
             
+            // Fetch child game titles for batch want-to-play posts
+            if !batchWtpPostIds.isEmpty {
+                struct WtpBatchChild: Decodable {
+                    let batch_post_id: String
+                    let metadata: WtpMeta?
+                    struct WtpMeta: Decodable {
+                        let game_title: String?
+                        let game_cover_url: String?
+                    }
+                }
+                
+                let wtpChildren: [WtpBatchChild] = try await supabase.client
+                    .from("feed_posts")
+                    .select("batch_post_id, metadata")
+                    .in("batch_post_id", values: batchWtpPostIds)
+                    .eq("post_type", value: "want_to_play")
+                    .order("created_at", ascending: true)
+                    .execute()
+                    .value
+                
+                var wtpGrouped: [String: [(String, String?)]] = [:]
+                for child in wtpChildren {
+                    let title = child.metadata?.game_title ?? "Unknown"
+                    let cover = child.metadata?.game_cover_url
+                    wtpGrouped[child.batch_post_id, default: []].append((title, cover))
+                }
+                for (batchId, games) in wtpGrouped {
+                    if let first = games.first {
+                        batchGameTitles[batchId] = (title: first.0, coverURL: first.1, count: games.count)
+                    }
+                }
+            }
+            
             notifications = rows.map { row in
-                let isBatch = row.feed_posts?.post_type == "batch_ranked"
+                let isBatch = row.feed_posts?.post_type == "batch_ranked" || row.feed_posts?.post_type == "batch_want_to_play"
                 let batchInfo = row.feed_post_id.flatMap { batchGameTitles[$0] }
                 
                 let gameTitle: String?
@@ -509,16 +548,18 @@ struct NotificationRow: View {
         var action = AttributedString("")
         switch notification.type {
         case .like:
+            let isWtp = notification.postType == "batch_want_to_play" || notification.postType == "want_to_play"
             if let game = notification.gameTitle {
-                action = AttributedString(" liked your ranking of \(game)")
+                action = AttributedString(isWtp ? " liked your Want to Play post for \(game)" : " liked your ranking of \(game)")
             } else {
-                action = AttributedString(" liked your ranking")
+                action = AttributedString(isWtp ? " liked your Want to Play post" : " liked your ranking")
             }
         case .comment:
+            let isWtp = notification.postType == "batch_want_to_play" || notification.postType == "want_to_play"
             if let game = notification.gameTitle {
-                action = AttributedString(" commented on your ranking of \(game)")
+                action = AttributedString(isWtp ? " commented on your Want to Play post for \(game)" : " commented on your ranking of \(game)")
             } else {
-                action = AttributedString(" commented on your ranking")
+                action = AttributedString(isWtp ? " commented on your Want to Play post" : " commented on your ranking")
             }
         case .friendRequest:
             action = AttributedString(" sent you a friend request")

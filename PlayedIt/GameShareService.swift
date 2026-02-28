@@ -39,15 +39,18 @@ class GameShareService {
             return
         }
         
-        let shareText: String
-            if let rank = rankPosition {
-                shareText = "I ranked \(gameTitle) #\(rank) on PlayedIt! Check it out 🎮\nhttps://playedit.app/game/\(gameId)"
-            } else {
-                shareText = "Check out \(gameTitle) on PlayedIt! 🎮\nhttps://playedit.app/game/\(gameId)"
-            }
+        // Build URL with share context for OG image generation
+        var urlString = "https://playedit.app/game/\(gameId)"
+        var params: [String] = []
+        if let rank = rankPosition { params.append("rank=\(rank)") }
+        if totalGames > 0 { params.append("total=\(totalGames)") }
+        params.append("user=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username)")
+        if !params.isEmpty { urlString += "?" + params.joined(separator: "&") }
+        
+        let shareURL = URL(string: urlString)!
         
         let activityVC = UIActivityViewController(
-            activityItems: [image, shareText],
+            activityItems: [shareURL],
             applicationActivities: nil
         )
         
