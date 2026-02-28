@@ -166,20 +166,8 @@ struct ComparisonView: View {
             return
         }
         
-        if let predicted = predictedPosition, existingGames.count >= 6 {
-            // Bias the binary search window around the predicted position
-            // Convert predicted position (1-based) to 0-based index
-            let predictedIndex = max(0, min(predicted - 1, existingGames.count - 1))
-            
-            // Window size: enough room to be wrong by ~30% of list size
-            let windowSize = max(3, existingGames.count / 3)
-            lowIndex = max(0, predictedIndex - windowSize)
-            highIndex = min(existingGames.count - 1, predictedIndex + windowSize)
-            debugLog("🎯 Biased comparison: predicted=#\(predicted), window=[\(lowIndex)...\(highIndex)] of \(existingGames.count)")
-            } else {
-            lowIndex = 0
-            highIndex = existingGames.count - 1
-        }
+        lowIndex = 0
+        highIndex = existingGames.count - 1
         comparisonCount = 0
         
         nextComparison()
@@ -195,7 +183,13 @@ struct ComparisonView: View {
             return
         }
         
-        let midIndex = (lowIndex + highIndex) / 2
+        let midIndex: Int
+        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+            debugLog("🎯 Biased first comparison to index \(midIndex) (predicted #\(predicted)) instead of \((lowIndex + highIndex) / 2)")
+        } else {
+            midIndex = (lowIndex + highIndex) / 2
+        }
         currentComparison = existingGames[midIndex]
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {

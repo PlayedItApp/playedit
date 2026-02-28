@@ -31,6 +31,7 @@ struct FeedView: View {
                 }
             }
             .navigationTitle("Feed")
+            .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1520,6 +1521,7 @@ struct FeedGameDetailSheet: View {
                             }
                         }
                     }
+                    .presentationBackground(Color.appBackground)
                 } else {
                     VStack(spacing: 12) {
                         Text("Couldn't load game details")
@@ -1588,20 +1590,20 @@ struct FeedGameDetailSheet: View {
                     .value
                 
                 userGame = UserGame(
-                    id: row.id,
-                    gameId: row.game_id,
-                    userId: row.user_id,
-                    rankPosition: row.rank_position ?? 0,
-                    platformPlayed: row.platform_played,
-                    notes: row.notes,
-                    loggedAt: row.logged_at,
-                    canonicalGameId: row.canonical_game_id,
-                    gameTitle: row.games.title,
-                    gameCoverURL: row.games.cover_url,
-                    gameReleaseDate: row.games.release_date,
-                    gameRawgId: row.games.rawg_id
-                )
-            } else {
+                        id: row.id,
+                        gameId: row.game_id,
+                        userId: row.user_id,
+                        rankPosition: row.rank_position ?? 0,
+                        platformPlayed: row.platform_played,
+                        notes: row.notes,
+                        loggedAt: row.logged_at,
+                        canonicalGameId: row.canonical_game_id,
+                        gameTitle: row.games.title,
+                        gameCoverURL: row.games.cover_url,
+                        gameReleaseDate: row.games.release_date,
+                        gameRawgId: row.games.rawg_id
+                    )
+                } else {
                 // Fallback: build from FeedItem data (no DB fetch needed)
                 userGame = UserGame(
                     id: item.id,

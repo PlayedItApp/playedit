@@ -391,24 +391,6 @@ struct ProfileView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button {
-                            showSteamImport = true
-                        } label: {
-                            Label(hasSteamConnected ? "Import from Steam (Connected ✓)" : "Import from Steam", systemImage: "arrow.down.circle")
-                        }
-                        Button {
-                            showDiagnosticSheet = true
-                        } label: {
-                            Label("Send Diagnostic Logs", systemImage: "ladybug")
-                        }
-                        
-                        if !hasAppleLinked {
-                            Button {
-                                triggerAppleLinking()
-                            } label: {
-                                Label("Link Apple ID", systemImage: "apple.logo")
-                            }
-                        }
-                        Button {
                             UIPasteboard.general.string = "https://playedit.app/profile/\(username)"
                             message = "Profile link copied!"
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -417,68 +399,103 @@ struct ProfileView: View {
                         } label: {
                             Label("Share Profile Link", systemImage: "link")
                         }
+                        
                         Menu {
-                            Button { startTab = 0 } label: {
-                                HStack {
-                                    Text("Feed")
-                                    if startTab == 0 { Image(systemName: "checkmark") }
-                                }
+                            NavigationLink {
+                                FeedbackView()
+                            } label: {
+                                Label("Send Feedback", systemImage: "bubble.left.and.bubble.right")
                             }
-                            Button { startTab = 1 } label: {
-                                HStack {
-                                    Text("Friends")
-                                    if startTab == 1 { Image(systemName: "checkmark") }
-                                }
-                            }
-                            Button { startTab = 2 } label: {
-                                HStack {
-                                    Text("Profile")
-                                    if startTab == 2 { Image(systemName: "checkmark") }
-                                }
+                            
+                            Button {
+                                showDiagnosticSheet = true
+                            } label: {
+                                Label("Send Diagnostic Logs", systemImage: "ladybug")
                             }
                         } label: {
-                            Label("Start Screen", systemImage: "house")
+                            Label("Help & Feedback", systemImage: "questionmark.circle")
                         }
-                        Toggle(isOn: $hideNotifications) {
-                            Label("Hide Notifications", systemImage: "bell.slash")
-                        }
+                        
+                        // Settings submenu
                         Menu {
-                            Button { appearanceManager.appearanceMode = 0 } label: {
-                                HStack {
-                                    Text("System")
-                                    if appearanceManager.appearanceMode == 0 { Image(systemName: "checkmark") }
+                            Menu {
+                                Button { startTab = 0 } label: {
+                                    HStack {
+                                        Text("Feed")
+                                        if startTab == 0 { Image(systemName: "checkmark") }
+                                    }
                                 }
-                            }
-                            Button { appearanceManager.appearanceMode = 1 } label: {
-                                HStack {
-                                    Text("Light")
-                                    if appearanceManager.appearanceMode == 1 { Image(systemName: "checkmark") }
+                                Button { startTab = 1 } label: {
+                                    HStack {
+                                        Text("Friends")
+                                        if startTab == 1 { Image(systemName: "checkmark") }
+                                    }
                                 }
+                                Button { startTab = 2 } label: {
+                                    HStack {
+                                        Text("Profile")
+                                        if startTab == 2 { Image(systemName: "checkmark") }
+                                    }
+                                }
+                            } label: {
+                                Label("Start Screen", systemImage: "house")
                             }
-                            Button { appearanceManager.appearanceMode = 2 } label: {
-                                HStack {
-                                    Text("Dark")
-                                    if appearanceManager.appearanceMode == 2 { Image(systemName: "checkmark") }
+                            
+                            Menu {
+                                Button { appearanceManager.appearanceMode = 0 } label: {
+                                    HStack {
+                                        Text("System")
+                                        if appearanceManager.appearanceMode == 0 { Image(systemName: "checkmark") }
+                                    }
+                                }
+                                Button { appearanceManager.appearanceMode = 1 } label: {
+                                    HStack {
+                                        Text("Light")
+                                        if appearanceManager.appearanceMode == 1 { Image(systemName: "checkmark") }
+                                    }
+                                }
+                                Button { appearanceManager.appearanceMode = 2 } label: {
+                                    HStack {
+                                        Text("Dark")
+                                        if appearanceManager.appearanceMode == 2 { Image(systemName: "checkmark") }
+                                    }
+                                }
+                            } label: {
+                                Label("Appearance", systemImage: "moon.circle")
+                            }
+                            
+                            Toggle(isOn: $hideNotifications) {
+                                Label("Hide Notifications", systemImage: "bell.slash")
+                            }
+                            
+                            Button {
+                                showSteamImport = true
+                            } label: {
+                                Label(hasSteamConnected ? "Import from Steam (Connected ✓)" : "Import from Steam", systemImage: "arrow.down.circle")
+                            }
+                            
+                            if !hasAppleLinked {
+                                Button {
+                                    triggerAppleLinking()
+                                } label: {
+                                    Label("Link Apple ID", systemImage: "apple.logo")
                                 }
                             }
                         } label: {
-                            Label("Appearance", systemImage: "moon.circle")
-                        }
-                        NavigationLink {
-                            FeedbackView()
-                        } label: {
-                            Label("Send Feedback", systemImage: "bubble.left.and.bubble.right")
+                            Label("Settings", systemImage: "gearshape")
                         }
                         
                         if rankedGames.count >= 2 {
+                            Divider()
+                            
                             Button(role: .destructive) {
                                 showResetRankings = true
                             } label: {
                                 Label("Reset Rankings", systemImage: "arrow.counterclockwise")
                             }
-                            
-                            Divider()
                         }
+                        
+                        Divider()
                         
                         Button {
                             PushNotificationManager.shared.removeDeviceToken()

@@ -26,17 +26,16 @@ struct GameDetailFromFriendView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // MARK: - Hero Section
-                heroSection
-                
+            // MARK: - Hero Section
+            heroSection
+            
+            VStack(spacing: 12) {
                 Divider()
                     .padding(.horizontal, 20)
                 
                 // MARK: - Friend's Perspective
                 friendPerspectiveSection
-                
-                // MARK: - Your Perspective
-                myPerspectiveSection
+            }
                 
                 // MARK: - Social Context
                 if !friendRankings.isEmpty {
@@ -120,7 +119,7 @@ struct GameDetailFromFriendView: View {
     
     // MARK: - Friend's Perspective
     private var friendPerspectiveSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 4) {
             // Section header
             HStack(spacing: 8) {
                 friendAvatar(size: 28)
@@ -181,9 +180,10 @@ struct GameDetailFromFriendView: View {
                     .padding(.top, 4)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.cardBackground) 
+            .background(Color.cardBackground)
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
