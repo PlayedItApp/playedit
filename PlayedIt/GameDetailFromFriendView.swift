@@ -80,12 +80,11 @@ struct GameDetailFromFriendView: View {
         }
         .task {
             resolveMyGame()
-            await fetchMetacriticScore()
-            await fetchGameDescription()
-            await fetchFriendRankings()
-            if myUserGame == nil {
-                await fetchPrediction()
-            }
+            async let meta: () = fetchMetacriticScore()
+            async let desc: () = fetchGameDescription()
+            async let friends: () = fetchFriendRankings()
+            async let pred: () = fetchPredictionIfNeeded()
+            _ = await (meta, desc, friends, pred)
         }
         .sheet(isPresented: $showLogGame, onDismiss: {
             Task {
@@ -611,6 +610,12 @@ struct GameDetailFromFriendView: View {
                     .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
                     .foregroundColor(.primaryBlue)
             )
+    }
+    
+    private func fetchPredictionIfNeeded() async {
+        if myUserGame == nil {
+            await fetchPrediction()
+        }
     }
     
     // MARK: - Prediction

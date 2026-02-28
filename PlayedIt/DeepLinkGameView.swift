@@ -249,8 +249,9 @@ struct DeepLinkGameView: View {
                 }
                 
                 isLoading = false
-                await fetchFriendRankings()
-                await fetchMyGame()
+                async let f: () = fetchFriendRankings()
+                async let m: () = fetchMyGame()
+                _ = await (f, m)
                 return
             }
             
@@ -282,8 +283,9 @@ struct DeepLinkGameView: View {
             }
             
             isLoading = false
-            await fetchFriendRankings()
-            await fetchMyGame()
+            async let f: () = fetchFriendRankings()
+            async let m: () = fetchMyGame()
+            _ = await (f, m)
             
         } catch {
             debugLog("❌ Error loading game: \(error)")

@@ -339,48 +339,47 @@ struct WantToPlayListView: View {
         guard let context = await PredictionEngine.buildContext() else { return }
         predictionContext = context
         
-        for game in (rankedGames + unrankedGames) {
+        let allGames = rankedGames + unrankedGames
+            guard !allGames.isEmpty else { return }
+            
+            let gameIds = allGames.map { $0.gameId }
+            
+            struct GameInfo: Decodable {
+                let id: Int
+                let rawg_id: Int
+                let genres: [String]?
+                let tags: [String]?
+                let metacritic_score: Int?
+            }
+            
             do {
-                struct GameInfo: Decodable {
-                    let rawg_id: Int
-                    let genres: [String]?
-                    let tags: [String]?
-                    let metacritic_score: Int?
-                    let description: String?
-                }
-                
                 let infos: [GameInfo] = try await SupabaseManager.shared.client
                     .from("games")
-                    .select("rawg_id, genres, tags, metacritic_score")
-                    .eq("id", value: game.gameId)
-                    .limit(1)
+                    .select("id, rawg_id, genres, tags, metacritic_score")
+                    .in("id", values: gameIds)
                     .execute()
                     .value
                 
-                guard let info = infos.first else { continue }
+                let infoMap = Dictionary(uniqueKeysWithValues: infos.map { ($0.id, $0) })
                 
-                let target = PredictionTarget(
-                    rawgId: info.rawg_id,
-                    canonicalGameId: nil,
-                    genres: info.genres ?? [],
-                    tags: info.tags ?? [],
-                    metacriticScore: info.metacritic_score
-                )
-                
-                if let pred = PredictionEngine.shared.predict(game: target, context: context) {
-                    predictions[game.id] = pred
-                    debugLog("🔮 \(game.gameTitle): percentile=\(Int(pred.predictedPercentile))%, confidence=\(pred.confidenceLabel), tiers=\(pred.tiersUsed), summary=\(pred.summaryText)")
-                    for signal in pred.friendSignals {
-                        debugLog("   👤 \(signal.friendName): ranked at \(Int(signal.friendRankPercentile))th percentile, taste match: \(signal.tasteMatch)%")
-                    }
-                    if let genre = pred.topGenreAffinity {
-                        debugLog("   🎮 Genre affinity: \(Int(genre))%")
+                for game in allGames {
+                    guard let info = infoMap[game.gameId] else { continue }
+                    
+                    let target = PredictionTarget(
+                        rawgId: info.rawg_id,
+                        canonicalGameId: nil,
+                        genres: info.genres ?? [],
+                        tags: info.tags ?? [],
+                        metacriticScore: info.metacritic_score
+                    )
+                    
+                    if let pred = PredictionEngine.shared.predict(game: target, context: context) {
+                        predictions[game.id] = pred
                     }
                 }
             } catch {
-                debugLog("⚠️ Prediction fetch failed for \(game.gameTitle): \(error)")
+                debugLog("⚠️ Batch prediction fetch failed: \(error)")
             }
-        }
     }
     
     // MARK: - Load Games
@@ -1721,10 +1720,11 @@ struct FirstTwoComparisonView: View {
                     GameLogView(game: game.toGame())
                 }
                 .task {
-                    await fetchGameDetails()
-                    await fetchSourceFriend()
-                    await fetchFriendRankings()
-                    await checkIfAlreadyRanked()
+                    async let details: () = fetchGameDetails()
+                    async let source: () = fetchSourceFriend()
+                    async let friends: () = fetchFriendRankings()
+                    async let ranked: () = checkIfAlreadyRanked()
+                    _ = await (details, source, friends, ranked)
                 }
             }
         }
