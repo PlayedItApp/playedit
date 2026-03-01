@@ -2510,29 +2510,27 @@ struct WantToPlayExpandedRow: View {
                 Spacer()
                 
                 // Bookmark button (only on friends' posts)
-                if groupUserId.lowercased() != (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") {
-                    HStack(spacing: 4) {
-                        if showToast {
-                            Text(toastMessage)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color.adaptiveGray)
-                                .transition(.opacity)
-                        }
-                        BookmarkButton(
-                            gameId: item.gameId,
-                            gameTitle: item.gameTitle,
-                            gameCoverUrl: item.gameCoverURL,
-                            source: "feed_batch",
-                            sourceFriendId: groupUserId,
-                            onToast: { message in
-                                toastMessage = message
-                                withAnimation { showToast = true }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    withAnimation { showToast = false }
-                                }
-                            }
-                        )
+                HStack(spacing: 4) {
+                    if showToast {
+                        Text(toastMessage)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                            .transition(.opacity)
                     }
+                    BookmarkButton(
+                        gameId: item.gameId,
+                        gameTitle: item.gameTitle,
+                        gameCoverUrl: item.gameCoverURL,
+                        source: "feed_batch",
+                        sourceFriendId: groupUserId,
+                        onToast: { message in
+                            toastMessage = message
+                            withAnimation { showToast = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation { showToast = false }
+                            }
+                        }
+                    )
                 }
             }
             .padding(.horizontal, 12)
