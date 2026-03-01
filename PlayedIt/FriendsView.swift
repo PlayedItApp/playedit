@@ -1618,6 +1618,8 @@ struct FriendWantToPlayDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var gameDescription: String? = nil
     @State private var metacriticScore: Int? = nil
+    @State private var curatedGenres: [String]? = nil
+    @State private var curatedTags: [String]? = nil
     
     var body: some View {
         NavigationStack {
@@ -1642,6 +1644,13 @@ struct FriendWantToPlayDetailSheet: View {
                         .foregroundStyle(Color.adaptiveSlate)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
+                    
+                    // Curated genres & tags
+                    if let genres = curatedGenres, !genres.isEmpty {
+                        curatedChips(genres: genres, tags: curatedTags ?? [])
+                    } else if let tags = curatedTags, !tags.isEmpty {
+                        curatedChips(genres: [], tags: tags)
+                    }
                     
                     if let position = game.sortPosition {
                         Text("\(friendName)'s Priority #\(position)")
@@ -1708,16 +1717,26 @@ struct FriendWantToPlayDetailSheet: View {
     }
     
     private func fetchGameDetails() async {
+        if let cached = GameMetadataCache.shared.get(gameId: game.gameId) {
+            metacriticScore = cached.metacriticScore
+            gameDescription = cached.description
+            curatedGenres = cached.curatedGenres
+            curatedTags = cached.curatedTags
+            if gameDescription != nil { return }
+        }
+        
         do {
             struct GameInfo: Decodable {
                 let rawg_id: Int
                 let metacritic_score: Int?
                 let description: String?
                 let curated_description: String?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
             }
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description, curated_description")
+                .select("rawg_id, metacritic_score, description, curated_description, curated_genres, curated_tags")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
@@ -1725,9 +1744,12 @@ struct FriendWantToPlayDetailSheet: View {
             
             guard let info = infos.first else { return }
             metacriticScore = info.metacritic_score
+            curatedGenres = info.curated_genres
+            curatedTags = info.curated_tags
 
             if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                 gameDescription = desc
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: nil, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
                 return
             }
             
@@ -1735,6 +1757,7 @@ struct FriendWantToPlayDetailSheet: View {
             gameDescription = details.gameDescriptionHtml ?? details.gameDescription
 
             if let desc = gameDescription, !desc.isEmpty {
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: nil, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
                 _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])
@@ -1744,6 +1767,38 @@ struct FriendWantToPlayDetailSheet: View {
         } catch {
             debugLog("⚠️ Could not fetch game details: \(error)")
         }
+    }
+    
+    private func curatedChips(genres: [String], tags: [String]) -> some View {
+        FlowLayout(spacing: 6) {
+            ForEach(genres, id: \.self) { genre in
+                Text(genre)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primaryBlue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.primaryBlue.opacity(0.15))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.primaryBlue.opacity(0.3), lineWidth: 1)
+                    )
+                    .cornerRadius(20)
+            }
+            ForEach(tags, id: \.self) { tag in
+                            Text(tag)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.adaptiveSlate)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.adaptiveSilver.opacity(0.15))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.adaptiveSilver.opacity(0.35), lineWidth: 1)
+                    )
+                    .cornerRadius(20)
+            }
+        }
+        .padding(.horizontal, 20)
     }
     
     private func metacriticColor(_ score: Int) -> Color {

@@ -410,6 +410,8 @@ struct RecommendationDetailSheet: View {
     @State private var gameDescription: String? = nil
     @State private var isLoadingDescription = true
     @State private var metacriticScore: Int? = nil
+    @State private var curatedGenres: [String]? = nil
+    @State private var curatedTags: [String]? = nil
     
     var body: some View {
         NavigationStack {
@@ -421,16 +423,11 @@ struct RecommendationDetailSheet: View {
                         releaseDate: nil,
                         metacriticScore: metacriticScore,
                         gameDescription: gameDescription,
-                        isLoadingDescription: isLoadingDescription
+                        isLoadingDescription: isLoadingDescription,
+                        curatedGenres: curatedGenres,
+                        curatedTags: curatedTags
                     )
                     .padding(.top, 12)
-                    
-                    // Genres
-                    if !recommendation.genres.isEmpty {
-                        Text(recommendation.genres.prefix(4).joined(separator: " · "))
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.adaptiveGray)
-                    }
                     
                     // Prediction badge
                     HStack(spacing: 6) {
@@ -499,6 +496,17 @@ struct RecommendationDetailSheet: View {
     }
     
     private func loadDescription() async {
+        if let cached = GameMetadataCache.shared.get(gameId: recommendation.gameRawgId) {
+            metacriticScore = cached.metacriticScore
+            gameDescription = cached.description
+            curatedGenres = cached.curatedGenres
+            curatedTags = cached.curatedTags
+            if gameDescription != nil {
+                isLoadingDescription = false
+                return
+            }
+        }
+        
         // First try the games table
         do {
             struct GameDesc: Decodable {
@@ -506,11 +514,13 @@ struct RecommendationDetailSheet: View {
                 let curated_description: String?
                 let metacritic_score: Int?
                 let release_date: String?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
             }
             
             let infos: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description, curated_description, metacritic_score, release_date")
+                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags")
                 .eq("rawg_id", value: recommendation.gameRawgId)
                 .limit(1)
                 .execute()
@@ -519,9 +529,12 @@ struct RecommendationDetailSheet: View {
             if let score = infos.first?.metacritic_score {
                 metacriticScore = score
             }
+            curatedGenres = infos.first?.curated_genres
+            curatedTags = infos.first?.curated_tags
             if let desc = infos.first?.curated_description ?? infos.first?.description, !desc.isEmpty {
                 let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
                 gameDescription = cleaned
+                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: nil, curatedGenres: curatedGenres, curatedTags: curatedTags)
                 isLoadingDescription = false
                 return
             }
@@ -538,6 +551,7 @@ struct RecommendationDetailSheet: View {
             
             // Cache for next time
             if !cleaned.isEmpty {
+                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: nil, curatedGenres: curatedGenres, curatedTags: curatedTags)
                 _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])

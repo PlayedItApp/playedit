@@ -8,6 +8,8 @@ struct GameInfoHeroView: View {
     var metacriticScore: Int? = nil
     var gameDescription: String? = nil
     var isLoadingDescription: Bool = false
+    var curatedGenres: [String]? = nil
+    var curatedTags: [String]? = nil
     
     var body: some View {
         VStack(spacing: 16) {
@@ -32,6 +34,13 @@ struct GameInfoHeroView: View {
                 .foregroundStyle(Color.adaptiveSlate)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
+            
+            // Curated genres & tags
+            if let genres = curatedGenres, !genres.isEmpty {
+                genreTagChips(genres: genres, tags: curatedTags ?? [])
+            } else if let tags = curatedTags, !tags.isEmpty {
+                genreTagChips(genres: [], tags: tags)
+            }
             
             // Release year + Metacritic
             if hasMetadata {
@@ -73,6 +82,38 @@ struct GameInfoHeroView: View {
     
     private var hasMetadata: Bool {
         (releaseDate?.prefix(4)) != nil || (metacriticScore ?? 0) > 0
+    }
+    
+    private func genreTagChips(genres: [String], tags: [String]) -> some View {
+        FlowLayout(spacing: 6) {
+            ForEach(genres, id: \.self) { genre in
+                Text(genre)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primaryBlue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.primaryBlue.opacity(0.15))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.primaryBlue.opacity(0.3), lineWidth: 1)
+                    )
+                    .cornerRadius(20)
+            }
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.adaptiveSlate)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.adaptiveSilver.opacity(0.15))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.adaptiveSilver.opacity(0.35), lineWidth: 1)
+                    )
+                    .cornerRadius(20)
+            }
+        }
+        .padding(.horizontal, 20)
     }
     
     private func metacriticColor(_ score: Int) -> Color {

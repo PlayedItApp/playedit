@@ -9,6 +9,8 @@ class GameMetadataCache {
         let description: String?
         let metacriticScore: Int?
         let releaseDate: String?
+        let curatedGenres: [String]?
+        let curatedTags: [String]?
     }
     
     private var cache: [Int: CachedMetadata] = [:] // keyed by gameId
@@ -17,11 +19,13 @@ class GameMetadataCache {
         cache[gameId]
     }
     
-    func set(gameId: Int, description: String?, metacriticScore: Int?, releaseDate: String?) {
+    func set(gameId: Int, description: String?, metacriticScore: Int?, releaseDate: String?, curatedGenres: [String]? = nil, curatedTags: [String]? = nil) {
         cache[gameId] = CachedMetadata(
             description: description,
             metacriticScore: metacriticScore,
-            releaseDate: releaseDate
+            releaseDate: releaseDate,
+            curatedGenres: curatedGenres,
+            curatedTags: curatedTags
         )
     }
 }

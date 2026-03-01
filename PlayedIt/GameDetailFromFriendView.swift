@@ -17,6 +17,8 @@ struct GameDetailFromFriendView: View {
     @State private var showReportSheet = false
     @State private var gameDescription: String? = nil
     @State private var prediction: GamePrediction? = nil
+    @State private var curatedGenres: [String]? = nil
+    @State private var curatedTags: [String]? = nil
     
     // Check if current user has this game ranked
     private var iHaveThisGame: Bool {
@@ -113,7 +115,9 @@ struct GameDetailFromFriendView: View {
             coverURL: userGame.gameCoverURL,
             releaseDate: userGame.gameReleaseDate,
             metacriticScore: metacriticScore,
-            gameDescription: gameDescription
+            gameDescription: gameDescription,
+            curatedGenres: curatedGenres,
+            curatedTags: curatedTags
         )
         .padding(.top, 20)
     }
@@ -420,20 +424,33 @@ struct GameDetailFromFriendView: View {
     
     private func fetchGameDescription() async {
         debugLog("📖 DESC DEBUG: gameId=\(userGame.gameId), gameRawgId=\(String(describing: userGame.gameRawgId)), title=\(userGame.gameTitle)")
+        
+        if let cached = GameMetadataCache.shared.get(gameId: userGame.gameId) {
+            metacriticScore = cached.metacriticScore
+            gameDescription = cached.description
+            curatedGenres = cached.curatedGenres
+            curatedTags = cached.curatedTags
+            if gameDescription != nil { return }
+        }
+        
         do {
-            struct GameDesc: Decodable { let rawg_id: Int; let description: String?; let curated_description: String? }
+            struct GameDesc: Decodable { let rawg_id: Int; let description: String?; let curated_description: String?; let curated_genres: [String]?; let curated_tags: [String]? }
             let results: [GameDesc] = try await supabase.client
                 .from("games")
-                .select("rawg_id, description, curated_description")
+                .select("rawg_id, description, curated_description, curated_genres, curated_tags")
                 .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
                 .limit(1)
                 .execute()
                 .value
             
             guard let result = results.first else { return }
+                        
+            curatedGenres = result.curated_genres
+            curatedTags = result.curated_tags
             
             if let desc = result.curated_description ?? result.description, !desc.isEmpty {
                 gameDescription = desc
+                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags)
                 return
             }
             
@@ -443,6 +460,7 @@ struct GameDetailFromFriendView: View {
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
             
             if let desc = gameDescription, !desc.isEmpty {
+                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags)
                 _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])
@@ -742,13 +760,15 @@ struct GameDetailFromFriendView: View {
                 let rawg_id: Int
                 let genres: [String]?
                 let tags: [String]?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
                 let metacritic_score: Int?
                 let description: String?
             }
             
             let infos: [GameInfo] = try await supabase.client
                 .from("games")
-                .select("rawg_id, genres, tags, metacritic_score")
+                .select("rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score")
                 .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
                 .limit(1)
                 .execute()
@@ -759,8 +779,8 @@ struct GameDetailFromFriendView: View {
             let target = PredictionTarget(
                 rawgId: info.rawg_id,
                 canonicalGameId: userGame.canonicalGameId,
-                genres: info.genres ?? [],
-                tags: info.tags ?? [],
+                genres: info.curated_genres ?? info.genres ?? [],
+                tags: info.curated_tags ?? info.tags ?? [],
                 metacriticScore: info.metacritic_score
             )
             

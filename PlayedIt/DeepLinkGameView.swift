@@ -584,12 +584,14 @@ struct DeepLinkGameView: View {
                 let rawg_id: Int
                 let genres: [String]?
                 let tags: [String]?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
                 let metacritic_score: Int?
             }
             
             let infos: [GameInfo] = try await supabase.client
                 .from("games")
-                .select("rawg_id, genres, tags, metacritic_score")
+                .select("rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score")
                 .eq("rawg_id", value: gameId)
                 .limit(1)
                 .execute()
@@ -600,8 +602,8 @@ struct DeepLinkGameView: View {
             let target = PredictionTarget(
                 rawgId: info.rawg_id,
                 canonicalGameId: nil,
-                genres: info.genres ?? [],
-                tags: info.tags ?? [],
+                genres: info.curated_genres ?? info.genres ?? [],
+                tags: info.curated_tags ?? info.tags ?? [],
                 metacriticScore: info.metacritic_score
             )
             

@@ -527,13 +527,15 @@ class PredictionEngine {
                     let rawg_id: Int
                     let genres: [String]?
                     let tags: [String]?
+                    let curated_genres: [String]?
+                    let curated_tags: [String]?
                     let metacritic_score: Int?
                 }
             }
             
             let myRows: [MyGameRow] = try await SupabaseManager.shared.client
                 .from("user_games")
-                .select("id, game_id, rank_position, canonical_game_id, games(rawg_id, genres, tags, metacritic_score)")
+                .select("id, game_id, rank_position, canonical_game_id, games(rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -546,8 +548,8 @@ class PredictionEngine {
                     rawgId: row.games.rawg_id,
                     canonicalGameId: row.canonical_game_id,
                     rankPosition: row.rank_position,
-                    genres: row.games.genres ?? [],
-                    tags: row.games.tags ?? [],
+                    genres: row.games.curated_genres ?? row.games.genres ?? [],
+                    tags: row.games.curated_tags ?? row.games.tags ?? [],
                     metacriticScore: row.games.metacritic_score
                 )
             }

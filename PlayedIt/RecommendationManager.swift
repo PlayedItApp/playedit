@@ -284,6 +284,8 @@ class RecommendationManager: ObservableObject {
                     let cover_url: String?
                     let genres: [String]?
                     let tags: [String]?
+                    let curated_genres: [String]?
+                    let curated_tags: [String]?
                     let metacritic_score: Int?
                     let description: String?
                 }
@@ -291,7 +293,7 @@ class RecommendationManager: ObservableObject {
                 do {
                     let infos: [GameInfo] = try await supabase.client
                         .from("games")
-                        .select("id, rawg_id, title, cover_url, genres, tags, metacritic_score")
+                        .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, metacritic_score")
                         .eq("id", value: friendGame.gameId)
                         .limit(1)
                         .execute()
@@ -304,8 +306,8 @@ class RecommendationManager: ObservableObject {
                         rawgId: info.rawg_id,
                         title: info.title,
                         coverUrl: info.cover_url,
-                        genres: info.genres ?? [],
-                        tags: info.tags ?? [],
+                        genres: info.curated_genres ?? info.genres ?? [],
+                        tags: info.curated_tags ?? info.tags ?? [],
                         metacritic: info.metacritic_score,
                         source: "friend_ranked",
                         sourceFriendId: friend.userId,
@@ -355,13 +357,15 @@ class RecommendationManager: ObservableObject {
                 let cover_url: String?
                 let genres: [String]?
                 let tags: [String]?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
                 let metacritic_score: Int?
             }
             
             // Fetch games from PlayedIt table that overlap with user's top genres
             let games: [GameRow] = try await supabase.client
                 .from("games")
-                .select("id, rawg_id, title, cover_url, genres, tags, metacritic_score")
+                .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, metacritic_score")
                 .not("metacritic_score", operator: .is, value: "null")
                 .gte("metacritic_score", value: 75)
                 .order("metacritic_score", ascending: false)
@@ -374,7 +378,7 @@ class RecommendationManager: ObservableObject {
                 guard !candidates.contains(where: { $0.gameId == game.id }) else { continue }
                 
                 // Check genre overlap
-                let gameGenres = game.genres ?? []
+                let gameGenres = game.curated_genres ?? game.genres ?? []
                 let hasGenreOverlap = gameGenres.contains(where: { topGenres.contains($0) })
                 guard hasGenreOverlap else { continue }
                 
@@ -384,7 +388,7 @@ class RecommendationManager: ObservableObject {
                     title: game.title,
                     coverUrl: game.cover_url,
                     genres: gameGenres,
-                    tags: game.tags ?? [],
+                    tags: game.curated_tags ?? game.tags ?? [],
                     metacritic: game.metacritic_score,
                     source: "genre_discovery",
                     sourceFriendId: nil,
@@ -535,6 +539,8 @@ class RecommendationManager: ObservableObject {
                 let cover_url: String?
                 let genres: [String]?
                 let tags: [String]?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
                 let metacritic_score: Int?
                 let description: String?
             }
@@ -542,7 +548,7 @@ class RecommendationManager: ObservableObject {
             do {
                 let infos: [GameInfo] = try await supabase.client
                     .from("games")
-                    .select("rawg_id, title, cover_url, genres, tags, metacritic_score")
+                    .select("rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, metacritic_score")
                     .eq("id", value: rec.gameId)
                     .limit(1)
                     .execute()
@@ -553,8 +559,8 @@ class RecommendationManager: ObservableObject {
                 let target = PredictionTarget(
                     rawgId: info.rawg_id,
                     canonicalGameId: nil,
-                    genres: info.genres ?? [],
-                    tags: info.tags ?? [],
+                    genres: info.curated_genres ?? info.genres ?? [],
+                    tags: info.curated_tags ?? info.tags ?? [],
                     metacriticScore: info.metacritic_score
                 )
                 
@@ -582,7 +588,7 @@ class RecommendationManager: ObservableObject {
                     gameTitle: info.title,
                     gameCoverUrl: info.cover_url,
                     gameRawgId: info.rawg_id,
-                    genres: info.genres ?? [],
+                    genres: info.curated_genres ?? info.genres ?? [],
                     platforms: nil,
                     prediction: pred,
                     sourceFriendName: friendName,

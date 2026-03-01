@@ -349,13 +349,15 @@ struct WantToPlayListView: View {
                 let rawg_id: Int
                 let genres: [String]?
                 let tags: [String]?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
                 let metacritic_score: Int?
             }
             
             do {
                 let infos: [GameInfo] = try await SupabaseManager.shared.client
                     .from("games")
-                    .select("id, rawg_id, genres, tags, metacritic_score")
+                    .select("id, rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score")
                     .in("id", values: gameIds)
                     .execute()
                     .value
@@ -368,8 +370,8 @@ struct WantToPlayListView: View {
                     let target = PredictionTarget(
                         rawgId: info.rawg_id,
                         canonicalGameId: nil,
-                        genres: info.genres ?? [],
-                        tags: info.tags ?? [],
+                        genres: info.curated_genres ?? info.genres ?? [],
+                        tags: info.curated_tags ?? info.tags ?? [],
                         metacriticScore: info.metacritic_score
                     )
                     
@@ -1497,6 +1499,8 @@ struct FirstTwoComparisonView: View {
         @Environment(\.dismiss) private var dismiss
         @State private var gameDescription: String? = nil
         @State private var metacriticScore: Int? = nil
+        @State private var curatedGenres: [String]? = nil
+        @State private var curatedTags: [String]? = nil
         @State private var sourceFriendName: String? = nil
         @State private var releaseDate: String? = nil
         @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
@@ -1513,7 +1517,9 @@ struct FirstTwoComparisonView: View {
                             coverURL: game.gameCoverUrl,
                             releaseDate: releaseDate,
                             metacriticScore: metacriticScore,
-                            gameDescription: gameDescription
+                            gameDescription: gameDescription,
+                            curatedGenres: curatedGenres,
+                            curatedTags: curatedTags
                         )
                         
                         // Priority position
@@ -1762,6 +1768,7 @@ struct FirstTwoComparisonView: View {
                     _ = await (details, source, friends, ranked)
                 }
             }
+            .presentationBackground(Color.appBackground)
         }
         
         private func fetchGameDetails() async {
@@ -1772,6 +1779,8 @@ struct FirstTwoComparisonView: View {
             metacriticScore = cached.metacriticScore
             gameDescription = cached.description
             releaseDate = cached.releaseDate
+            curatedGenres = cached.curatedGenres
+            curatedTags = cached.curatedTags
             if gameDescription != nil { return }
         }
         
@@ -1782,14 +1791,26 @@ struct FirstTwoComparisonView: View {
                 let description: String?
                 let curated_description: String?
                 let release_date: String?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
             }
-            let infos: [GameInfo] = try await SupabaseManager.shared.client
+            var infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description, curated_description, release_date")
+                .select("rawg_id, metacritic_score, description, curated_description, release_date, curated_genres, curated_tags")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
                 .value
+            
+            if infos.isEmpty {
+                infos = try await SupabaseManager.shared.client
+                    .from("games")
+                    .select("rawg_id, metacritic_score, description, curated_description, release_date, curated_genres, curated_tags")
+                    .eq("rawg_id", value: game.gameId)
+                    .limit(1)
+                    .execute()
+                    .value
+            }
             
             guard let info = infos.first else {
                 debugLog("⚠️ No games row found for gameId \(game.gameId), fetching directly from RAWG")
@@ -1800,11 +1821,13 @@ struct FirstTwoComparisonView: View {
                 
             metacriticScore = info.metacritic_score
             releaseDate = info.release_date
+            curatedGenres = info.curated_genres
+            curatedTags = info.curated_tags
             
             // Use cached description if available — skip RAWG entirely
             if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                 gameDescription = desc
-                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date)
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
                 return
             }
             
@@ -1813,7 +1836,7 @@ struct FirstTwoComparisonView: View {
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
 
             if let desc = gameDescription, !desc.isEmpty {
-                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date)
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
                 _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])
