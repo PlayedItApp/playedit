@@ -44,6 +44,9 @@ struct SteamImportView: View {
     @State private var showSelectAll = true
     @State private var authContext: SteamAuthPresentationContext?
     
+    // Resume state
+    var resumingImport: PendingImport? = nil
+    
     var body: some View {
         NavigationStack {
             Group {
@@ -70,6 +73,30 @@ struct SteamImportView: View {
             }
             .navigationTitle("Import from Steam")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if let pending = resumingImport {
+                    gamesToRank = pending.games.map { g in
+                        MatchedSteamGame(
+                            steamAppId: Int(g.sourceMetadata["steam_app_id"] ?? "0") ?? 0,
+                            steamName: g.sourceMetadata["steam_name"] ?? g.title,
+                            playtimeMinutes: Int(g.sourceMetadata["steam_playtime_minutes"] ?? "0") ?? 0,
+                            rawgId: g.rawgId,
+                            rawgTitle: g.title,
+                            rawgCoverUrl: g.coverUrl,
+                            rawgGenres: g.genres,
+                            rawgPlatforms: g.platforms,
+                            rawgReleaseDate: g.releaseDate,
+                            rawgMetacriticScore: g.metacriticScore,
+                            matchConfidence: 100
+                        )
+                    }
+                    currentRankIndex = pending.currentIndex
+                    Task {
+                        await refreshExistingGames()
+                        phase = .ranking
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -500,7 +527,9 @@ struct SteamImportView: View {
                         currentRankIndex += 1
                         debugLog("🎮 Ranked game \(currentRankIndex) of \(gamesToRank.count): \(game.displayTitle)")
                     }
+                    await PendingImportManager.shared.updateIndex(source: "steam_import", currentIndex: currentRankIndex)
                     if currentRankIndex >= gamesToRank.count {
+                        await PendingImportManager.shared.delete(source: "steam_import")
                         if let userId = supabase.currentUser?.id {
                             _ = try? await supabase.client
                                 .rpc("renormalize_ranks", params: [
@@ -884,6 +913,26 @@ struct SteamImportView: View {
         }
     }
     
+    private func pendingGamesFromConfirmed() -> [PendingImportGame] {
+        confirmedForRanking.compactMap { game in
+            guard let rawgId = game.rawgId else { return nil }
+            return PendingImportGame(
+                rawgId: rawgId,
+                title: game.displayTitle,
+                coverUrl: game.rawgCoverUrl,
+                genres: game.rawgGenres,
+                platforms: game.rawgPlatforms,
+                releaseDate: game.rawgReleaseDate,
+                metacriticScore: game.rawgMetacriticScore,
+                sourceMetadata: [
+                    "steam_app_id": String(game.steamAppId),
+                    "steam_playtime_minutes": String(game.playtimeMinutes),
+                    "steam_name": game.steamName
+                ]
+            )
+        }
+    }
+    
     private func startRankingFromReview() {
         gamesToRank = confirmedForRanking
         
@@ -893,6 +942,11 @@ struct SteamImportView: View {
         }
         
         Task {
+            await PendingImportManager.shared.save(
+                source: "steam_import",
+                games: pendingGamesFromConfirmed(),
+                currentIndex: 0
+            )
             await refreshExistingGames()
             currentRankIndex = 0
             phase = .ranking

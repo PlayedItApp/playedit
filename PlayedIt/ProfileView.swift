@@ -36,6 +36,7 @@ struct ProfileView: View {
     @State private var unrankedCount = 0
     @State private var showSteamImport = false
     @State private var hasSteamConnected = false
+    @State private var pendingImport: PendingImport?
     
     var body: some View {
         NavigationStack {
@@ -209,6 +210,43 @@ struct ProfileView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.top, 20)
                             } else {
+                                if let pending = pendingImport {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(.white)
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(pending.source == "steam_import" ? "Steam import in progress" : "Import in progress")
+                                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.white)
+                                            Text("\(pending.currentIndex) of \(pending.totalCount) ranked")
+                                                .font(.system(size: 12, design: .rounded))
+                                                .foregroundColor(.white.opacity(0.8))
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Button {
+                                            if pending.source == "steam_import" {
+                                                showSteamImport = true
+                                            }
+                                            // Future: else if pending.source == "csv_import" { showCSVImport = true }
+                                        } label: {
+                                            Text("Continue")
+                                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                                .foregroundColor(.accentOrange)
+                                                .padding(.horizontal, 14)
+                                                .padding(.vertical, 6)
+                                                .background(Color.white)
+                                                .cornerRadius(8)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(Color.accentOrange)
+                                    .cornerRadius(12)
+                                    .padding(.horizontal, 20)
+                                }
                                 if hasUnrankedGames {
                                     HStack(spacing: 10) {
                                         Image(systemName: "arrow.counterclockwise")
@@ -239,7 +277,11 @@ struct ProfileView: View {
                                         }
                                     }
                                     .padding(12)
-                                    .background(Color.accentOrange.opacity(0.08))
+                                    .background(Color.accentOrange.opacity(0.15))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.accentOrange.opacity(0.4), lineWidth: 1)
+                                    )
                                     .cornerRadius(12)
                                     .padding(.horizontal, 20)
                                 }
@@ -277,9 +319,10 @@ struct ProfileView: View {
                 Task {
                     await fetchRankedGames()
                     hasSteamConnected = await SteamService.shared.getSteamId() != nil
+                    pendingImport = await PendingImportManager.shared.fetchAny()
                 }
             }) {
-                SteamImportView()
+                SteamImportView(resumingImport: pendingImport)
             }
             .alert("Start fresh?", isPresented: $showResetRankings) {
                 Button("Yeah, let's start over", role: .destructive) {
@@ -515,10 +558,16 @@ struct ProfileView: View {
             }
         }
         .task {
-            await fetchProfile()
-            await fetchRankedGames()
-            hasAppleLinked = await supabase.hasAppleIdentity()
-            hasSteamConnected = await SteamService.shared.getSteamId() != nil
+            async let profileTask: () = fetchProfile()
+            async let rankedTask: () = fetchRankedGames()
+            async let appleTask = supabase.hasAppleIdentity()
+            async let steamTask = SteamService.shared.getSteamId()
+            async let pendingTask = PendingImportManager.shared.fetchAny()
+            
+            _ = await (profileTask, rankedTask)
+            hasAppleLinked = await appleTask
+            hasSteamConnected = await steamTask != nil
+            pendingImport = await pendingTask
         }
         .onReceive(NotificationCenter.default.publisher(for: .profileNudgeTapped)) { _ in
                 isEditing = true
@@ -665,16 +714,25 @@ struct ProfileView: View {
         // Check if user has unranked games (mid-reset)
         if let userId = supabase.currentUser?.id {
             do {
-                let totalCount: Int = try await supabase.client
+                let totalRows: Int = try await supabase.client
+                    .from("user_games")
+                    .select("*", head: true, count: .exact)
+                    .eq("user_id", value: userId.uuidString)
+                    .not("rank_position", operator: .is, value: "null")
+                    .execute()
+                    .count ?? 0
+                
+                // totalRows = games WITH a rank. If that's less than total user_games, some are unranked (mid-reset)
+                let allRows: Int = try await supabase.client
                     .from("user_games")
                     .select("*", head: true, count: .exact)
                     .eq("user_id", value: userId.uuidString)
                     .execute()
                     .count ?? 0
                 
-                unrankedCount = totalCount - rankedGames.count
+                unrankedCount = allRows - totalRows
                 hasUnrankedGames = unrankedCount > 0
-                debugLog("🔍 Ranked: \(rankedGames.count), Total: \(totalCount), hasUnranked: \(hasUnrankedGames)")
+                debugLog("🔍 Ranked: \(totalRows), Unranked: \(unrankedCount), hasUnranked: \(hasUnrankedGames)")
             } catch {
                 debugLog("❌ Error checking unranked games: \(error)")
             }
