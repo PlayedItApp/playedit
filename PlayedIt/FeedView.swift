@@ -1144,12 +1144,7 @@ struct FeedItemRow: View {
                 HStack(spacing: 12) {
                 // Cover art
                 CachedAsyncImage(url: item.gameCoverURL) {
-                    Rectangle()
-                        .fill(Color.secondaryBackground)
-                        .overlay(
-                            Image(systemName: "gamecontroller")
-                                .foregroundStyle(Color.adaptiveSilver)
-                        )
+                    GameArtworkPlaceholder(genre: nil, size: .medium)
                 }
                 .frame(width: 50, height: 67)
                 .cornerRadius(6)
@@ -1923,18 +1918,12 @@ struct GroupedFeedRow: View {
                 ZStack {
                     GeometryReader { geo in
                         CachedAsyncImage(url: item.gameCoverURL) {
-                            Rectangle()
-                                .fill(Color.secondaryBackground)
-                                .overlay(
-                                    Image(systemName: "gamecontroller")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                )
+                                GameArtworkPlaceholder(genre: nil, size: .small)
+                            }
                         }
-                    }
-                    .frame(height: 60)
-                    .cornerRadius(6)
-                    .clipped()
+                        .frame(height: 60)
+                        .cornerRadius(6)
+                        .clipped()
                     
                     // "+X more" badge on last item
                     if index == displayItems.count - 1 && remaining > 0 {
@@ -1971,13 +1960,7 @@ struct GroupedFeedRow: View {
                             // Game info row - tappable for detail
                             HStack(spacing: 10) {
                                 CachedAsyncImage(url: item.gameCoverURL) {
-                                    Rectangle()
-                                        .fill(Color.secondaryBackground)
-                                        .overlay(
-                                            Image(systemName: "gamecontroller")
-                                                .font(.system(size: 8))
-                                                .foregroundStyle(Color.adaptiveSilver)
-                                        )
+                                    GameArtworkPlaceholder(genre: nil, size: .small)
                                 }
                                 .frame(width: 36, height: 48)
                                 .clipped()
@@ -2218,12 +2201,7 @@ struct WantToPlayFeedRow: View {
                     // Single game — mirrors FeedItemRow exactly
                     HStack(spacing: 12) {
                         CachedAsyncImage(url: game.gameCoverURL) {
-                            Rectangle()
-                                .fill(Color.secondaryBackground)
-                                .overlay(
-                                    Image(systemName: "gamecontroller")
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                )
+                            GameArtworkPlaceholder(genre: nil, size: .medium)
                         }
                         .frame(width: 50, height: 67)
                         .cornerRadius(6)
@@ -2394,16 +2372,10 @@ struct WantToPlayFeedRow: View {
                 ZStack {
                     GeometryReader { geo in
                         CachedAsyncImage(url: item.gameCoverURL) {
-                            Rectangle()
-                                .fill(Color.secondaryBackground)
-                                .overlay(
-                                    Image(systemName: "gamecontroller")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                )
+                                GameArtworkPlaceholder(genre: nil, size: .small)
+                            }
                         }
-                    }
-                    .frame(height: 60)
+                        .frame(height: 60)
                     .cornerRadius(6)
                     .clipped()
                     
@@ -2488,13 +2460,7 @@ struct WantToPlayExpandedRow: View {
             // Game info row
             HStack(spacing: 10) {
                 CachedAsyncImage(url: item.gameCoverURL) {
-                    Rectangle()
-                        .fill(Color.secondaryBackground)
-                        .overlay(
-                            Image(systemName: "gamecontroller")
-                                .font(.system(size: 8))
-                                .foregroundStyle(Color.adaptiveSilver)
-                        )
+                    GameArtworkPlaceholder(genre: nil, size: .small)
                 }
                 .frame(width: 36, height: 48)
                 .clipped()

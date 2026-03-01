@@ -1576,13 +1576,7 @@ struct FriendWantToPlayRow: View {
             }
             
             CachedAsyncImage(url: game.gameCoverUrl) {
-                Rectangle()
-                    .fill(Color.secondaryBackground)
-                    .overlay(
-                        Image(systemName: "gamecontroller")
-                            .foregroundStyle(Color.adaptiveSilver)
-                            .font(.system(size: 12))
-                    )
+                GameArtworkPlaceholder(genre: nil, size: .medium)
             }
             .frame(width: 50, height: 67)
             .cornerRadius(6)
@@ -1626,13 +1620,7 @@ struct FriendWantToPlayDetailSheet: View {
             ScrollView {
                 VStack(spacing: 20) {
                     CachedAsyncImage(url: game.gameCoverUrl) {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .font(.system(size: 40))
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
+                        GameArtworkPlaceholder(genre: nil, size: .large)
                     }
                     .frame(width: 150, height: 200)
                     .cornerRadius(12)

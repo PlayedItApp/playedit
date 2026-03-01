@@ -427,12 +427,7 @@ struct WantToPlayRankedRow: View {
         HStack(spacing: 12) {
             // Cover art
             CachedAsyncImage(url: game.gameCoverUrl) {
-                Rectangle()
-                    .fill(Color.secondaryBackground)
-                    .overlay(
-                        Image(systemName: "gamecontroller")
-                            .foregroundStyle(Color.adaptiveSilver)
-                    )
+                GameArtworkPlaceholder(genre: nil, size: .medium)
             }
             .frame(width: 50, height: 67)
             .cornerRadius(6)
@@ -522,12 +517,7 @@ struct WantToPlayUnrankedRow: View {
         HStack(spacing: 12) {
             // Cover art
             CachedAsyncImage(url: game.gameCoverUrl) {
-                Rectangle()
-                    .fill(Color.secondaryBackground)
-                    .overlay(
-                        Image(systemName: "gamecontroller")
-                            .foregroundStyle(Color.adaptiveSilver)
-                    )
+                GameArtworkPlaceholder(genre: nil, size: .medium)
             }
             .frame(width: 50, height: 67)
             .cornerRadius(6)
@@ -831,12 +821,7 @@ struct PlaceAtPositionSheet: View {
                 // Header
                 HStack(spacing: 12) {
                     CachedAsyncImage(url: game.gameCoverUrl) {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
+                        GameArtworkPlaceholder(genre: nil, size: .small)
                     }
                     .frame(width: 40, height: 53)
                     .cornerRadius(4)
@@ -862,13 +847,7 @@ struct PlaceAtPositionSheet: View {
                     ForEach(orderedGames) { item in
                         HStack(spacing: 12) {
                             CachedAsyncImage(url: item.gameCoverUrl) {
-                                Rectangle()
-                                    .fill(Color.secondaryBackground)
-                                    .overlay(
-                                        Image(systemName: "gamecontroller")
-                                            .foregroundStyle(Color.adaptiveSilver)
-                                            .font(.system(size: 12))
-                                    )
+                                GameArtworkPlaceholder(genre: nil, size: .small)
                             }
                             .frame(width: 40, height: 53)
                             .cornerRadius(4)
@@ -939,12 +918,7 @@ struct ReorderPositionSheet: View {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     CachedAsyncImage(url: game.gameCoverUrl) {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
+                        GameArtworkPlaceholder(genre: nil, size: .small)
                     }
                     .frame(width: 40, height: 53)
                     .cornerRadius(4)
@@ -969,13 +943,7 @@ struct ReorderPositionSheet: View {
                     ForEach(orderedGames) { item in
                         HStack(spacing: 12) {
                             CachedAsyncImage(url: item.gameCoverUrl) {
-                                Rectangle()
-                                    .fill(Color.secondaryBackground)
-                                    .overlay(
-                                        Image(systemName: "gamecontroller")
-                                            .foregroundStyle(Color.adaptiveSilver)
-                                            .font(.system(size: 12))
-                                    )
+                                GameArtworkPlaceholder(genre: nil, size: .small)
                             }
                             .frame(width: 40, height: 53)
                             .cornerRadius(4)

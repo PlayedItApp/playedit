@@ -267,12 +267,7 @@ struct RecommendationCard: View {
             HStack(spacing: 12) {
                 // Cover art
                 CachedAsyncImage(url: recommendation.gameCoverUrl) {
-                    Rectangle()
-                        .fill(Color.secondaryBackground)
-                        .overlay(
-                            Image(systemName: "gamecontroller")
-                                .foregroundStyle(Color.adaptiveSilver)
-                        )
+                    GameArtworkPlaceholder(genre: nil, size: .medium)
                 }
                 .frame(width: 60, height: 80)
                 .cornerRadius(8)

@@ -305,13 +305,7 @@ struct GameComparisonCard: View {
                         .frame(width: 144, height: 191)
                     
                     CachedAsyncImage(url: coverURL) {
-                        Rectangle()
-                            .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
+                        GameArtworkPlaceholder(genre: nil, size: .large)
                     }
                     .frame(width: 140, height: 187)
                     .clipped()

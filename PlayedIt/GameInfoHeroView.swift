@@ -15,13 +15,7 @@ struct GameInfoHeroView: View {
         VStack(spacing: 16) {
             // Cover art
             CachedAsyncImage(url: coverURL) {
-                Rectangle()
-                    .fill(Color.secondaryBackground)
-                    .overlay(
-                        Image(systemName: "gamecontroller")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color.adaptiveSilver)
-                    )
+                GameArtworkPlaceholder(genre: nil, size: .large)
             }
             .frame(width: 160, height: 213)
             .cornerRadius(12)

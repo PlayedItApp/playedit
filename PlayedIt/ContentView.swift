@@ -356,12 +356,7 @@ struct RankedGameRow: View {
                     .frame(width: 32)
                 
                 CachedAsyncImage(url: game.gameCoverURL) {
-                    Rectangle()
-                        .fill(Color.secondaryBackground)
-                        .overlay(
-                            Image(systemName: "gamecontroller")
-                                .foregroundStyle(Color.adaptiveSilver)
-                        )
+                    GameArtworkPlaceholder(genre: nil, size: .medium)
                 }
                 .frame(width: 50, height: 67)
                 .cornerRadius(6)

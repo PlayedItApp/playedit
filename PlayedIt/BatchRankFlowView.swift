@@ -43,13 +43,7 @@ struct BatchRankFlowView: View {
                         
                         // Cover art
                         CachedAsyncImage(url: game.gameCoverURL) {
-                            Rectangle()
-                                .fill(Color.secondaryBackground)
-                                .overlay(
-                                    Image(systemName: "gamecontroller")
-                                        .font(.system(size: 40))
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                )
+                            GameArtworkPlaceholder(genre: nil, size: .large)
                         }
                         .frame(width: 150, height: 200)
                         .cornerRadius(12)

@@ -497,13 +497,7 @@ struct OnboardingQuizView: View {
             VStack(spacing: 6) {
                 ZStack(alignment: .topTrailing) {
                     CachedAsyncImage(url: game.coverUrl) {
-                                Rectangle()
-                                    .fill(Color.secondaryBackground)
-                            .overlay(
-                                Image(systemName: "gamecontroller.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundStyle(Color.adaptiveSilver)
-                            )
+                        GameArtworkPlaceholder(genre: nil, size: .medium)
                     }
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 120, maxHeight: 120)
                     .contentShape(Rectangle())
@@ -711,13 +705,7 @@ struct OnboardingGameSearchSheet: View {
                                 } label: {
                                     HStack(spacing: 12) {
                                         CachedAsyncImage(url: game.coverURL) {
-                                            Rectangle()
-                                                .fill(Color.secondaryBackground)
-                                                .overlay(
-                                                    Image(systemName: "gamecontroller.fill")
-                                                        .font(.system(size: 14))
-                                                        .foregroundStyle(Color.adaptiveSilver)
-                                                )
+                                            GameArtworkPlaceholder(genre: nil, size: .small)
                                         }
                                         .frame(width: 50, height: 65)
                                         .clipped()
