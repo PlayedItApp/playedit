@@ -5,6 +5,7 @@ struct ComparisonView: View {
     let existingGames: [UserGame]
     var skipCelebration: Bool = false
     var hideCancel: Bool = false
+    var suppressDismiss: Bool = false
     var predictedPosition: Int? = nil
     var predictedRange: (lower: Int, upper: Int)? = nil
     let onComplete: (Int) -> Void
@@ -105,7 +106,9 @@ struct ComparisonView: View {
                     if skipCelebration {
                         Color.clear.onAppear {
                             onComplete(position)
-                            dismiss()
+                            if !suppressDismiss {
+                                dismiss()
+                            }
                         }
                     } else {
                         Spacer()
@@ -151,6 +154,7 @@ struct ComparisonView: View {
             .onAppear {
                 setupComparison()
             }
+            .presentationBackground(Color.black)
         }
     }
     
@@ -334,7 +338,7 @@ struct GameComparisonCard: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isHighlighted ? Color.primaryBlue.opacity(0.1) : Color.cardBackground)
+                    .fill(isHighlighted ? Color.primaryBlue.opacity(0.1) : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)

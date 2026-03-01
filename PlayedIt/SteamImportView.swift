@@ -9,6 +9,7 @@ enum SteamImportPhase: Equatable {
     case fetchingLibrary
     case selectingGames
     case matchingGames
+    case reviewingMatches
     case ranking
     case complete
     case error(String)
@@ -33,8 +34,11 @@ struct SteamImportView: View {
     // Ranking state
     @State private var gamesToRank: [MatchedSteamGame] = []
     @State private var currentRankIndex = 0
-    @State private var showComparison = false
     @State private var currentGameId: Int?
+    @State private var currentRankingItem: RankingItem?
+    @State private var confirmedForRanking: [MatchedSteamGame] = []
+    @State private var showMatchSwapSearch = false
+    @State private var swappingGameIndex: Int?
     
     // UI state
     @State private var showSelectAll = true
@@ -54,6 +58,8 @@ struct SteamImportView: View {
                     gameSelectionView
                 case .matchingGames:
                     matchingView
+                case .reviewingMatches:
+                    matchReviewView
                 case .ranking:
                     rankingView
                 case .complete:
@@ -222,7 +228,6 @@ struct SteamImportView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
             }
-            .background(Color.cardBackground) 
         }
     }
     
@@ -245,76 +250,287 @@ struct SteamImportView: View {
         }
     }
     
-    // MARK: - Ranking View
-    private var rankingView: some View {
-        VStack {
-            Spacer()
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
-            Spacer()
-        }
-        .sheet(isPresented: $showComparison, onDismiss: {
-            // If comparison was cancelled (not completed), dismiss back to profile
-            if currentRankIndex < gamesToRank.count && phase == .ranking {
-                dismiss()
+    // MARK: - Match Review View
+    private var matchReviewView: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Review Matches")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.adaptiveSlate)
+                    Text("Make sure we found the right games")
+                        .font(.system(size: 14, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                }
+                Spacer()
             }
-        }) {
-            if let index = gamesToRank.indices.contains(currentRankIndex) ? currentRankIndex : nil {
-                let game = gamesToRank[index]
-                ComparisonView(
-                    newGame: game.toGame(),
-                    existingGames: existingUserGames,
-                    skipCelebration: true,
-                    hideCancel: true,
-                    onComplete: { position in
-                        Task {
-                            await saveImportedGame(game: game, position: position)
-                            await refreshExistingGames()
-                            currentRankIndex += 1
-                            if currentRankIndex >= gamesToRank.count {
-                                if let userId = supabase.currentUser?.id {
-                                    _ = try? await supabase.client
-                                        .rpc("renormalize_ranks", params: [
-                                            "p_user_id": AnyJSON.string(userId.uuidString)
-                                        ])
-                                        .execute()
-                                }
-                                showComparison = false
-                                dismiss()
-                            } else {
-                                try? await Task.sleep(nanoseconds: 300_000_000)
-                                showComparison = true
-                            }
-                        }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            
+            Divider()
+            
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(confirmedForRanking.enumerated()), id: \.element.id) { index, game in
+                        matchReviewRow(game: game, index: index)
                     }
-                )
-                .interactiveDismissDisabled()
-                .safeAreaInset(edge: .bottom) {
-                    VStack(spacing: 12) {
-                        Button {
-                            showComparison = false
-                            dismiss()
-                        } label: {
-                            Text("Save & Finish Later (\(currentRankIndex)/\(gamesToRank.count) ranked)")
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                .foregroundColor(.primaryBlue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.primaryBlue, lineWidth: 1.5)
-                                )
+                    
+                    // Unmatched games
+                    let unmatchedGames = matchedGames.filter {
+                        selectedForRanking.contains($0.steamAppId) && !$0.isMatched
+                    }
+                    if !unmatchedGames.isEmpty {
+                        HStack {
+                            Text("No Match Found")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                            Spacer()
                         }
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 8)
+                        .padding(.vertical, 12)
+                        .background(Color.secondaryBackground)
+                        
+                        ForEach(Array(unmatchedGames.enumerated()), id: \.element.id) { _, game in
+                            unmatchedReviewRow(game: game)
+                        }
                     }
-                    .background(Color.cardBackground) 
+                }
+            }
+            
+            // Bottom bar
+            VStack(spacing: 12) {
+                Divider()
+                Button {
+                    startRankingFromReview()
+                } label: {
+                    Text("Start Ranking (\(confirmedForRanking.count) games)")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(confirmedForRanking.isEmpty)
+                .opacity(confirmedForRanking.isEmpty ? 0.4 : 1.0)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+            }
+        }
+        .sheet(isPresented: $showMatchSwapSearch) {
+            matchSwapSearchSheet
+        }
+    }
+    
+    private func matchReviewRow(game: MatchedSteamGame, index: Int) -> some View {
+        HStack(spacing: 12) {
+            // RAWG cover art
+            if let coverUrl = game.rawgCoverUrl, let url = URL(string: coverUrl) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Rectangle().fill(Color.secondaryBackground)
+                }
+                .frame(width: 48, height: 64)
+                .cornerRadius(6)
+                .clipped()
+            } else {
+                Rectangle()
+                    .fill(Color.secondaryBackground)
+                    .frame(width: 48, height: 64)
+                    .cornerRadius(6)
+                    .overlay(Image(systemName: "gamecontroller").foregroundStyle(Color.adaptiveSilver).font(.system(size: 14)))
+            }
+            
+            // Game info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(game.displayTitle)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                    .lineLimit(1)
+                
+                if game.rawgTitle != nil && game.steamName.lowercased() != game.rawgTitle!.lowercased() {
+                    Text("Steam: \(game.steamName)")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                        .lineLimit(1)
+                }
+                
+                Text(game.playtimeFormatted)
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+            }
+            
+            Spacer()
+            
+            // Swap button
+            Button {
+                swappingGameIndex = index
+                showMatchSwapSearch = true
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 14))
+                    .foregroundColor(.primaryBlue)
+            }
+            .buttonStyle(.plain)
+            
+            // Remove button
+            Button {
+                confirmedForRanking.remove(at: index)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.silver)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+    }
+    
+    private func unmatchedReviewRow(game: MatchedSteamGame) -> some View {
+        HStack(spacing: 12) {
+            // Warning icon placeholder
+            Rectangle()
+                .fill(Color.secondaryBackground)
+                .frame(width: 48, height: 64)
+                .cornerRadius(6)
+                .overlay(
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundColor(.accentOrange)
+                        .font(.system(size: 16))
+                )
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(game.steamName)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                    .lineLimit(1)
+                Text("No match found")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Color.accentOrange)
+            }
+            
+            Spacer()
+            
+            // Search button
+            Button {
+                // Add to confirmed list temporarily so swap can target it
+                let placeholder = game
+                confirmedForRanking.append(placeholder)
+                swappingGameIndex = confirmedForRanking.count - 1
+                showMatchSwapSearch = true
+            } label: {
+                Text("Search")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primaryBlue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+    }
+    
+    private var matchSwapSearchSheet: some View {
+        NavigationStack {
+            MatchSwapSearchView { selectedGame in
+                if let index = swappingGameIndex, index < confirmedForRanking.count {
+                    let original = confirmedForRanking[index]
+                    let swapped = MatchedSteamGame(
+                        steamAppId: original.steamAppId,
+                        steamName: original.steamName,
+                        playtimeMinutes: original.playtimeMinutes,
+                        rawgId: selectedGame.rawgId,
+                        rawgTitle: selectedGame.title,
+                        rawgCoverUrl: selectedGame.coverURL,
+                        rawgGenres: selectedGame.genres,
+                        rawgPlatforms: selectedGame.platforms,
+                        rawgReleaseDate: selectedGame.releaseDate,
+                        rawgMetacriticScore: selectedGame.metacriticScore,
+                        matchConfidence: 100
+                    )
+                    confirmedForRanking[index] = swapped
+                }
+                showMatchSwapSearch = false
+                swappingGameIndex = nil
+            }
+            .navigationTitle("Find Game")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        // If we added an unmatched placeholder, remove it
+                        if let index = swappingGameIndex, index < confirmedForRanking.count,
+                           confirmedForRanking[index].rawgId == nil {
+                            confirmedForRanking.remove(at: index)
+                        }
+                        showMatchSwapSearch = false
+                        swappingGameIndex = nil
+                    }
+                    .foregroundColor(.primaryBlue)
                 }
             }
         }
-        .onAppear {
-            if !gamesToRank.isEmpty {
-                showComparison = true
+    }
+    
+    // MARK: - Ranking View
+    private var rankingView: some View {
+        VStack {
+            if currentRankIndex < gamesToRank.count {
+                rankingComparisonView
+                    .id(currentRankIndex)
+            } else {
+                ProgressView()
+            }
+        }
+    }
+    
+    private var rankingComparisonView: some View {
+        let game = gamesToRank[currentRankIndex]
+        return ComparisonView(
+            newGame: game.toGame(),
+            existingGames: existingUserGames,
+            skipCelebration: true,
+            hideCancel: true,
+            suppressDismiss: true,
+            onComplete: { position in
+                Task {
+                    await saveImportedGame(game: game, position: position)
+                    await refreshExistingGames()
+                    await MainActor.run {
+                        currentRankIndex += 1
+                        debugLog("🎮 Ranked game \(currentRankIndex) of \(gamesToRank.count): \(game.displayTitle)")
+                    }
+                    if currentRankIndex >= gamesToRank.count {
+                        if let userId = supabase.currentUser?.id {
+                            _ = try? await supabase.client
+                                .rpc("renormalize_ranks", params: [
+                                    "p_user_id": AnyJSON.string(userId.uuidString)
+                                ])
+                                .execute()
+                        }
+                        dismiss()
+                    }
+                }
+            }
+        )
+        .interactiveDismissDisabled()
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 12) {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Save & Finish Later (\(currentRankIndex)/\(gamesToRank.count) ranked)")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primaryBlue)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.primaryBlue, lineWidth: 1.5)
+                        )
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
             }
         }
     }
@@ -594,26 +810,22 @@ struct SteamImportView: View {
             await WantToPlayManager.shared.refreshMyIds()
             
             // Filter to only games selected for ranking that have RAWG matches
-            gamesToRank = matchedGames.filter {
+            confirmedForRanking = matchedGames.filter {
                 selectedForRanking.contains($0.steamAppId) && $0.isMatched
             }
             
-            if gamesToRank.isEmpty && bookmarkedGames.isEmpty {
+            if confirmedForRanking.isEmpty && bookmarkedGames.isEmpty {
                 phase = .error("Couldn't match any of your selected games. Try different ones?")
                 return
             }
             
-            if gamesToRank.isEmpty {
+            if confirmedForRanking.isEmpty {
                 // Only bookmarks, no ranking needed
                 phase = .complete
                 return
             }
             
-            // Load existing user games for comparison
-            await refreshExistingGames()
-            
-            currentRankIndex = 0
-            phase = .ranking
+            phase = .reviewingMatches
             
         } catch {
             phase = .error("Matching failed: \(error.localizedDescription)")
@@ -669,6 +881,21 @@ struct SteamImportView: View {
             }
         } catch {
             debugLog("❌ Error refreshing games: \(error)")
+        }
+    }
+    
+    private func startRankingFromReview() {
+        gamesToRank = confirmedForRanking
+        
+        if gamesToRank.isEmpty {
+            phase = .complete
+            return
+        }
+        
+        Task {
+            await refreshExistingGames()
+            currentRankIndex = 0
+            phase = .ranking
         }
     }
     
@@ -747,12 +974,9 @@ struct SteamGameRow: View {
         HStack(spacing: 12) {
             // Checkbox for ranking
             if !isAlreadyRanked {
-                Button(action: onToggleRank) {
-                    Image(systemName: isSelectedForRanking ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 22))
-                        .foregroundColor(isSelectedForRanking ? .primaryBlue : .silver)
-                }
-                .buttonStyle(.plain)
+                Image(systemName: isSelectedForRanking ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundColor(isSelectedForRanking ? .primaryBlue : .silver)
             }
             
             // Game icon
@@ -804,6 +1028,8 @@ struct SteamGameRow: View {
                     Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 16))
                         .foregroundColor(isBookmarked ? .accentOrange : .silver)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -811,6 +1037,12 @@ struct SteamGameRow: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .opacity(isAlreadyRanked ? 0.5 : 1.0)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isAlreadyRanked {
+                onToggleRank()
+            }
+        }
         .allowsHitTesting(!isAlreadyRanked)
     }
 }
@@ -826,6 +1058,143 @@ class SteamAuthPresentationContext: NSObject, ASWebAuthenticationPresentationCon
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         windowScene.windows.first { $0.isKeyWindow } ?? UIWindow(windowScene: windowScene)
     }
+}
+
+// MARK: - Match Swap Search View
+struct MatchSwapSearchView: View {
+    let onSelect: (Game) -> Void
+    
+    @State private var searchText = ""
+    @State private var searchResults: [Game] = []
+    @State private var isSearching = false
+    @FocusState private var isSearchFocused: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Search bar
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(Color.adaptiveGray)
+                TextField("Search for the correct game…", text: $searchText)
+                    .font(.system(size: 16, design: .rounded))
+                    .focused($isSearchFocused)
+                    .onSubmit { search() }
+                    .submitLabel(.search)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        searchResults = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.secondaryBackground)
+            .cornerRadius(10)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            
+            Divider()
+            
+            if isSearching {
+                Spacer()
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                Spacer()
+            } else if searchResults.isEmpty && !searchText.isEmpty {
+                Spacer()
+                Text("No results")
+                    .font(.system(size: 16, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(searchResults) { game in
+                            Button {
+                                onSelect(game)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    if let coverUrl = game.coverURL, let url = URL(string: coverUrl) {
+                                        AsyncImage(url: url) { image in
+                                            image.resizable().aspectRatio(contentMode: .fill)
+                                        } placeholder: {
+                                            Rectangle().fill(Color.secondaryBackground)
+                                        }
+                                        .frame(width: 48, height: 64)
+                                        .cornerRadius(6)
+                                        .clipped()
+                                    } else {
+                                        Rectangle()
+                                            .fill(Color.secondaryBackground)
+                                            .frame(width: 48, height: 64)
+                                            .cornerRadius(6)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(game.title)
+                                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                                            .foregroundStyle(Color.adaptiveSlate)
+                                            .lineLimit(1)
+                                        if let date = game.releaseDate?.prefix(4) {
+                                            Text(String(date))
+                                                .font(.system(size: 12, design: .rounded))
+                                                .foregroundStyle(Color.adaptiveGray)
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Divider().padding(.leading, 80)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            isSearchFocused = true
+        }
+        .onChange(of: searchText) {
+            search()
+        }
+    }
+    
+    private func search() {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else {
+            searchResults = []
+            return
+        }
+        
+        isSearching = true
+        Task {
+            do {
+                let results = try await RAWGService.shared.searchGames(query: query)
+                await MainActor.run {
+                    searchResults = results
+                    isSearching = false
+                }
+            } catch {
+                await MainActor.run {
+                    searchResults = []
+                    isSearching = false
+                }
+            }
+        }
+    }
+}
+
+struct RankingItem: Identifiable {
+    let id: Int
+    let game: MatchedSteamGame
 }
 
 // MARK: - Safe Array Access
