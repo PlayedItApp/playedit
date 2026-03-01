@@ -398,6 +398,7 @@ struct RecommendationLogGameSheet: View {
     
     var body: some View {
         GameLogView(game: game, source: "recommendation")
+            .presentationBackground(Color.appBackground)
     }
 }
 

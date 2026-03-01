@@ -119,6 +119,7 @@ struct GameSearchView: View {
                 }
             }) { game in
                 GameLogView(game: game, source: "search")
+                    .presentationBackground(Color.appBackground)
             }
             .task {
                 await fetchRankedGameIds()

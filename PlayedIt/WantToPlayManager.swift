@@ -87,7 +87,7 @@ class WantToPlayManager: ObservableObject {
         guard let userId = supabase.currentUser?.id else { return false }
         
         do {
-            let localGameId = gameId
+            let localGameId = await resolveLocalGameId(rawgOrLocalId: gameId, title: gameTitle, coverUrl: gameCoverUrl)
             
             struct Insert: Encodable {
                 let user_id: String
@@ -264,13 +264,24 @@ class WantToPlayManager: ObservableObject {
                 return existing.id
             }
             
-            // Doesn't exist at all — create it
+            // Doesn't exist at all — create it, enriched with RAWG data
+            var releaseDate: String? = nil
+            var genres: [String] = []
+            var metacriticScore: Int = 0
+            if let details = try? await RAWGService.shared.getGameDetails(id: rawgOrLocalId) {
+                releaseDate = details.releaseDate
+                genres = details.genres
+                metacriticScore = details.metacriticScore ?? 0
+            }
+            
             struct NewGame: Encodable {
                 let rawg_id: Int
                 let title: String
                 let cover_url: String?
                 let genres: [String]
                 let tags: [String]
+                let release_date: String?
+                let metacritic_score: Int
             }
             
             struct InsertedGame: Decodable { let id: Int }
@@ -281,8 +292,10 @@ class WantToPlayManager: ObservableObject {
                     rawg_id: rawgOrLocalId,
                     title: title,
                     cover_url: coverUrl,
-                    genres: [],
-                    tags: []
+                    genres: genres,
+                    tags: [],
+                    release_date: releaseDate,
+                    metacritic_score: metacriticScore
                 ))
                 .select("id")
                 .single()

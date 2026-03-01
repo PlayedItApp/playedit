@@ -96,6 +96,7 @@ struct GameDetailFromFriendView: View {
             }
         }) {
             GameLogView(game: userGame.toGame(), source: "friend_list")
+                .presentationBackground(Color.appBackground)
         }
         .sheet(isPresented: $showReportSheet) {
             ReportView(

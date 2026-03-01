@@ -19,6 +19,10 @@ struct GameLogView: View {
     @State private var showReRankAlert = false
     @State private var showAllPlatforms = false
     @State private var gameDescription: String? = nil
+    @State private var metacriticScore: Int? = nil
+    @State private var curatedGenres: [String]? = nil
+    @State private var curatedTags: [String]? = nil
+    @State private var isLoadingDescription = true
     @State private var computedPredictedRange: (lower: Int, upper: Int)? = nil
     
     static let allPlatforms = [
@@ -103,43 +107,17 @@ struct GameLogView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Game Header
-                    HStack(spacing: 16) {
-                        CachedAsyncImage(url: game.coverURL) {
-                            Rectangle()
-                                .fill(Color.secondaryBackground)
-                                .overlay(
-                                    Image(systemName: "gamecontroller")
-                                        .foregroundStyle(Color.adaptiveSilver)
-                                )
-                        }
-                        .frame(width: 80, height: 107)
-                        .cornerRadius(8)
-                        .clipped()
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(game.title)
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.adaptiveSlate)
-                                .lineLimit(2)
-                            
-                            if let year = game.releaseDate?.prefix(4) {
-                                Text(String(year))
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.adaptiveGray)
-                            }
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    
-                    // Game description
-                    if let desc = gameDescription, !desc.isEmpty {
-                        GameDescriptionView(text: desc)
-                            .padding(.horizontal, 20)
-                    }
+                    GameInfoHeroView(
+                            title: game.title,
+                            coverURL: game.coverURL,
+                            releaseDate: game.releaseDate,
+                            metacriticScore: metacriticScore,
+                            gameDescription: gameDescription,
+                            isLoadingDescription: isLoadingDescription,
+                            curatedGenres: curatedGenres,
+                            curatedTags: curatedTags
+                        )
+                        .padding(.top, 16)
                     
                     // Platform Selection
                     VStack(alignment: .leading, spacing: 12) {
@@ -325,20 +303,47 @@ struct GameLogView: View {
     
     // MARK: - Fetch Description
     private func fetchDescription() async {
-        // Check Supabase cache first
+        // Check in-memory cache first
+        if let cached = GameMetadataCache.shared.get(gameId: game.rawgId) {
+            gameDescription = cached.description
+            metacriticScore = cached.metacriticScore
+            curatedGenres = cached.curatedGenres
+            curatedTags = cached.curatedTags
+            if gameDescription != nil {
+                isLoadingDescription = false
+                return
+            }
+        }
+        
+        // Check Supabase
         do {
-            struct GameDesc: Decodable { let description: String?; let curated_description: String? }
+            struct GameDesc: Decodable {
+                let description: String?
+                let curated_description: String?
+                let metacritic_score: Int?
+                let release_date: String?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
+            }
             let results: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description, curated_description")
+                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags")
                 .eq("rawg_id", value: game.rawgId)
                 .limit(1)
                 .execute()
                 .value
             
-            if let desc = results.first?.curated_description ?? results.first?.description, !desc.isEmpty {
-                gameDescription = desc
-                return
+            if let info = results.first {
+                metacriticScore = info.metacritic_score
+                curatedGenres = info.curated_genres
+                curatedTags = info.curated_tags
+                
+                if let desc = info.curated_description ?? info.description, !desc.isEmpty {
+                    gameDescription = desc
+                    GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
+                    isLoadingDescription = false
+                    return
+                }
             }
         } catch {
             debugLog("⚠️ Could not check cached description: \(error)")
@@ -349,7 +354,16 @@ struct GameLogView: View {
             let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
             
-            // Upsert game row so description is cached even if user doesn't rank
+            if let mc = details.metacriticScore, metacriticScore == nil {
+                metacriticScore = mc
+            }
+            
+            // Cache it
+            if let desc = gameDescription, !desc.isEmpty {
+                GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: metacriticScore, releaseDate: game.releaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags)
+            }
+            
+            // Upsert to DB
             let desc = details.gameDescriptionHtml ?? details.gameDescription
             
             struct GameUpsert: Encodable {
@@ -382,6 +396,8 @@ struct GameLogView: View {
         } catch {
             debugLog("⚠️ Could not fetch game description: \(error)")
         }
+        
+        isLoadingDescription = false
     }
     
     // MARK: - Check If Already Ranked
