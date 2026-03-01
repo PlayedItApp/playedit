@@ -1709,6 +1709,7 @@ struct BookmarkButton: View {
     
     @ObservedObject private var manager = WantToPlayManager.shared
     @State private var isRanked = false
+    @State private var isBusy = false
     
     var body: some View {
         let isWantToPlay = manager.myWantToPlayIds.contains(gameId)
@@ -1729,6 +1730,9 @@ struct BookmarkButton: View {
     }
     
     private func handleTap(isWantToPlay: Bool) async {
+        guard !isBusy else { return }
+        isBusy = true
+        defer { isBusy = false }
         if isWantToPlay {
             let success = await manager.removeGame(gameId: gameId)
             if success { onToast?("Removed") }

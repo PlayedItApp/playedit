@@ -85,6 +85,10 @@ class WantToPlayManager: ObservableObject {
     // MARK: - Add game (unranked by default)
     func addGame(gameId: Int, gameTitle: String, gameCoverUrl: String?, source: String, sourceFriendId: String? = nil) async -> Bool {
         guard let userId = supabase.currentUser?.id else { return false }
+        guard !myWantToPlayIds.contains(gameId) else {
+            debugLog("ℹ️ \(gameTitle) already in Want to Play set, skipping")
+            return true
+        }
         
         do {
             let localGameId = await resolveLocalGameId(rawgOrLocalId: gameId, title: gameTitle, coverUrl: gameCoverUrl)
@@ -122,7 +126,11 @@ class WantToPlayManager: ObservableObject {
                 )
                 
                 return true
-            } catch {
+        } catch {
+                if let pgError = error as? PostgrestError, pgError.code == "23505" {
+                    debugLog("ℹ️ \(gameTitle) already in Want to Play, ignoring duplicate")
+                    return true
+                }
                 debugLog("❌ Error adding to want to play: \(error)")
                 return false
             }
