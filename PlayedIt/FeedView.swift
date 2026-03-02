@@ -1702,6 +1702,7 @@ struct BookmarkButton: View {
     let gameCoverUrl: String?
     let source: String
     var sourceFriendId: String? = nil
+    var forceBookmarked: Bool = false
     var onToast: ((String) -> Void)? = nil
     
     @ObservedObject private var manager = WantToPlayManager.shared
@@ -1709,7 +1710,7 @@ struct BookmarkButton: View {
     @State private var isBusy = false
     
     var body: some View {
-        let isWantToPlay = manager.myWantToPlayIds.contains(gameId) || manager.myWantToPlayRawgIds.contains(gameId)
+        let isWantToPlay = forceBookmarked || manager.myWantToPlayIds.contains(gameId) || manager.myWantToPlayRawgIds.contains(gameId)
         
         if !isRanked {
             Button {
@@ -1733,7 +1734,10 @@ struct BookmarkButton: View {
         defer { isBusy = false }
         if isWantToPlay {
             let success = await manager.removeGame(gameId: gameId)
-            if success { onToast?("Removed") }
+            if success {
+                await manager.refreshMyIds()
+                onToast?("Removed")
+            }
         } else {
             let success = await manager.addGame(
                 gameId: gameId,
@@ -1742,7 +1746,10 @@ struct BookmarkButton: View {
                 source: source,
                 sourceFriendId: sourceFriendId
             )
-            if success { onToast?("Saved!") }
+            if success {
+                await manager.refreshMyIds()
+                onToast?("Saved!")
+            }
         }
     }
     
@@ -2342,6 +2349,9 @@ struct WantToPlayFeedRow: View {
         .background(Color.cardBackground)
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .task {
+            await WantToPlayManager.shared.refreshMyIds()
+        }
         .sheet(item: $selectedWtpItem) { wtpItem in
             WantToPlayDetailSheet(
                 game: WantToPlayGame(

@@ -225,26 +225,28 @@ struct GameSearchRow: View {
                             .background(Color.teal)
                             .clipShape(Capsule())
                     } else {
-                        HStack(spacing: 6) {
+                        BookmarkButton(
+                            gameId: game.id,
+                            gameTitle: game.title,
+                            gameCoverUrl: game.coverURL,
+                            source: "search",
+                            onToast: { message in
+                                toastMessage = message
+                                withAnimation { showToast = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation { showToast = false }
+                                }
+                            }
+                        )
+                        .overlay(alignment: .trailing) {
                             if showToast {
                                 Text(toastMessage)
                                     .font(.system(size: 12, weight: .medium, design: .rounded))
                                     .foregroundStyle(Color.adaptiveGray)
+                                    .fixedSize()
+                                    .offset(x: -30)
                                     .transition(.opacity)
                             }
-                            BookmarkButton(
-                                gameId: game.id,
-                                gameTitle: game.title,
-                                gameCoverUrl: game.coverURL,
-                                source: "search",
-                                onToast: { message in
-                                    toastMessage = message
-                                    withAnimation { showToast = true }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                        withAnimation { showToast = false }
-                                    }
-                                }
-                            )
                         }
                     }
                 }

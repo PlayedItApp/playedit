@@ -262,20 +262,37 @@ class WantToPlayManager: ObservableObject {
     
     // MARK: - Remove game
     func removeGame(gameId: Int) async -> Bool {
-            guard let userId = supabase.currentUser?.id else { return false }
-            
-            do {
-                try await supabase.client
-                    .rpc("remove_want_to_play", params: [
-                        "p_user_id": AnyJSON.string(userId.uuidString),
-                        "p_game_id": AnyJSON.integer(gameId)
-                    ])
+        guard let userId = supabase.currentUser?.id else { return false }
+        
+        do {
+            // Resolve RAWG ID to local game ID if needed
+            var localGameId = gameId
+            if !myWantToPlayIds.contains(gameId) {
+                struct GameLookup: Decodable { let id: Int }
+                let rows: [GameLookup] = try await supabase.client
+                    .from("games")
+                    .select("id")
+                    .eq("rawg_id", value: gameId)
+                    .limit(1)
                     .execute()
+                    .value
+                if let found = rows.first {
+                    localGameId = found.id
+                }
+            }
+            
+            try await supabase.client
+                .rpc("remove_want_to_play", params: [
+                    "p_user_id": AnyJSON.string(userId.uuidString),
+                    "p_game_id": AnyJSON.integer(localGameId)
+                ])
+                .execute()
                 
-                myWantToPlayIds.remove(gameId)
+            myWantToPlayIds.remove(localGameId)
+            myWantToPlayRawgIds.remove(gameId)
                 
-                // Remove associated feed posts
-                await removeWantToPlayFeedPosts(userId: userId.uuidString, gameId: gameId)
+            // Remove associated feed posts (check both local and original ID)
+            await removeWantToPlayFeedPosts(userId: userId.uuidString, gameId: localGameId, rawgId: gameId != localGameId ? gameId : nil)
                 
                 return true
             } catch {
@@ -285,7 +302,7 @@ class WantToPlayManager: ObservableObject {
         }
     
     // MARK: - Remove Want to Play Feed Posts
-    private func removeWantToPlayFeedPosts(userId: String, gameId: Int) async {
+    private func removeWantToPlayFeedPosts(userId: String, gameId: Int, rawgId: Int? = nil) async {
         do {
             // Find child feed posts for this game
             struct FeedPostRow: Decodable {
@@ -303,7 +320,7 @@ class WantToPlayManager: ObservableObject {
             
             // Filter to posts matching this game_id in metadata
             // We need to check metadata->game_id
-            let matchingPosts: [FeedPostRow] = try await supabase.client
+            var matchingPosts: [FeedPostRow] = try await supabase.client
                 .from("feed_posts")
                 .select("id, batch_post_id")
                 .eq("user_id", value: userId)
@@ -311,6 +328,18 @@ class WantToPlayManager: ObservableObject {
                 .eq("metadata->>game_id", value: String(gameId))
                 .execute()
                 .value
+            
+            // Also check RAWG ID if different from local ID
+            if let rawgId = rawgId, matchingPosts.isEmpty {
+                matchingPosts = try await supabase.client
+                    .from("feed_posts")
+                    .select("id, batch_post_id")
+                    .eq("user_id", value: userId)
+                    .eq("post_type", value: "want_to_play")
+                    .eq("metadata->>game_id", value: String(rawgId))
+                    .execute()
+                    .value
+            }
             
             guard !matchingPosts.isEmpty else { return }
             
