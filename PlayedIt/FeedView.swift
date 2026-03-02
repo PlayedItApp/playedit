@@ -65,7 +65,9 @@ struct FeedView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showGameSearch) {
+            .sheet(isPresented: $showGameSearch, onDismiss: {
+                Task { await fetchFeed() }
+            }) {
                 GameSearchView()
             }
             .sheet(item: $selectedItem) { item in
