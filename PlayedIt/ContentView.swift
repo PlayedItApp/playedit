@@ -450,6 +450,7 @@ struct GameDetailSheet: View {
     @State private var isSharing = false
     @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
     @State private var isLoadingFriendRankings = true
+    @State private var computedPredictedRange: (lower: Int, upper: Int)? = nil
     
     
     private var quickPlatforms: [String] {
@@ -998,6 +999,8 @@ struct GameDetailSheet: View {
                 ComparisonView(
                     newGame: game.toGame(),
                     existingGames: existingUserGames,
+                    predictedPosition: computedPredictedRange.map { ($0.lower + $0.upper) / 2 },
+                    predictedRange: computedPredictedRange,
                     onComplete: { newPosition in
                         Task {
                             await saveReRankedGame(newPosition: newPosition)
@@ -1245,6 +1248,35 @@ struct GameDetailSheet: View {
                     gameReleaseDate: row.games.release_date,
                     gameRawgId: row.games.rawg_id
                 )
+            }
+            
+            // Compute prediction bias for re-rank
+            if existingUserGames.count >= 6 {
+                let _ = await PredictionEngine.shared.refreshContext()
+                if let context = PredictionEngine.shared.cachedContext {
+                    let genres = curatedGenres ?? []
+                    let tags = curatedTags ?? []
+                    let mc = metacriticScore
+                    let rawgId = game.gameRawgId ?? game.gameId
+                    debugLog("🎯 Re-rank prediction inputs: genres=\(genres.count) tags=\(tags.count) metacritic=\(String(describing: mc)) rawgId=\(rawgId)")
+                    
+                    let target = PredictionTarget(
+                        rawgId: rawgId,
+                        canonicalGameId: nil,
+                        genres: genres,
+                        tags: tags,
+                        metacriticScore: mc
+                    )
+                    if let prediction = PredictionEngine.shared.predict(game: target, context: context) {
+                        let range = prediction.estimatedRank(inListOf: existingUserGames.count)
+                        computedPredictedRange = (lower: range.lower, upper: range.upper)
+                        debugLog("🎯 Re-rank prediction: ~#\(range.lower)–\(range.upper) (percentile: \(Int(prediction.predictedPercentile))%, confidence: \(prediction.confidence))")
+                    } else {
+                        debugLog("🎯 Re-rank prediction returned nil")
+                    }
+                } else {
+                    debugLog("🎯 Re-rank: cachedContext is nil")
+                }
             }
             
             isLoadingReRank = false

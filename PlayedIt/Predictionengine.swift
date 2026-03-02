@@ -423,20 +423,20 @@ class PredictionEngine {
             genreTagWeight = hasGenreTag ? 0.20 : 0.0
             metacriticWeight = hasMetacritic ? 0.80 : 0.0
         } else if friendCount >= 2 {
-            // Strong friend signal
-            friendWeight = 0.60
-            genreTagWeight = hasGenreTag ? 0.30 : 0.0
+            // Strong friend signal, but genre/tag leads
+            friendWeight = 0.30
+            genreTagWeight = hasGenreTag ? 0.60 : 0.0
             metacriticWeight = hasMetacritic ? 0.10 : 0.0
         } else if friendCount == 1 {
             // Single friend
-            friendWeight = 0.55
-            genreTagWeight = hasGenreTag ? 0.30 : 0.0
+            friendWeight = 0.25
+            genreTagWeight = hasGenreTag ? 0.60 : 0.0
             metacriticWeight = hasMetacritic ? 0.15 : 0.0
         } else {
             // No friends ranked this game
             friendWeight = 0.0
-            genreTagWeight = hasGenreTag ? 0.70 : 0.0
-            metacriticWeight = hasMetacritic ? 0.30 : 0.0
+            genreTagWeight = hasGenreTag ? 0.85 : 0.0
+            metacriticWeight = hasMetacritic ? 0.15 : 0.0
         }
         
         // Normalize weights to sum to 1

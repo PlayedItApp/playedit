@@ -667,20 +667,32 @@ struct GameLogView: View {
 
             isLoading = false
             self.savedGameId = gameId
-            if existingUserGames.count >= 6,
-               let context = PredictionEngine.shared.cachedContext {
-                let target = PredictionTarget(
-                    rawgId: game.rawgId,
-                    canonicalGameId: nil,
-                    genres: curatedGenres ?? predictionGenres,
-                    tags: curatedTags ?? predictionTags,
-                    metacriticScore: metacriticScore ?? predictionMetacritic
-                )
-                if let prediction = PredictionEngine.shared.predict(game: target, context: context) {
-                    let range = prediction.estimatedRank(inListOf: existingUserGames.count)
-                    self.computedPredictedRange = (lower: range.lower, upper: range.upper)
-                    debugLog("🎯 Stored computedPredictedRange: ~#\(range.lower)–\(range.upper)")
+            if existingUserGames.count >= 6 {
+                if let context = PredictionEngine.shared.cachedContext {
+                    let genres = curatedGenres ?? predictionGenres
+                    let tags = curatedTags ?? predictionTags
+                    let mc = metacriticScore ?? predictionMetacritic
+                    debugLog("🎯 Prediction inputs: genres=\(genres.count) tags=\(tags.count) metacritic=\(String(describing: mc)) rawgId=\(game.rawgId)")
+                    
+                    let target = PredictionTarget(
+                        rawgId: game.rawgId,
+                        canonicalGameId: nil,
+                        genres: genres,
+                        tags: tags,
+                        metacriticScore: mc
+                    )
+                    if let prediction = PredictionEngine.shared.predict(game: target, context: context) {
+                        let range = prediction.estimatedRank(inListOf: existingUserGames.count)
+                        self.computedPredictedRange = (lower: range.lower, upper: range.upper)
+                        debugLog("🎯 Stored computedPredictedRange: ~#\(range.lower)–\(range.upper) (percentile: \(Int(prediction.predictedPercentile))%, confidence: \(prediction.confidence))")
+                    } else {
+                        debugLog("🎯 Prediction engine returned nil for \(game.title)")
+                    }
+                } else {
+                    debugLog("🎯 cachedContext is nil after refreshContext() call")
                 }
+            } else {
+                debugLog("🎯 Skipping prediction: only \(existingUserGames.count) existing games (need 6+)")
             }
 
             if existingUserGames.isEmpty && existingUserGame == nil {

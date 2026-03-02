@@ -617,9 +617,9 @@ struct RecommendationDetailSheet: View {
                         // Blending
                         sectionHeader("Blending Weights")
                         VStack(alignment: .leading, spacing: 8) {
-                            weightRow("2+ friends ranked it:", "60% friend, 30% genre/tag, 10% metacritic")
-                            weightRow("1 friend ranked it:", "55% friend, 30% genre/tag, 15% metacritic")
-                            weightRow("No friend signal:", "70% genre/tag, 30% metacritic")
+                            weightRow("2+ friends ranked it:", "30% friend, 60% genre/tag, 10% metacritic")
+                            weightRow("1 friend ranked it:", "25% friend, 60% genre/tag, 15% metacritic")
+                            weightRow("No friend signal:", "85% genre/tag, 15% metacritic")
                         }
                         
                         // Genre Drag
