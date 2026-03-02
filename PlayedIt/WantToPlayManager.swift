@@ -60,6 +60,7 @@ class WantToPlayManager: ObservableObject {
     static let shared = WantToPlayManager()
     
     @Published var myWantToPlayIds: Set<Int> = []
+    @Published var myWantToPlayRawgIds: Set<Int> = []
     
     private let supabase = SupabaseManager.shared
     
@@ -68,15 +69,22 @@ class WantToPlayManager: ObservableObject {
         guard let userId = supabase.currentUser?.id else { return }
         
         do {
-            struct Row: Decodable { let game_id: Int }
+            struct Row: Decodable {
+                let game_id: Int
+                let games: GameRawg?
+                struct GameRawg: Decodable {
+                    let rawg_id: Int?
+                }
+            }
             let rows: [Row] = try await supabase.client
                 .from("want_to_play")
-                .select("game_id")
+                .select("game_id, games(rawg_id)")
                 .eq("user_id", value: userId.uuidString)
                 .execute()
                 .value
             
             myWantToPlayIds = Set(rows.map { $0.game_id })
+            myWantToPlayRawgIds = Set(rows.compactMap { $0.games?.rawg_id })
         } catch {
             debugLog("❌ Error fetching want to play IDs: \(error)")
         }
@@ -115,6 +123,9 @@ class WantToPlayManager: ObservableObject {
                 .execute()
             
             myWantToPlayIds.insert(localGameId)
+                if localGameId != gameId {
+                    myWantToPlayRawgIds.insert(gameId)
+                }
                 debugLog("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
                 
                 // Post to activity feed (batched)

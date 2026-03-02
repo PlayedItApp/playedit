@@ -1707,7 +1707,7 @@ struct BookmarkButton: View {
     @State private var isBusy = false
     
     var body: some View {
-        let isWantToPlay = manager.myWantToPlayIds.contains(gameId)
+        let isWantToPlay = manager.myWantToPlayIds.contains(gameId) || manager.myWantToPlayRawgIds.contains(gameId)
         
         if !isRanked {
             Button {

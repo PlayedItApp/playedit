@@ -122,6 +122,7 @@ struct GameSearchView: View {
                     .presentationBackground(Color.appBackground)
             }
             .task {
+                await WantToPlayManager.shared.refreshMyIds()
                 await fetchRankedGameIds()
             }
         }
