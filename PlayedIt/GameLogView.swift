@@ -672,9 +672,9 @@ struct GameLogView: View {
                 let target = PredictionTarget(
                     rawgId: game.rawgId,
                     canonicalGameId: nil,
-                    genres: predictionGenres,
-                    tags: predictionTags,
-                    metacriticScore: predictionMetacritic
+                    genres: curatedGenres ?? predictionGenres,
+                    tags: curatedTags ?? predictionTags,
+                    metacriticScore: metacriticScore ?? predictionMetacritic
                 )
                 if let prediction = PredictionEngine.shared.predict(game: target, context: context) {
                     let range = prediction.estimatedRank(inListOf: existingUserGames.count)
@@ -782,9 +782,9 @@ struct GameLogView: View {
         let target = PredictionTarget(
             rawgId: game.rawgId,
             canonicalGameId: nil,
-            genres: game.genres,
-            tags: game.tags,
-            metacriticScore: game.metacriticScore
+            genres: curatedGenres ?? game.genres,
+            tags: curatedTags ?? game.tags,
+            metacriticScore: metacriticScore ?? game.metacriticScore
         )
         
         guard let recalcPrediction = PredictionEngine.shared.predict(game: target, context: context) else {
