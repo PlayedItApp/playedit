@@ -1719,6 +1719,7 @@ struct BookmarkButton: View {
             }
             .buttonStyle(.plain)
             .task {
+                await manager.refreshMyIds()
                 await checkIfRanked()
             }
         }
@@ -1753,8 +1754,9 @@ struct BookmarkButton: View {
                 .execute()
                 .value
             
-            let rankedIds = Set(response.compactMap { $0.games?.rawg_id })
-            isRanked = rankedIds.contains(gameId)
+            let rankedRawgIds = Set(response.compactMap { $0.games?.rawg_id })
+            let rankedLocalIds = Set(response.map { $0.game_id })
+            isRanked = rankedRawgIds.contains(gameId) || rankedLocalIds.contains(gameId)
         } catch {
             debugLog("❌ Error checking ranked status: \(error)")
         }
