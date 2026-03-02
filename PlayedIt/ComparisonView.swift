@@ -175,6 +175,7 @@ struct ComparisonView: View {
         highIndex = existingGames.count - 1
         comparisonCount = 0
         
+        debugLog("📊 RANKING START: '\(newGame.title)' into list of \(existingGames.count) games | predicted=#\(predictedPosition ?? -1)")
         nextComparison()
     }
     
@@ -185,17 +186,21 @@ struct ComparisonView: View {
         if lowIndex > highIndex || comparisonCount >= maxComparisons {
             finalPosition = lowIndex + 1
             currentComparison = nil
+            debugLog("📊 RESULT: '\(newGame.title)' → #\(lowIndex + 1) after \(comparisonCount) comparisons | range was [\(lowIndex)...\(highIndex)]")
             return
         }
         
+        let standardMid = (lowIndex + highIndex) / 2
         let midIndex: Int
         if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
             midIndex = max(lowIndex, min(predicted - 1, highIndex))
-            debugLog("🎯 Biased first comparison to index \(midIndex) (predicted #\(predicted)) instead of \((lowIndex + highIndex) / 2)")
+            debugLog("🎯 Biased first comparison to index \(midIndex) (predicted #\(predicted)) instead of standard \(standardMid)")
         } else {
-            midIndex = (lowIndex + highIndex) / 2
+            midIndex = standardMid
         }
         currentComparison = existingGames[midIndex]
+        
+        debugLog("📊 COMPARE #\(comparisonCount + 1): '\(newGame.title)' vs '\(existingGames[midIndex].gameTitle)' (rank #\(existingGames[midIndex].rankPosition)) | midIndex=\(midIndex) range=[\(lowIndex)...\(highIndex)]")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             showCards = true
@@ -218,28 +223,44 @@ struct ComparisonView: View {
     }
     
     private func userChoseNewGame() {
-        // Save current state for undo
         comparisonHistory.append(ComparisonState(
             lowIndex: lowIndex,
             highIndex: highIndex,
             comparisonCount: comparisonCount
         ))
         
-        let midIndex = (lowIndex + highIndex) / 2
+        // Use the same midIndex that was shown to the user
+        let midIndex: Int
+        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+        } else {
+            midIndex = (lowIndex + highIndex) / 2
+        }
+        
+        debugLog("📊 CHOSE: '\(newGame.title)' > '\(existingGames[midIndex].gameTitle)' → highIndex: \(highIndex) → \(midIndex - 1)")
+        
         highIndex = midIndex - 1
         comparisonCount += 1
         nextComparison()
     }
     
     private func userChoseExistingGame() {
-        // Save current state for undo
         comparisonHistory.append(ComparisonState(
             lowIndex: lowIndex,
             highIndex: highIndex,
             comparisonCount: comparisonCount
         ))
         
-        let midIndex = (lowIndex + highIndex) / 2
+        // Use the same midIndex that was shown to the user
+        let midIndex: Int
+        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+        } else {
+            midIndex = (lowIndex + highIndex) / 2
+        }
+        
+        debugLog("📊 CHOSE: '\(existingGames[midIndex].gameTitle)' > '\(newGame.title)' → lowIndex: \(lowIndex) → \(midIndex + 1)")
+        
         lowIndex = midIndex + 1
         comparisonCount += 1
         nextComparison()

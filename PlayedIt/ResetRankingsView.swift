@@ -32,6 +32,7 @@ struct ResetRankingsView: View {
     @State private var selectedSide: String? = nil
     @State private var comparisonHistory: [ComparisonState] = []
     @State private var gameHistory: [GameSnapshot] = []
+    @State private var previousRanks: [String: Int] = [:]  // game ID → old rank position
     
     private let maxComparisons = 10
     
@@ -323,6 +324,19 @@ struct ResetRankingsView: View {
         return shuffledGames[currentGameIndex]
     }
     
+    // MARK: - Prediction Bias
+    private func predictedIndex(for game: UserGame) -> Int? {
+        guard rankedSoFar.count >= 6 else { return nil }
+        guard let oldRank = previousRanks[game.id] else { return nil }
+        let totalPrevious = previousRanks.count
+        guard totalPrevious > 0 else { return nil }
+        
+        // Scale old rank to current list size
+        let percentile = Double(oldRank - 1) / Double(max(totalPrevious - 1, 1))
+        let predicted = Int(round(percentile * Double(rankedSoFar.count - 1)))
+        return max(0, min(rankedSoFar.count - 1, predicted))
+    }
+    
     // MARK: - Comparison Logic
     
     private func startComparisonForCurrentGame() {
@@ -355,6 +369,8 @@ struct ResetRankingsView: View {
         comparisonCount = 0
         isComparing = true
         
+        debugLog("📊 RESET RANK: '\(shuffledGames[currentGameIndex].gameTitle)' into \(rankedSoFar.count) ranked games")
+        
         nextComparison()
     }
     
@@ -364,14 +380,24 @@ struct ResetRankingsView: View {
         
         if lowIndex > highIndex || comparisonCount >= maxComparisons {
             let position = lowIndex + 1
+            debugLog("📊 RESET RESULT: '\(shuffledGames[currentGameIndex].gameTitle)' → #\(position) after \(comparisonCount) comparisons | range was [\(lowIndex)...\(highIndex)]")
             isComparing = false
             currentOpponent = nil
             Task { await placeGame(shuffledGames[currentGameIndex], at: position) }
             return
         }
         
-        let midIndex = (lowIndex + highIndex) / 2
+        let standardMid = (lowIndex + highIndex) / 2
+        let midIndex: Int
+        if comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
+            midIndex = max(lowIndex, min(biased, highIndex))
+            debugLog("🎯 RESET biased first comparison to index \(midIndex) (old rank scaled) instead of standard \(standardMid)")
+        } else {
+            midIndex = standardMid
+        }
         currentOpponent = rankedSoFar[midIndex]
+        
+        debugLog("📊 RESET COMPARE #\(comparisonCount + 1): '\(shuffledGames[currentGameIndex].gameTitle)' vs '\(rankedSoFar[midIndex].gameTitle)' (rank #\(rankedSoFar[midIndex].rankPosition)) | mid=\(midIndex) range=[\(lowIndex)...\(highIndex)]")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             showCards = true
@@ -412,10 +438,19 @@ struct ResetRankingsView: View {
                 comparisonCount: comparisonCount
             ))
             
-            let midIndex = (lowIndex + highIndex) / 2
+            // Use the same midIndex that was shown to the user
+            let midIndex: Int
+            if comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
+                midIndex = max(lowIndex, min(biased, highIndex))
+            } else {
+                midIndex = (lowIndex + highIndex) / 2
+            }
+            
             if side == "left" {
+                debugLog("📊 RESET CHOSE: current game > '\(rankedSoFar[midIndex].gameTitle)' → highIndex: \(highIndex) → \(midIndex - 1)")
                 highIndex = midIndex - 1
             } else {
+                debugLog("📊 RESET CHOSE: '\(rankedSoFar[midIndex].gameTitle)' > current game → lowIndex: \(lowIndex) → \(midIndex + 1)")
                 lowIndex = midIndex + 1
             }
             comparisonCount += 1
@@ -546,6 +581,15 @@ struct ResetRankingsView: View {
                 .execute()
             
             debugLog("✅ All rank positions wiped")
+            
+            // Capture previous rank positions for prediction bias
+            let totalGames = games.count
+            for game in games {
+                if game.rankPosition > 0 {
+                    previousRanks[game.id] = game.rankPosition
+                }
+            }
+            debugLog("📊 RESET: Captured \(previousRanks.count) previous ranks out of \(totalGames) games")
             
             shuffledGames = games.shuffled()
             rankedSoFar = []
