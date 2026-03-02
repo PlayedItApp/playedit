@@ -447,13 +447,21 @@ class RecommendationManager: ObservableObject {
                 guard !excludedIds.contains(gId) else { continue }
                 guard !candidates.contains(where: { $0.gameId == gId }) else { continue }
                 
+                // Check for curated data if game already existed in table
+                var useGenres = game.genres
+                var useTags = game.tags
+                if let curatedData = await fetchCuratedData(gameId: gId) {
+                    if let cg = curatedData.curatedGenres { useGenres = cg }
+                    if let ct = curatedData.curatedTags { useTags = ct }
+                }
+                
                 candidates.append((
                     gameId: gId,
                     rawgId: game.rawgId,
                     title: game.title,
                     coverUrl: game.coverURL,
-                    genres: game.genres,
-                    tags: game.tags,
+                    genres: useGenres,
+                    tags: useTags,
                     metacritic: game.metacriticScore,
                     source: "rawg_discovery",
                     sourceFriendId: nil,
@@ -472,7 +480,6 @@ class RecommendationManager: ObservableObject {
     }
     
     // MARK: - Ensure Game Exists in Table
-    
     private func ensureGameInTable(game: Game) async -> Int? {
         do {
             struct ExistingGame: Decodable { let id: Int }
@@ -524,8 +531,26 @@ class RecommendationManager: ObservableObject {
         }
     }
     
-    // MARK: - Build Display List
+    // MARK: - Fetch Curated Data If Available
+    private func fetchCuratedData(gameId: Int) async -> (curatedGenres: [String]?, curatedTags: [String]?)? {
+        struct CuratedRow: Decodable {
+            let curated_genres: [String]?
+            let curated_tags: [String]?
+        }
+        
+        guard let row = try? await supabase.client
+            .from("games")
+            .select("curated_genres, curated_tags")
+            .eq("id", value: gameId)
+            .single()
+            .execute()
+            .value as CuratedRow else { return nil }
+        
+        guard row.curated_genres != nil || row.curated_tags != nil else { return nil }
+        return (curatedGenres: row.curated_genres, curatedTags: row.curated_tags)
+    }
     
+    // MARK: - Build Display List
     func buildDisplayList() async {
         guard let context = await PredictionEngine.shared.getContext() else { return }
         let pending = await fetchPending()
