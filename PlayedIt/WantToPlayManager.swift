@@ -36,20 +36,19 @@ struct WantToPlayGame: Identifiable, Codable {
     /// Convert to Game for use in ComparisonView
     func toGame() -> Game {
         Game(
-            from: RAWGGame(
-                id: gameId,
-                name: gameTitle,
-                backgroundImage: gameCoverUrl,
-                released: nil,
-                metacritic: nil,
-                genres: nil,
-                platforms: nil,
-                added: nil,
-                rating: nil,
-                descriptionRaw: nil,
-                descriptionHtml: nil,
-                tags: nil
-            )
+            id: gameId,
+            rawgId: 0,
+            title: gameTitle,
+            coverURL: gameCoverUrl,
+            genres: [],
+            platforms: [],
+            releaseDate: nil,
+            metacriticScore: nil,
+            added: nil,
+            rating: nil,
+            gameDescription: nil,
+            gameDescriptionHtml: nil,
+            tags: []
         )
     }
 }

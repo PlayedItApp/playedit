@@ -334,14 +334,27 @@ curatedPlatforms: curatedPlatforms
                 let curated_tags: [String]?
                 let curated_platforms: [String]?
                 let curated_release_year: Int?
+                let rawg_id: Int?
             }
-            let results: [GameDesc] = try await SupabaseManager.shared.client
-                .from("games")
-                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year")
-                .eq("rawg_id", value: game.rawgId)
-                .limit(1)
-                .execute()
-                .value
+            var results: [GameDesc] = []
+            if game.rawgId > 0 {
+                results = try await SupabaseManager.shared.client
+                    .from("games")
+                    .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year, rawg_id")
+                    .eq("rawg_id", value: game.rawgId)
+                    .limit(1)
+                    .execute()
+                    .value
+            }
+            if results.isEmpty {
+                results = try await SupabaseManager.shared.client
+                    .from("games")
+                    .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year, rawg_id")
+                    .eq("id", value: game.id)
+                    .limit(1)
+                    .execute()
+                    .value
+            }
             
             if let info = results.first {
                 metacriticScore = info.metacritic_score
@@ -352,7 +365,8 @@ curatedPlatforms: curatedPlatforms
                 
                 if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                     gameDescription = desc
-                    GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
+                    let cacheKey = game.rawgId > 0 ? game.rawgId : game.id
+                    GameMetadataCache.shared.set(gameId: cacheKey, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
                     isLoadingDescription = false
                     return
                 }
@@ -361,7 +375,11 @@ curatedPlatforms: curatedPlatforms
             debugLog("⚠️ Could not check cached description: \(error)")
         }
         
-        // Fall back to RAWG
+        // Fall back to RAWG (only if we have a real RAWG ID)
+        guard game.rawgId > 0 else {
+            isLoadingDescription = false
+            return
+        }
         do {
             let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml

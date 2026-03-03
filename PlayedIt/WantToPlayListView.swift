@@ -25,6 +25,7 @@ struct WantToPlayListView: View {
     @State private var showRecommendations = false
     @State private var rankedGameCount: Int = 0
     @State private var selectedGame: WantToPlayGame? = nil
+    @State private var gameToLog: WantToPlayGame? = nil
     
     var body: some View {
         Group {
@@ -104,8 +105,14 @@ struct WantToPlayListView: View {
         } message: {
             Text("This will remove all priority ordering. Your games stay, just the order gets wiped.")
         }
-        .sheet(item: $selectedGame) { game in
-            WantToPlayDetailSheet(game: game, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0)
+        .sheet(item: $gameToLog, onDismiss: {
+            Task {
+                await loadGames()
+                NotificationCenter.default.post(name: NSNotification.Name("profileShouldRefresh"), object: nil)
+            }
+        }) { game in
+            GameLogView(game: game.toGame(), source: "want_to_play")
+                .presentationBackground(Color.appBackground)
         }
     }
     
@@ -327,6 +334,8 @@ struct WantToPlayListView: View {
                             let _ = await manager.placeGameAtPosition(gameId: game.id, position: nextPosition)
                             await loadGames()
                         }
+                    }, onRankGame: {
+                        gameToLog = game
                     }, onTap: {
                         selectedGame = game
                     })
@@ -558,6 +567,7 @@ struct WantToPlayUnrankedRow: View {
     let onRank: () -> Void
     let onPlaceAtPosition: () -> Void
     let onPlaceAtBottom: () -> Void
+    var onRankGame: () -> Void = {}
     
     var onTap: () -> Void = {}
         
@@ -598,32 +608,48 @@ struct WantToPlayUnrankedRow: View {
                         .lineLimit(1)
                 }
                 
-                Button(action: onRank) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Rank")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundColor(.primaryBlue)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.primaryBlue.opacity(0.1))
-                    .cornerRadius(8)
-                }
-                
                 if let pred = prediction, myGameCount >= 5, pred.predictedPercentile >= 65 || pred.predictedPercentile < 40 {
-                    Text("PlayedIt Prediction: \(pred.summaryText)")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .foregroundColor(predictionColor(pred))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4)
-                                .stroke(predictionColor(pred).opacity(0.4), lineWidth: 1)
-                        )
+                        Text("PlayedIt Prediction: \(pred.summaryText)")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .foregroundColor(predictionColor(pred))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(predictionColor(pred).opacity(0.4), lineWidth: 1)
+                            )
+                    }
+                    
+                    HStack(spacing: 6) {
+                        Button(action: onRank) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up.arrow.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Prioritize")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            }
+                            .foregroundColor(.primaryBlue)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.primaryBlue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        
+                        Button(action: onRankGame) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "gamecontroller.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Rank It")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            }
+                            .foregroundColor(.accentOrange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.accentOrange.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                    }
                 }
-            }
             
             Spacer()
             
@@ -1813,6 +1839,7 @@ struct FirstTwoComparisonView: View {
         
         private func fetchGameDetails() async {
         debugLog("🔍 WTP Detail: fetching gameId=\(game.gameId), title=\(game.gameTitle)")
+        debugLog("🔍 WTP Detail: cached? \(GameMetadataCache.shared.get(gameId: game.gameId)?.description?.prefix(50) ?? "nil")")
         
         // Instantly apply cached metadata if available
         if let cached = GameMetadataCache.shared.get(gameId: game.gameId) {
@@ -1862,6 +1889,8 @@ struct FirstTwoComparisonView: View {
                 gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                 return
             }
+            
+            debugLog("🔍 WTP Detail: DB returned rawg_id=\(info.rawg_id), desc prefix=\(String((info.curated_description ?? info.description ?? "nil").prefix(50)))")
                 
             metacriticScore = info.metacritic_score
             releaseDate = info.release_date
