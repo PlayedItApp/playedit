@@ -30,12 +30,12 @@ struct GameLogView: View {
     static let allPlatforms = [
         "Android", "Apple TV", "Apple Vision Pro",
         "Atari",
-        "Dreamcast",
+        "Sega Dreamcast",
         "Game Boy", "Game Boy Advance", "Game Boy Advance SP",
         "Game Boy Color", "Game Gear", "GameCube",
         "iOS",
         "Linux",
-        "Mac", "Meta Quest 3", "Meta Quest 3S",
+        "macOS", "Meta Quest 3", "Meta Quest 3S",
         "Neo Geo", "NES", "Nintendo 3DS", "Nintendo 64", "Nintendo DS",
         "Nintendo Switch", "Nintendo Switch 2",
         "Oculus Quest", "Oculus Quest 2", "Oculus Rift",
@@ -47,7 +47,7 @@ struct GameLogView: View {
         "SNES", "Steam Deck",
         "Wii", "Wii U",
         "Xbox", "Xbox 360", "Xbox One",
-        "Xbox Series S", "Xbox Series X"
+        "Xbox Series X/S"
     ]
     
     static let popularPlatforms = [

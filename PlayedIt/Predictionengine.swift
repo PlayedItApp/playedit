@@ -94,6 +94,7 @@ struct RankedGameData {
     let genres: [String]
     let tags: [String]
     let metacriticScore: Int?
+    let releaseYear: Int?
 }
 
 struct FriendData {
@@ -119,6 +120,7 @@ struct PredictionTarget {
     let genres: [String]
     let tags: [String]
     let metacriticScore: Int?
+    var releaseYear: Int? = nil
 }
 
 // MARK: - Prediction Engine
@@ -173,23 +175,20 @@ class PredictionEngine {
         let tagAffinity = computeTagAffinity(tags: game.tags, context: context)
         let genreTagScore = blendGenreTag(genre: genreAffinity, tag: tagAffinity)
         
-        // Tier 3: Metacritic correlation
-        let metacriticScore = computeMetacriticCorrelation(
-            metacritic: game.metacriticScore,
-            context: context
-        )
+        // Tier 3: Metacritic correlation (disabled — not used in blend)
+        let metacriticScore: Double? = nil
         
         // Track which tiers contributed
         if let fr = friendResult, !fr.signals.isEmpty { tiersUsed.append("friends") }
         if genreTagScore != nil { tiersUsed.append("genre") }
-        if metacriticScore != nil { tiersUsed.append("metacritic") }
         
         // Blend tiers
         let blended = blendTiers(
             friendResult: friendResult,
             genreTagScore: genreTagScore,
             metacriticScore: metacriticScore,
-            context: context
+            context: context,
+            targetReleaseYear: game.releaseYear
         )
         
         guard let finalPercentile = blended else { return nil }
@@ -275,27 +274,24 @@ class PredictionEngine {
             let matchingGames = context.myGames.filter { $0.genres.contains(genre) }
             guard !matchingGames.isEmpty else { continue }
             
-            let avgPercentile = matchingGames.reduce(0.0) { sum, game in
+            // Rank-weighted average: higher-ranked games contribute more
+            var weightedSum: Double = 0
+            var totalWeight: Double = 0
+            for game in matchingGames {
                 let percentile = (1.0 - (Double(game.rankPosition - 1) / Double(max(context.myGameCount - 1, 1)))) * 100.0
-                return sum + percentile
-            } / Double(matchingGames.count)
-            
-            // Weight by how many games in this genre — more games = more reliable signal
-            let countBoost: Double
-            if matchingGames.count >= 5 {
-                countBoost = 1.0  // Strong signal, no adjustment needed
-            } else if matchingGames.count >= 3 {
-                countBoost = 0.9  // Decent signal
-            } else {
-                countBoost = 0.75 // Weak signal — pull toward neutral
+                // Weight = percentile itself, so top-ranked games in genre dominate
+                let weight = max(10, percentile)
+                weightedSum += percentile * weight
+                totalWeight += weight
             }
+            let weightedAvg = weightedSum / totalWeight
             
-            // Blend toward the raw average but amplify if user clearly likes the genre
-            // For small libraries: if avg is above 50%, boost it slightly to create separation
-            var adjusted = avgPercentile
-            if context.myGameCount < 30 && avgPercentile > 50 {
-                let boost = (avgPercentile - 50) * 0.3 * countBoost  // Up to ~15% boost
-                adjusted = avgPercentile + boost
+            // Boost to create separation (no library size gate)
+            let countBoost: Double = matchingGames.count >= 5 ? 1.0 : matchingGames.count >= 3 ? 0.9 : 0.75
+            var adjusted = weightedAvg
+            if weightedAvg > 50 {
+                let boost = (weightedAvg - 50) * 0.5 * countBoost
+                adjusted = weightedAvg + boost
             }
             
             genrePercentiles.append(adjusted)
@@ -303,8 +299,7 @@ class PredictionEngine {
         
         guard !genrePercentiles.isEmpty else { return nil }
         
-        // Average across all matching genres
-        return max(20, genrePercentiles.reduce(0.0, +) / Double(genrePercentiles.count))
+        return genrePercentiles.reduce(0.0, +) / Double(genrePercentiles.count)
     }
     
     // MARK: - Tier 2: Tag Affinity
@@ -316,19 +311,24 @@ class PredictionEngine {
         
         for tag in tags {
             let matchingGames = context.myGames.filter { $0.tags.contains(tag) }
-            // Need at least 2 games with this tag for it to be meaningful
             guard matchingGames.count >= 2 else { continue }
             
-            let avgPercentile = matchingGames.reduce(0.0) { sum, game in
+            // Rank-weighted average
+            var weightedSum: Double = 0
+            var totalWeight: Double = 0
+            for game in matchingGames {
                 let percentile = (1.0 - (Double(game.rankPosition - 1) / Double(max(context.myGameCount - 1, 1)))) * 100.0
-                return sum + percentile
-            } / Double(matchingGames.count)
+                let weight = max(10, percentile)
+                weightedSum += percentile * weight
+                totalWeight += weight
+            }
+            let weightedAvg = weightedSum / totalWeight
             
-            var adjusted = avgPercentile
-            if context.myGameCount < 30 && avgPercentile > 50 {
-                let countBoost = matchingGames.count >= 3 ? 0.9 : 0.75
-                let boost = (avgPercentile - 50) * 0.3 * countBoost
-                adjusted = avgPercentile + boost
+            let countBoost: Double = matchingGames.count >= 3 ? 0.9 : 0.75
+            var adjusted = weightedAvg
+            if weightedAvg > 50 {
+                let boost = (weightedAvg - 50) * 0.5 * countBoost
+                adjusted = weightedAvg + boost
             }
             
             tagPercentiles.append(adjusted)
@@ -336,7 +336,7 @@ class PredictionEngine {
         
         guard !tagPercentiles.isEmpty else { return nil }
         
-        return max(20, tagPercentiles.reduce(0.0, +) / Double(tagPercentiles.count))
+        return tagPercentiles.reduce(0.0, +) / Double(tagPercentiles.count)
     }
     
     // MARK: - Blend Genre + Tag
@@ -344,7 +344,8 @@ class PredictionEngine {
     private func blendGenreTag(genre: Double?, tag: Double?) -> Double? {
         switch (genre, tag) {
         case let (g?, t?):
-            return g * 0.5 + t * 0.5  // Equal weight genre and tags
+            // Tags are more specific signals than genre
+            return g * 0.3 + t * 0.7
         case let (g?, nil):
             return g
         case let (nil, t?):
@@ -402,7 +403,8 @@ class PredictionEngine {
         friendResult: FriendResult?,
         genreTagScore: Double?,
         metacriticScore: Double?,
-        context: PredictionContext
+        context: PredictionContext,
+        targetReleaseYear: Int? = nil
     ) -> Double? {
         let friendCount = friendResult?.signals.count ?? 0
         let hasFriends = friendCount > 0
@@ -417,26 +419,18 @@ class PredictionEngine {
         var genreTagWeight: Double = 0
         var metacriticWeight: Double = 0
         
-        if context.myGameCount < 5 {
-            // Very thin data — lean on metacritic
-            friendWeight = hasFriends ? 0.0 : 0.0
-            genreTagWeight = hasGenreTag ? 0.20 : 0.0
-            metacriticWeight = hasMetacritic ? 0.80 : 0.0
-        } else if friendCount >= 2 {
+        if friendCount >= 2 {
             // Strong friend signal, but genre/tag leads
             friendWeight = 0.30
-            genreTagWeight = hasGenreTag ? 0.60 : 0.0
-            metacriticWeight = hasMetacritic ? 0.10 : 0.0
+            genreTagWeight = hasGenreTag ? 0.70 : 0.0
         } else if friendCount == 1 {
             // Single friend
             friendWeight = 0.25
-            genreTagWeight = hasGenreTag ? 0.60 : 0.0
-            metacriticWeight = hasMetacritic ? 0.15 : 0.0
+            genreTagWeight = hasGenreTag ? 0.75 : 0.0
         } else {
-            // No friends ranked this game
+            // No friends ranked this game — genre/tag only
             friendWeight = 0.0
-            genreTagWeight = hasGenreTag ? 0.85 : 0.0
-            metacriticWeight = hasMetacritic ? 0.15 : 0.0
+            genreTagWeight = hasGenreTag ? 1.0 : 0.0
         }
         
         // Normalize weights to sum to 1
@@ -452,7 +446,7 @@ class PredictionEngine {
         if let gt = genreTagScore { blended += gt * genreTagWeight }
         if let mc = metacriticScore { blended += mc * metacriticWeight }
         
-        debugLog("🧮 Blend: friend=\(friendResult?.percentile ?? -1), genreTag=\(genreTagScore ?? -1), metacritic=\(metacriticScore ?? -1), blended=\(blended)")
+        debugLog("🧮 Blend: friend=\(friendResult?.percentile ?? -1), genreTag=\(genreTagScore ?? -1), blended=\(blended)")
         // Genre drag: if friends love it but genre/tag affinity doesn't match, limit friend influence
         if let fr = friendResult, !fr.signals.isEmpty {
             if let gt = genreTagScore {
@@ -470,7 +464,51 @@ class PredictionEngine {
             }
         }
         
+        // Era modifier: boost/penalize based on how candidate's era matches user preference
+        if let targetYear = targetReleaseYear {
+            let eraModifier = computeEraModifier(targetYear: targetYear, context: context)
+            if eraModifier != 0 {
+                debugLog("🕰️ Era modifier: \(eraModifier > 0 ? "+" : "")\(String(format: "%.1f", eraModifier)) for year \(targetYear)")
+            }
+            blended += eraModifier
+        }
+        
         return max(0, min(100, blended))
+    }
+    
+    // MARK: - Era Modifier
+    
+    private func computeEraModifier(targetYear: Int, context: PredictionContext) -> Double {
+        func era(_ year: Int) -> Int {
+            switch year {
+            case ..<1995: return 0
+            case 1995...2004: return 1
+            case 2005...2012: return 2
+            case 2013...2019: return 3
+            default: return 4
+            }
+        }
+        
+        let gamesWithYear = context.myGames.filter { $0.releaseYear != nil }
+        guard gamesWithYear.count >= 5 else { return 0 }
+        
+        let targetEra = era(targetYear)
+        let matchingGames = gamesWithYear.filter { era($0.releaseYear!) == targetEra }
+        guard !matchingGames.isEmpty else { return -5 }
+        
+        // Rank-weighted average percentile for games in this era
+        var weightedSum: Double = 0
+        var totalWeight: Double = 0
+        for game in matchingGames {
+            let percentile = (1.0 - (Double(game.rankPosition - 1) / Double(max(context.myGameCount - 1, 1)))) * 100.0
+            let weight = max(10, percentile)
+            weightedSum += percentile * weight
+            totalWeight += weight
+        }
+        let eraAffinity = weightedSum / totalWeight
+        
+        // Neutral at 50%, max ±10 points
+        return (eraAffinity - 50) / 50.0 * 10.0
     }
     
     // MARK: - Confidence Calculation
@@ -530,12 +568,13 @@ class PredictionEngine {
                     let curated_genres: [String]?
                     let curated_tags: [String]?
                     let metacritic_score: Int?
+                    let curated_release_year: Int?
                 }
             }
             
             let myRows: [MyGameRow] = try await SupabaseManager.shared.client
                 .from("user_games")
-                .select("id, game_id, rank_position, canonical_game_id, games(rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score)")
+                .select("id, game_id, rank_position, canonical_game_id, games(rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score, curated_release_year)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -550,7 +589,8 @@ class PredictionEngine {
                     rankPosition: row.rank_position,
                     genres: row.games.curated_genres ?? row.games.genres ?? [],
                     tags: row.games.curated_tags ?? row.games.tags ?? [],
-                    metacriticScore: row.games.metacritic_score
+                    metacriticScore: row.games.metacritic_score,
+                    releaseYear: row.games.curated_release_year
                 )
             }
             

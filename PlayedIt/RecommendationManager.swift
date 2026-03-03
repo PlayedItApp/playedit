@@ -23,6 +23,7 @@ struct Recommendation: Identifiable, Codable {
     let actedAt: String?
     let rankedAt: String?
     let dismissedUntil: String?
+    let roundNumber: Int?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -43,6 +44,7 @@ struct Recommendation: Identifiable, Codable {
         case actedAt = "acted_at"
         case rankedAt = "ranked_at"
         case dismissedUntil = "dismissed_until"
+        case roundNumber = "round_number"
     }
 }
 
@@ -103,21 +105,46 @@ class RecommendationManager: ObservableObject {
         isGenerating = true
         defer { isGenerating = false }
         
-        // 1. Get existing pending recs (keep them)
-        let existingPending = await fetchPending()
-        let existingGameIds = Set(existingPending.map { $0.gameId })
-        let slotsToFill = max(0, 10 - existingPending.count)
-        
-        guard slotsToFill > 0 else {
-            // Already have 10 pending, just refresh display
-            await buildDisplayList()
-            return
+        // 1. Get current round number and expire pending recs
+        var currentRound = 1
+        do {
+            struct MaxRound: Decodable { let round_number: Int? }
+            let rows: [MaxRound] = try await supabase.client
+                .from("recommendations")
+                .select("round_number")
+                .eq("user_id", value: userId.uuidString)
+                .order("round_number", ascending: false)
+                .limit(1)
+                .execute()
+                .value
+            currentRound = (rows.first?.round_number ?? 0) + 1
+        } catch {
+            debugLog("⚠️ Error fetching max round: \(error)")
         }
         
-        // 2. Build exclusion set
-        let excludedGameIds = await buildExclusionSet(userId: userId.uuidString, existingPendingIds: existingGameIds)
+        do {
+            struct ExpireUpdate: Encodable { let action: String }
+            try await supabase.client
+                .from("recommendations")
+                .update(ExpireUpdate(action: "expired"))
+                .eq("user_id", value: userId.uuidString)
+                .eq("action", value: "pending")
+                .execute()
+        } catch {
+            debugLog("⚠️ Error expiring pending recommendations: \(error)")
+        }
         
-        // 3. Build prediction context
+        let slotsToFill = 10
+        debugLog("🎯 Starting round \(currentRound)")
+        
+        // 2. Build exclusion set
+        let excludedGameIds = await buildExclusionSet(userId: userId.uuidString, existingPendingIds: Set(), currentRound: currentRound)
+        
+        // 3. Build owned platforms set (platforms with 2+ ranked games)
+        let ownedPlatforms = await buildOwnedPlatforms(userId: userId.uuidString)
+        debugLog("🎯 Owned platforms: \(ownedPlatforms)")
+        
+        // 4. Build prediction context
         guard let context = await PredictionEngine.shared.getContext() else {
             await buildDisplayList()
             return
@@ -130,24 +157,24 @@ class RecommendationManager: ObservableObject {
             debugLog("   🤝 \(friend.username): \(friend.tasteMatch)% taste match, \(friend.games.count) games")
         }
         
-        // 4. Gather candidates from all sources
+        // 5. Gather candidates from all sources
         var candidates: [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] = []
         
         // Source 1: Friend-ranked games (70%+ taste match, top 50%)
-        let friendCandidates = await gatherFriendCandidates(context: context, excludedIds: excludedGameIds)
+        let friendCandidates = await gatherFriendCandidates(context: context, excludedIds: excludedGameIds, ownedPlatforms: ownedPlatforms)
         candidates.append(contentsOf: friendCandidates)
         
         // Source 2: PlayedIt games table (genre/tag discovery)
-        let genreCandidates = await gatherGenreCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })))
+        let genreCandidates = await gatherGenreCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })), ownedPlatforms: ownedPlatforms)
         candidates.append(contentsOf: genreCandidates)
         
         // Source 3: RAWG API discovery (always run for fresh games)
-        let rawgCandidates = await gatherRAWGCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })))
+        let rawgCandidates = await gatherRAWGCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })), ownedPlatforms: ownedPlatforms)
         candidates.append(contentsOf: rawgCandidates)
         
-        debugLog("🎯 Friend candidates: \(friendCandidates.count), Genre candidates: \(genreCandidates.count), RAWG candidates: \(rawgCandidates.count)")
+        debugLog("🎯 Pre-filter — Friend: \(friendCandidates.count), Genre: \(genreCandidates.count), RAWG: \(rawgCandidates.count)")
         
-        // 5. Score all candidates through PredictionEngine
+        // 6. Score all candidates through PredictionEngine
         var scoredCandidates: [(candidate: (gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?), prediction: GamePrediction)] = []
         
         for candidate in candidates {
@@ -166,15 +193,19 @@ class RecommendationManager: ObservableObject {
         
         debugLog("🎯 Total scored candidates: \(scoredCandidates.count)")
         for sc in scoredCandidates.sorted(by: { $0.prediction.predictedPercentile > $1.prediction.predictedPercentile }).prefix(15) {
-            debugLog("   🔮 \(sc.candidate.title): \(Int(sc.prediction.predictedPercentile))% [\(sc.candidate.source)]")
+            let p = sc.prediction
+            let genreStr = p.topGenreAffinity.map { "genre=\(Int($0))%" } ?? "genre=n/a"
+            let tagStr = p.topTagAffinity.map { "tag=\(Int($0))%" } ?? "tag=n/a"
+            let friendStr = p.friendSignals.isEmpty ? "friends=none" : "friends=\(p.friendSignals.map { "\($0.friendName)(\(Int($0.friendRankPercentile))%)" }.joined(separator: ","))"
+            debugLog("   🔮 \(sc.candidate.title): \(Int(p.predictedPercentile))% [\(sc.candidate.source)] | \(genreStr) \(tagStr) \(friendStr) | tiers=\(p.tiersUsed) conf=\(p.confidenceLabel)")
         }
         
-        // 6. Only show "You'll love this" tier (65%+)
+        // 7. Only show "You'll love this" tier (65%+)
         scoredCandidates = scoredCandidates.filter { $0.prediction.predictedPercentile >= 65 }
         scoredCandidates.sort { $0.prediction.predictedPercentile > $1.prediction.predictedPercentile }
         let topCandidates = Array(scoredCandidates.prefix(slotsToFill))
         
-        // 7. Insert into Supabase
+        // 8. Insert into Supabase
         for item in topCandidates {
             let c = item.candidate
             let p = item.prediction
@@ -188,6 +219,7 @@ class RecommendationManager: ObservableObject {
                 let predicted_summary: String
                 let confidence: Int
                 let tiers_used: [String]
+                let round_number: Int
             }
             
             do {
@@ -201,7 +233,8 @@ class RecommendationManager: ObservableObject {
                         predicted_percentile: p.predictedPercentile,
                         predicted_summary: p.summaryText,
                         confidence: p.confidence,
-                        tiers_used: p.tiersUsed
+                        tiers_used: p.tiersUsed,
+                        round_number: currentRound
                     ))
                     .execute()
             } catch {
@@ -209,13 +242,38 @@ class RecommendationManager: ObservableObject {
             }
         }
         
-        // 8. Build display list
+        // 9. Build display list
         await buildDisplayList()
     }
     
-    // MARK: - Build Exclusion Set
+    // MARK: - Build Owned Platforms
+    private func buildOwnedPlatforms(userId: String) async -> Set<String> {
+        do {
+            struct PlatformRow: Decodable { let platform_played: [String] }
+            let rows: [PlatformRow] = try await supabase.client
+                .from("user_games")
+                .select("platform_played")
+                .eq("user_id", value: userId)
+                .not("rank_position", operator: .is, value: "null")
+                .execute()
+                .value
+            
+            var counts: [String: Int] = [:]
+            for row in rows {
+                for platform in row.platform_played {
+                    counts[platform, default: 0] += 1
+                }
+            }
+            
+            return Set(counts.filter { $0.value >= 2 }.map { $0.key })
+        } catch {
+            debugLog("⚠️ Error building owned platforms: \(error)")
+            return []
+        }
+    }
     
-    private func buildExclusionSet(userId: String, existingPendingIds: Set<Int>) async -> Set<Int> {
+    // MARK: - Build Exclusion Set
+    private func buildExclusionSet(userId: String, existingPendingIds: Set<Int>, currentRound: Int) async -> Set<Int> {
         var excluded = existingPendingIds
         
         do {
@@ -251,6 +309,17 @@ class RecommendationManager: ObservableObject {
                 .execute()
                 .value
             excluded.formUnion(dismissed.map { $0.game_id })
+                        
+            // Recently recommended games (last 5 rounds)
+            struct RecentRecRow: Decodable { let game_id: Int }
+            let recentRecs: [RecentRecRow] = try await supabase.client
+                .from("recommendations")
+                .select("game_id")
+                .eq("user_id", value: userId)
+                .gte("round_number", value: max(1, currentRound - 5))
+                .execute()
+                .value
+            excluded.formUnion(recentRecs.map { $0.game_id })
             
         } catch {
             debugLog("⚠️ Error building exclusion set: \(error)")
@@ -261,7 +330,7 @@ class RecommendationManager: ObservableObject {
     
     // MARK: - Source 1: Friend Candidates
     
-    private func gatherFriendCandidates(context: PredictionContext, excludedIds: Set<Int>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
+    private func gatherFriendCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
         var candidates: [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] = []
         
         // Only friends with 70%+ taste match
@@ -286,6 +355,7 @@ class RecommendationManager: ObservableObject {
                     let tags: [String]?
                     let curated_genres: [String]?
                     let curated_tags: [String]?
+                    let curated_platforms: [String]?
                     let metacritic_score: Int?
                     let description: String?
                 }
@@ -293,13 +363,19 @@ class RecommendationManager: ObservableObject {
                 do {
                     let infos: [GameInfo] = try await supabase.client
                         .from("games")
-                        .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, metacritic_score")
+                        .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, curated_platforms, metacritic_score")
                         .eq("id", value: friendGame.gameId)
                         .limit(1)
                         .execute()
                         .value
                     
                     guard let info = infos.first else { continue }
+                    
+                    // Skip if no curated platforms or no overlap with owned platforms
+                    guard let curatedPlats = info.curated_platforms, !curatedPlats.isEmpty else { continue }
+                    if !ownedPlatforms.isEmpty {
+                        guard !Set(curatedPlats).intersection(ownedPlatforms).isEmpty else { continue }
+                    }
                     
                     candidates.append((
                         gameId: info.id,
@@ -326,7 +402,7 @@ class RecommendationManager: ObservableObject {
     
     // MARK: - Source 2: Genre Discovery (PlayedIt games table)
     
-    private func gatherGenreCandidates(context: PredictionContext, excludedIds: Set<Int>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
+    private func gatherGenreCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
         // Find user's top genres (from their top-ranked games)
         var genreCounts: [String: (count: Int, totalPercentile: Double)] = [:]
         for game in context.myGames {
@@ -359,16 +435,15 @@ class RecommendationManager: ObservableObject {
                 let tags: [String]?
                 let curated_genres: [String]?
                 let curated_tags: [String]?
+                let curated_platforms: [String]?
                 let metacritic_score: Int?
             }
             
             // Fetch games from PlayedIt table that overlap with user's top genres
             let games: [GameRow] = try await supabase.client
                 .from("games")
-                .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, metacritic_score")
-                .not("metacritic_score", operator: .is, value: "null")
-                .gte("metacritic_score", value: 75)
-                .order("metacritic_score", ascending: false)
+                .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, curated_platforms, metacritic_score")
+                .not("curated_platforms", operator: .is, value: "null")
                 .limit(50)
                 .execute()
                 .value
@@ -376,6 +451,12 @@ class RecommendationManager: ObservableObject {
             for game in games {
                 guard !excludedIds.contains(game.id) else { continue }
                 guard !candidates.contains(where: { $0.gameId == game.id }) else { continue }
+                
+                // Skip if no curated platforms or no overlap with owned platforms
+                guard let curatedPlats = game.curated_platforms, !curatedPlats.isEmpty else { continue }
+                if !ownedPlatforms.isEmpty {
+                    guard !Set(curatedPlats).intersection(ownedPlatforms).isEmpty else { continue }
+                }
                 
                 // Check genre overlap
                 let gameGenres = game.curated_genres ?? game.genres ?? []
@@ -407,7 +488,7 @@ class RecommendationManager: ObservableObject {
     }
     
     // MARK: - Source 3: RAWG Discovery
-    private func gatherRAWGCandidates(context: PredictionContext, excludedIds: Set<Int>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
+    private func gatherRAWGCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
         // Find user's top genres from their highest-ranked games
         var genreCounts: [String: (count: Int, totalPercentile: Double)] = [:]
         for game in context.myGames {
@@ -439,7 +520,6 @@ class RecommendationManager: ObservableObject {
             
             for game in results {
                 guard !excludedRawgIds.contains(game.rawgId) else { continue }
-                guard (game.metacriticScore ?? 0) >= 75 else { continue }
                 guard candidates.count < 15 else { break }
                 
                 let gameId = await ensureGameInTable(game: game)
@@ -453,6 +533,15 @@ class RecommendationManager: ObservableObject {
                 if let curatedData = await fetchCuratedData(gameId: gId) {
                     if let cg = curatedData.curatedGenres { useGenres = cg }
                     if let ct = curatedData.curatedTags { useTags = ct }
+                    
+                    // Skip if no curated platforms or no overlap with owned platforms
+                    guard let curatedPlats = curatedData.curatedPlatforms, !curatedPlats.isEmpty else { continue }
+                    if !ownedPlatforms.isEmpty {
+                        guard !Set(curatedPlats).intersection(ownedPlatforms).isEmpty else { continue }
+                    }
+                } else {
+                    // No curated data at all — don't recommend
+                    continue
                 }
                 
                 candidates.append((

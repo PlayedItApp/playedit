@@ -285,6 +285,14 @@ struct RecommendationCard: View {
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.adaptiveGray)
                     
+                    // Platforms
+                    if let platforms = recommendation.platforms, !platforms.isEmpty {
+                        Text(platforms.joined(separator: " · "))
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSilver)
+                            .lineLimit(1)
+                    }
+                    
                     // Friend attribution
                     if let friendName = recommendation.sourceFriendName,
                        let friendRank = recommendation.sourceFriendRankPosition {
@@ -584,7 +592,7 @@ curatedPlatforms: curatedPlatforms
                         
                         // Overview
                         sectionHeader("Overview")
-                        Text("Each candidate game is scored on a 0–100 percentile scale by blending three independent signals. Only games scoring 65%+ are shown.")
+                        Text("Each candidate game is scored on a 0–100 percentile scale by blending two independent signals: friend rankings and genre/tag affinity. Only games scoring 65%+ and available on platforms you own are shown.")
                             .bodyStyle()
                         
                         // Tier 1
@@ -608,27 +616,24 @@ curatedPlatforms: curatedPlatforms
                         
                         // Tier 2
                         sectionHeader("Tier 2: Genre & Tag Affinity")
-                        Text("For each genre/tag the candidate has, we find your average rank percentile across all your games with that genre/tag:")
+                        Text("For each genre/tag the candidate has, we compute a rank-weighted average percentile across your games that share that genre/tag. Games you rank higher contribute more to the signal.")
                             .bodyStyle()
-                        mathBlock("genreAffinity = avg(percentile) for your games in that genre")
-                        Text("Tags require ≥2 matching games. Genre and tag scores are blended 50/50. For libraries under 30 games, positive affinities get a small boost to create separation:")
+                        mathBlock("affinity = Σ(percentileᵢ × weightᵢ) / Σ(weightᵢ)")
+                        Text("Tags require ≥2 matching games. Tags are weighted 70%, genres 30% — tags are more specific signals. Positive affinities get a boost to create separation:")
                             .bodyStyle()
-                        mathBlock("boost = (affinity - 50) × 0.3 × countFactor")
+                        mathBlock("boost = (affinity - 50) × 0.5 × countFactor")
                         
-                        // Tier 3
-                        sectionHeader("Tier 3: Metacritic Correlation")
-                        Text("Linear regression between your rank percentiles and Metacritic scores across your library:")
-                            .bodyStyle()
-                        mathBlock("predicted = a + b × metacriticScore")
-                        Text("Requires ≥5 games with Metacritic scores. Measures how much you agree with critics.")
+                        // Era Modifier
+                        sectionHeader("Era Modifier")
+                        Text("Games are bucketed into eras (pre-1995, 1995–2004, 2005–2012, 2013–2019, 2020+). If you tend to rank games from a particular era highly, candidates from that era get a boost of up to ±10 points.")
                             .bodyStyle()
                         
                         // Blending
                         sectionHeader("Blending Weights")
                         VStack(alignment: .leading, spacing: 8) {
-                            weightRow("2+ friends ranked it:", "30% friend, 60% genre/tag, 10% metacritic")
-                            weightRow("1 friend ranked it:", "25% friend, 60% genre/tag, 15% metacritic")
-                            weightRow("No friend signal:", "85% genre/tag, 15% metacritic")
+                            weightRow("2+ friends ranked it:", "30% friend, 70% genre/tag")
+                            weightRow("1 friend ranked it:", "25% friend, 75% genre/tag")
+                            weightRow("No friend signal:", "100% genre/tag")
                         }
                         
                         // Genre Drag
@@ -638,6 +643,11 @@ curatedPlatforms: curatedPlatforms
                         mathBlock("if genreTag < 50: penalty = (50 - genreTag) / 50 × 20")
                         mathBlock("if genreTag < 70 & friend > 80th: reduction = (70 - genreTag) / 20 × 0.4 × friendContribution")
                         Text("This prevents recommendations in genres you don't enjoy, even when friends rank them highly.")
+                            .bodyStyle()
+                        
+                        // Platform Filtering
+                        sectionHeader("Platform Filtering")
+                        Text("Only games available on platforms you own are recommended. A platform is considered \"owned\" if you've ranked 2+ games on it. Only games with curated platform data are eligible.")
                             .bodyStyle()
                         
                         // Threshold
