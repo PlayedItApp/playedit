@@ -757,6 +757,7 @@ curatedPlatforms: curatedPlatforms
                         existingUserGame = nil
                         PredictionEngine.shared.invalidateContext()
                         await WantToPlayManager.shared.removeGameIfPresent(rawgId: game.rawgId)
+                        await RecommendationManager.checkAndUpdateOnRank(gameId: gameId, rankPosition: position, totalGames: existingUserGames.count + 1)
                     } else {
                     // New game — use insert RPC
                     let canonicalId = await RAWGService.shared.getParentGameId(for: game.rawgId) ?? game.rawgId
@@ -777,9 +778,10 @@ curatedPlatforms: curatedPlatforms
                         .execute()
                         
                         debugLog("✅ Game logged at position \(position)")
-                        PredictionEngine.shared.invalidateContext()
-                        await WantToPlayManager.shared.removeGameIfPresent(rawgId: game.rawgId)
-                    }
+                            PredictionEngine.shared.invalidateContext()
+                            await WantToPlayManager.shared.removeGameIfPresent(rawgId: game.rawgId)
+                            await RecommendationManager.checkAndUpdateOnRank(gameId: gameId, rankPosition: position, totalGames: existingUserGames.count + 1)
+                        }
                 
             } catch {
                 debugLog("❌ Error saving user game: \(error)")

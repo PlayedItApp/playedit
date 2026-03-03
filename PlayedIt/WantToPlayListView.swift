@@ -246,7 +246,10 @@ struct WantToPlayListView: View {
             .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
         .sheet(isPresented: $showRecommendations, onDismiss: {
-            Task { await loadGames() }
+            Task {
+                await loadGames()
+                await fetchPredictions()
+            }
         }) {
             RecommendationsView()
         }
@@ -407,6 +410,7 @@ struct WantToPlayListView: View {
                     
                     if let pred = PredictionEngine.shared.predict(game: target, context: context) {
                         predictions[game.id] = pred
+                        debugLog("🎯 WTP prediction: \(game.gameTitle) = \(Int(pred.predictedPercentile))% [\(pred.confidenceLabel)]")
                     }
                 }
             } catch {

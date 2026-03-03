@@ -61,8 +61,11 @@ struct RecommendationsView: View {
             }
             .task {
                 if !hasGenerated {
-                    await manager.generateRecommendations()
-                    hasGenerated = true
+                    await manager.buildDisplayList()
+                        if manager.recommendations.isEmpty {
+                            await manager.generateRecommendations()
+                        }
+                        hasGenerated = true
                 }
             }
             .sheet(isPresented: $showHowItWorks) {
@@ -227,7 +230,7 @@ struct RecommendationsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .background(Color(.systemBackground))
+        .background(Color.appBackground)
     }
     
     // MARK: - Toast
@@ -360,7 +363,7 @@ struct RecommendationCard: View {
             }
         }
         .padding(16)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.cardBackground)
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
     }

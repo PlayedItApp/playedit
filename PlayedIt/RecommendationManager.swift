@@ -140,6 +140,23 @@ class RecommendationManager: ObservableObject {
         // 2. Build exclusion set
         let excludedGameIds = await buildExclusionSet(userId: userId.uuidString, existingPendingIds: Set(), currentRound: currentRound)
         
+        // 2b. Build ranked title set for variant detection
+        var rankedBaseTitles: Set<String> = []
+        do {
+            struct RankedTitle: Decodable { let id: Int; let title: String }
+            let gameIds = excludedGameIds // already contains ranked game_ids
+            let titles: [RankedTitle] = try await supabase.client
+                .from("games")
+                .select("id, title")
+                .in("id", values: Array(gameIds))
+                .execute()
+                .value
+            rankedBaseTitles = Set(titles.map { baseTitle($0.title) })
+            debugLog("🎯 Ranked base titles (\(rankedBaseTitles.count)): \(rankedBaseTitles.sorted().prefix(20))")
+        } catch {
+            debugLog("⚠️ Error building ranked titles: \(error)")
+        }
+        
         // 3. Build owned platforms set (platforms with 2+ ranked games)
         let ownedPlatforms = await buildOwnedPlatforms(userId: userId.uuidString)
         debugLog("🎯 Owned platforms: \(ownedPlatforms)")
@@ -161,15 +178,15 @@ class RecommendationManager: ObservableObject {
         var candidates: [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] = []
         
         // Source 1: Friend-ranked games (70%+ taste match, top 50%)
-        let friendCandidates = await gatherFriendCandidates(context: context, excludedIds: excludedGameIds, ownedPlatforms: ownedPlatforms)
+        let friendCandidates = await gatherFriendCandidates(context: context, excludedIds: excludedGameIds, ownedPlatforms: ownedPlatforms, rankedBaseTitles: rankedBaseTitles)
         candidates.append(contentsOf: friendCandidates)
         
         // Source 2: PlayedIt games table (genre/tag discovery)
-        let genreCandidates = await gatherGenreCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })), ownedPlatforms: ownedPlatforms)
+        let genreCandidates = await gatherGenreCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })), ownedPlatforms: ownedPlatforms, rankedBaseTitles: rankedBaseTitles)
         candidates.append(contentsOf: genreCandidates)
         
         // Source 3: RAWG API discovery (always run for fresh games)
-        let rawgCandidates = await gatherRAWGCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })), ownedPlatforms: ownedPlatforms)
+        let rawgCandidates = await gatherRAWGCandidates(context: context, excludedIds: excludedGameIds.union(Set(candidates.map { $0.gameId })), ownedPlatforms: ownedPlatforms, rankedBaseTitles: rankedBaseTitles)
         candidates.append(contentsOf: rawgCandidates)
         
         debugLog("🎯 Pre-filter — Friend: \(friendCandidates.count), Genre: \(genreCandidates.count), RAWG: \(rawgCandidates.count)")
@@ -202,7 +219,12 @@ class RecommendationManager: ObservableObject {
         
         // 7. Only show "You'll love this" tier (65%+)
         scoredCandidates = scoredCandidates.filter { $0.prediction.predictedPercentile >= 65 }
-        scoredCandidates.sort { $0.prediction.predictedPercentile > $1.prediction.predictedPercentile }
+        scoredCandidates.sort {
+        if $0.prediction.confidence != $1.prediction.confidence {
+            return $0.prediction.confidence > $1.prediction.confidence
+        }
+        return $0.prediction.predictedPercentile > $1.prediction.predictedPercentile
+    }
         let topCandidates = Array(scoredCandidates.prefix(slotsToFill))
         
         // 8. Insert into Supabase
@@ -272,6 +294,20 @@ class RecommendationManager: ObservableObject {
         }
     }
     
+    // MARK: - Title Variant Detection
+        private static let titleSuffixes = [" Remastered", " Remake", " Definitive Edition", " HD Collection", " HD Remaster", " HD", " Game of the Year Edition", " GOTY Edition", " Director's Cut", " Royal Edition", " Complete Edition", " Ultimate Edition", " Enhanced Edition", " Special Edition", " Part I"]
+        
+        private func baseTitle(_ title: String) -> String {
+            var t = title
+            for suffix in Self.titleSuffixes {
+                if t.lowercased().hasSuffix(suffix.lowercased()) {
+                    t = String(t.dropLast(suffix.count))
+                    break
+                }
+            }
+            return t.lowercased().trimmingCharacters(in: .whitespaces)
+        }
+    
     // MARK: - Build Exclusion Set
     private func buildExclusionSet(userId: String, existingPendingIds: Set<Int>, currentRound: Int) async -> Set<Int> {
         var excluded = existingPendingIds
@@ -330,7 +366,7 @@ class RecommendationManager: ObservableObject {
     
     // MARK: - Source 1: Friend Candidates
     
-    private func gatherFriendCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
+    private func gatherFriendCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>, rankedBaseTitles: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
         var candidates: [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] = []
         
         // Only friends with 70%+ taste match
@@ -370,6 +406,13 @@ class RecommendationManager: ObservableObject {
                         .value
                     
                     guard let info = infos.first else { continue }
+                                        
+                    // Skip title variants of already-ranked games
+                    let candidateBase = baseTitle(info.title)
+                    if rankedBaseTitles.contains(candidateBase) {
+                        debugLog("🚫 Skipping variant: \(info.title) → base: \(candidateBase)")
+                        continue
+                    }
                     
                     // Skip if no curated platforms or no overlap with owned platforms
                     guard let curatedPlats = info.curated_platforms, !curatedPlats.isEmpty else { continue }
@@ -402,7 +445,7 @@ class RecommendationManager: ObservableObject {
     
     // MARK: - Source 2: Genre Discovery (PlayedIt games table)
     
-    private func gatherGenreCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
+    private func gatherGenreCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>, rankedBaseTitles: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
         // Find user's top genres (from their top-ranked games)
         var genreCounts: [String: (count: Int, totalPercentile: Double)] = [:]
         for game in context.myGames {
@@ -451,6 +494,9 @@ class RecommendationManager: ObservableObject {
             for game in games {
                 guard !excludedIds.contains(game.id) else { continue }
                 guard !candidates.contains(where: { $0.gameId == game.id }) else { continue }
+                                
+                // Skip title variants of already-ranked games
+                if rankedBaseTitles.contains(baseTitle(game.title)) { continue }
                 
                 // Skip if no curated platforms or no overlap with owned platforms
                 guard let curatedPlats = game.curated_platforms, !curatedPlats.isEmpty else { continue }
@@ -488,7 +534,7 @@ class RecommendationManager: ObservableObject {
     }
     
     // MARK: - Source 3: RAWG Discovery
-    private func gatherRAWGCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
+    private func gatherRAWGCandidates(context: PredictionContext, excludedIds: Set<Int>, ownedPlatforms: Set<String>, rankedBaseTitles: Set<String>) async -> [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] {
         // Find user's top genres from their highest-ranked games
         var genreCounts: [String: (count: Int, totalPercentile: Double)] = [:]
         for game in context.myGames {
@@ -526,6 +572,9 @@ class RecommendationManager: ObservableObject {
                 guard let gId = gameId else { continue }
                 guard !excludedIds.contains(gId) else { continue }
                 guard !candidates.contains(where: { $0.gameId == gId }) else { continue }
+                                
+                // Skip title variants of already-ranked games
+                if rankedBaseTitles.contains(baseTitle(game.title)) { continue }
                 
                 // Check for curated data if game already existed in table
                 var useGenres = game.genres
@@ -673,7 +722,7 @@ class RecommendationManager: ObservableObject {
                     .value
                 
                 guard let info = infos.first else { continue }
-                
+                                    
                 let target = PredictionTarget(
                     rawgId: info.rawg_id,
                     canonicalGameId: nil,
@@ -718,8 +767,13 @@ class RecommendationManager: ObservableObject {
             }
         }
         
-        // Sort by predicted percentile descending
-        recommendations = displays.sorted { $0.prediction.predictedPercentile > $1.prediction.predictedPercentile }
+        // Sort by confidence first, then predicted percentile
+        recommendations = displays.sorted {
+            if $0.prediction.confidence != $1.prediction.confidence {
+                return $0.prediction.confidence > $1.prediction.confidence
+            }
+            return $0.prediction.predictedPercentile > $1.prediction.predictedPercentile
+        }
     }
     
     // MARK: - User Actions
@@ -870,11 +924,16 @@ class RecommendationManager: ObservableObject {
                 .execute()
             
             debugLog("✅ Updated recommendation outcome: predicted=\(Int(rec.predicted_percentile))%, actual=\(Int(actualPercentile))%, accuracy=\(Int(accuracy))")
-            
-        } catch {
-            // Not an error if no recommendation exists for this game
+                        
+                // Remove from display list
+                await MainActor.run {
+                    RecommendationManager.shared.recommendations.removeAll { $0.id == rec.id }
+                }
+                
+            } catch {
+                // Not an error if no recommendation exists for this game
+            }
         }
-    }
     
     // MARK: - Check if User Has Enough Games
     
