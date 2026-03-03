@@ -22,6 +22,8 @@ struct GameLogView: View {
     @State private var metacriticScore: Int? = nil
     @State private var curatedGenres: [String]? = nil
     @State private var curatedTags: [String]? = nil
+    @State private var curatedPlatforms: [String]? = nil
+    @State private var curatedReleaseYear: Int? = nil
     @State private var isLoadingDescription = true
     @State private var computedPredictedRange: (lower: Int, upper: Int)? = nil
     
@@ -110,7 +112,7 @@ struct GameLogView: View {
                     GameInfoHeroView(
                             title: game.title,
                             coverURL: game.coverURL,
-                            releaseDate: game.releaseDate,
+                            releaseDate: curatedReleaseYear.map { String($0) } ?? game.releaseDate,
                             metacriticScore: metacriticScore,
                             gameDescription: gameDescription,
                             isLoadingDescription: isLoadingDescription,
@@ -309,6 +311,8 @@ struct GameLogView: View {
             metacriticScore = cached.metacriticScore
             curatedGenres = cached.curatedGenres
             curatedTags = cached.curatedTags
+            curatedPlatforms = cached.curatedPlatforms
+            curatedReleaseYear = cached.curatedReleaseYear
             if gameDescription != nil {
                 isLoadingDescription = false
                 return
@@ -324,10 +328,12 @@ struct GameLogView: View {
                 let release_date: String?
                 let curated_genres: [String]?
                 let curated_tags: [String]?
+                let curated_platforms: [String]?
+                let curated_release_year: Int?
             }
             let results: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags")
+                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year")
                 .eq("rawg_id", value: game.rawgId)
                 .limit(1)
                 .execute()
@@ -337,10 +343,12 @@ struct GameLogView: View {
                 metacriticScore = info.metacritic_score
                 curatedGenres = info.curated_genres
                 curatedTags = info.curated_tags
+                curatedPlatforms = info.curated_platforms
+                curatedReleaseYear = info.curated_release_year
                 
                 if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                     gameDescription = desc
-                    GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
+                    GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
                     isLoadingDescription = false
                     return
                 }
@@ -360,7 +368,7 @@ struct GameLogView: View {
             
             // Cache it
             if let desc = gameDescription, !desc.isEmpty {
-                GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: metacriticScore, releaseDate: game.releaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags)
+                GameMetadataCache.shared.set(gameId: game.rawgId, description: desc, metacriticScore: metacriticScore, releaseDate: curatedReleaseYear.map { String($0) } ?? game.releaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
             }
             
             // Upsert to DB

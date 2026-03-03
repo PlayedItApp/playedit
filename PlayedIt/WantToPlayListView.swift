@@ -1469,6 +1469,8 @@ struct FirstTwoComparisonView: View {
         @State private var metacriticScore: Int? = nil
         @State private var curatedGenres: [String]? = nil
         @State private var curatedTags: [String]? = nil
+        @State private var curatedPlatforms: [String]? = nil
+        @State private var curatedReleaseYear: Int? = nil
         @State private var sourceFriendName: String? = nil
         @State private var releaseDate: String? = nil
         @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
@@ -1483,7 +1485,7 @@ struct FirstTwoComparisonView: View {
                         GameInfoHeroView(
                             title: game.gameTitle,
                             coverURL: game.gameCoverUrl,
-                            releaseDate: releaseDate,
+                            releaseDate: curatedReleaseYear.map { String($0) } ?? releaseDate,
                             metacriticScore: metacriticScore,
                             gameDescription: gameDescription,
                             curatedGenres: curatedGenres,
@@ -1750,6 +1752,8 @@ struct FirstTwoComparisonView: View {
             releaseDate = cached.releaseDate
             curatedGenres = cached.curatedGenres
             curatedTags = cached.curatedTags
+            curatedPlatforms = cached.curatedPlatforms
+            curatedReleaseYear = cached.curatedReleaseYear
             if gameDescription != nil { return }
         }
         
@@ -1762,10 +1766,12 @@ struct FirstTwoComparisonView: View {
                 let release_date: String?
                 let curated_genres: [String]?
                 let curated_tags: [String]?
+                let curated_platforms: [String]?
+                let curated_release_year: Int?
             }
             var infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description, curated_description, release_date, curated_genres, curated_tags")
+                .select("rawg_id, metacritic_score, description, curated_description, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
@@ -1774,7 +1780,7 @@ struct FirstTwoComparisonView: View {
             if infos.isEmpty {
                 infos = try await SupabaseManager.shared.client
                     .from("games")
-                    .select("rawg_id, metacritic_score, description, curated_description, release_date, curated_genres, curated_tags")
+                    .select("rawg_id, metacritic_score, description, curated_description, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year")
                     .eq("rawg_id", value: game.gameId)
                     .limit(1)
                     .execute()
@@ -1792,11 +1798,13 @@ struct FirstTwoComparisonView: View {
             releaseDate = info.release_date
             curatedGenres = info.curated_genres
             curatedTags = info.curated_tags
+            curatedPlatforms = info.curated_platforms
+            curatedReleaseYear = info.curated_release_year
             
             // Use cached description if available — skip RAWG entirely
             if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                 gameDescription = desc
-                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
                 return
             }
             
@@ -1805,8 +1813,8 @@ struct FirstTwoComparisonView: View {
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
 
             if let desc = gameDescription, !desc.isEmpty {
-                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
-                _ = try? await SupabaseManager.shared.client
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: info.release_date, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
+                    _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])
                     .eq("rawg_id", value: info.rawg_id)

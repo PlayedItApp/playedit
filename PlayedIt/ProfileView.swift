@@ -666,12 +666,16 @@ struct ProfileView: View {
                     let description: String?
                     let curated_description: String?
                     let metacritic_score: Int?
+                    let curated_genres: [String]?
+                    let curated_tags: [String]?
+                    let curated_platforms: [String]?
+                    let curated_release_year: Int?
                 }
             }
             
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score)")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -685,7 +689,11 @@ struct ProfileView: View {
                         gameId: row.game_id,
                         description: desc,
                         metacriticScore: row.games.metacritic_score,
-                        releaseDate: row.games.release_date
+                        releaseDate: row.games.release_date,
+                        curatedGenres: row.games.curated_genres,
+                        curatedTags: row.games.curated_tags,
+                        curatedPlatforms: row.games.curated_platforms,
+                        curatedReleaseYear: row.games.curated_release_year
                     )
                 }
             }

@@ -13,6 +13,10 @@ struct DeepLinkGameView: View {
     @State private var gameReleaseDate: String? = nil
     @State private var gameDescription: String? = nil
     @State private var metacriticScore: Int? = nil
+    @State private var curatedGenres: [String]? = nil
+    @State private var curatedTags: [String]? = nil
+    @State private var curatedPlatforms: [String]? = nil
+    @State private var curatedReleaseYear: Int? = nil
     @State private var localGameId: Int? = nil
     @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
     @State private var myUserGame: UserGame? = nil
@@ -102,9 +106,11 @@ struct DeepLinkGameView: View {
                 GameInfoHeroView(
                     title: gameTitle,
                     coverURL: gameCoverURL,
-                    releaseDate: gameReleaseDate,
+                    releaseDate: curatedReleaseYear.map { String($0) } ?? gameReleaseDate,
                     metacriticScore: metacriticScore,
-                    gameDescription: gameDescription
+                    gameDescription: gameDescription,
+                    curatedGenres: curatedGenres,
+                    curatedTags: curatedTags
                 )
                 .padding(.top, 20)
                 
@@ -262,7 +268,17 @@ struct DeepLinkGameView: View {
     // MARK: - Load Game
     private func loadGame() async {
         do {
-            // 1. Look up game in our DB by rawg_id
+            // 1. Check in-memory cache first
+            if let cached = GameMetadataCache.shared.get(gameId: gameId) {
+                gameDescription = cached.description
+                metacriticScore = cached.metacriticScore
+                curatedGenres = cached.curatedGenres
+                curatedTags = cached.curatedTags
+                curatedPlatforms = cached.curatedPlatforms
+                curatedReleaseYear = cached.curatedReleaseYear
+            }
+            
+            // 2. Look up game in our DB by rawg_id
             struct GameRow: Decodable {
                 let id: Int
                 let rawg_id: Int
@@ -272,11 +288,15 @@ struct DeepLinkGameView: View {
                 let description: String?
                 let curated_description: String?
                 let metacritic_score: Int?
+                let curated_genres: [String]?
+                let curated_tags: [String]?
+                let curated_platforms: [String]?
+                let curated_release_year: Int?
             }
             
             let gameRows: [GameRow] = try await supabase.client
                 .from("games")
-                .select("id, rawg_id, title, cover_url, release_date, description, curated_description, metacritic_score")
+                .select("id, rawg_id, title, cover_url, release_date, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year")
                 .eq("rawg_id", value: gameId)
                 .limit(1)
                 .execute()
@@ -311,6 +331,16 @@ struct DeepLinkGameView: View {
             gameCoverURL = game.cover_url
             gameReleaseDate = game.release_date
             metacriticScore = game.metacritic_score
+            curatedGenres = game.curated_genres
+            curatedTags = game.curated_tags
+            curatedPlatforms = game.curated_platforms
+            curatedReleaseYear = game.curated_release_year
+            
+            // Cache the metadata
+            let resolvedDesc = game.curated_description ?? game.description
+            if resolvedDesc != nil || game.metacritic_score != nil {
+                GameMetadataCache.shared.set(gameId: gameId, description: resolvedDesc, metacriticScore: game.metacritic_score, releaseDate: game.release_date, curatedGenres: game.curated_genres, curatedTags: game.curated_tags, curatedPlatforms: game.curated_platforms, curatedReleaseYear: game.curated_release_year)
+            }
             
             // 3. Fetch description if not cached
             if let desc = game.curated_description ?? game.description, !desc.isEmpty {

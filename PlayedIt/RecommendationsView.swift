@@ -408,6 +408,8 @@ struct RecommendationDetailSheet: View {
     @State private var metacriticScore: Int? = nil
     @State private var curatedGenres: [String]? = nil
     @State private var curatedTags: [String]? = nil
+    @State private var curatedPlatforms: [String]? = nil
+    @State private var curatedReleaseYear: Int? = nil
     
     var body: some View {
         NavigationStack {
@@ -416,7 +418,7 @@ struct RecommendationDetailSheet: View {
                     GameInfoHeroView(
                         title: recommendation.gameTitle,
                         coverURL: recommendation.gameCoverUrl,
-                        releaseDate: nil,
+                        releaseDate: curatedReleaseYear.map { String($0) },
                         metacriticScore: metacriticScore,
                         gameDescription: gameDescription,
                         isLoadingDescription: isLoadingDescription,
@@ -497,6 +499,8 @@ struct RecommendationDetailSheet: View {
             gameDescription = cached.description
             curatedGenres = cached.curatedGenres
             curatedTags = cached.curatedTags
+            curatedPlatforms = cached.curatedPlatforms
+            curatedReleaseYear = cached.curatedReleaseYear
             if gameDescription != nil {
                 isLoadingDescription = false
                 return
@@ -512,11 +516,13 @@ struct RecommendationDetailSheet: View {
                 let release_date: String?
                 let curated_genres: [String]?
                 let curated_tags: [String]?
+                let curated_platforms: [String]?
+                let curated_release_year: Int?
             }
             
             let infos: [GameDesc] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags")
+                .select("description, curated_description, metacritic_score, release_date, curated_genres, curated_tags, curated_platforms, curated_release_year")
                 .eq("rawg_id", value: recommendation.gameRawgId)
                 .limit(1)
                 .execute()
@@ -527,10 +533,12 @@ struct RecommendationDetailSheet: View {
             }
             curatedGenres = infos.first?.curated_genres
             curatedTags = infos.first?.curated_tags
+            curatedPlatforms = infos.first?.curated_platforms
+            curatedReleaseYear = infos.first?.curated_release_year
             if let desc = infos.first?.curated_description ?? infos.first?.description, !desc.isEmpty {
                 let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
                 gameDescription = cleaned
-                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: nil, curatedGenres: curatedGenres, curatedTags: curatedTags)
+                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: infos.first?.release_date, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                 isLoadingDescription = false
                 return
             }
@@ -547,8 +555,8 @@ struct RecommendationDetailSheet: View {
             
             // Cache for next time
             if !cleaned.isEmpty {
-                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: nil, curatedGenres: curatedGenres, curatedTags: curatedTags)
-                _ = try? await SupabaseManager.shared.client
+                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: curatedReleaseYear.map { String($0) }, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
+                    _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])
                     .eq("rawg_id", value: recommendation.gameRawgId)

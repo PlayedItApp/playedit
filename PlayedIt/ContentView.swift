@@ -446,6 +446,8 @@ struct GameDetailSheet: View {
     @State private var metacriticScore: Int? = nil
     @State private var curatedGenres: [String]? = nil
     @State private var curatedTags: [String]? = nil
+    @State private var curatedPlatforms: [String]? = nil
+    @State private var curatedReleaseYear: Int? = nil
     @State private var totalRankedGames: Int = 0
     @State private var isSharing = false
     @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
@@ -469,7 +471,7 @@ struct GameDetailSheet: View {
                     GameInfoHeroView(
                         title: game.gameTitle,
                         coverURL: game.gameCoverURL,
-                        releaseDate: game.gameReleaseDate,
+                        releaseDate: curatedReleaseYear.map { String($0) } ?? game.gameReleaseDate,
                         metacriticScore: metacriticScore,
                         gameDescription: gameDescription,
                         curatedGenres: curatedGenres,
@@ -875,6 +877,8 @@ struct GameDetailSheet: View {
                     gameDescription = cached.description
                     curatedGenres = cached.curatedGenres
                     curatedTags = cached.curatedTags
+                    curatedPlatforms = cached.curatedPlatforms
+                    curatedReleaseYear = cached.curatedReleaseYear
                 }
                 
                 // Fetch total ranked game count for share card
@@ -902,12 +906,14 @@ struct GameDetailSheet: View {
                         let metacritic_score: Int?
                         let curated_genres: [String]?
                         let curated_tags: [String]?
+                        let curated_platforms: [String]?
+                        let curated_release_year: Int?
                     }
                     var results: [GameInfo] = []
                     if let rawgId = game.gameRawgId {
                         results = try await SupabaseManager.shared.client
                             .from("games")
-                            .select("rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags")
+                            .select("rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year")
                             .eq("rawg_id", value: rawgId)
                             .limit(1)
                             .execute()
@@ -916,7 +922,7 @@ struct GameDetailSheet: View {
                     if results.isEmpty {
                         results = try await SupabaseManager.shared.client
                             .from("games")
-                            .select("rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags")
+                            .select("rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year")
                             .eq("id", value: game.gameId)
                             .limit(1)
                             .execute()
@@ -931,10 +937,12 @@ struct GameDetailSheet: View {
                     metacriticScore = result.metacritic_score
                     curatedGenres = result.curated_genres
                     curatedTags = result.curated_tags
+                    curatedPlatforms = result.curated_platforms
+                    curatedReleaseYear = result.curated_release_year
                     
                     if let desc = result.curated_description ?? result.description, !desc.isEmpty {
                         gameDescription = desc
-                        GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags)
+                        GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags, curatedPlatforms: result.curated_platforms, curatedReleaseYear: result.curated_release_year)
                         return
                     }
                     
@@ -942,8 +950,8 @@ struct GameDetailSheet: View {
                     gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                     
                     if let desc = gameDescription, !desc.isEmpty {
-                        GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags)
-                        _ = try? await SupabaseManager.shared.client
+                        GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: result.metacritic_score, releaseDate: game.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags, curatedPlatforms: result.curated_platforms, curatedReleaseYear: result.curated_release_year)
+                            _ = try? await SupabaseManager.shared.client
                             .from("games")
                             .update(["description": desc])
                             .eq("rawg_id", value: result.rawg_id)

@@ -532,22 +532,24 @@ class RecommendationManager: ObservableObject {
     }
     
     // MARK: - Fetch Curated Data If Available
-    private func fetchCuratedData(gameId: Int) async -> (curatedGenres: [String]?, curatedTags: [String]?)? {
+    private func fetchCuratedData(gameId: Int) async -> (curatedGenres: [String]?, curatedTags: [String]?, curatedPlatforms: [String]?, curatedReleaseYear: Int?)? {
         struct CuratedRow: Decodable {
             let curated_genres: [String]?
             let curated_tags: [String]?
+            let curated_platforms: [String]?
+            let curated_release_year: Int?
         }
         
         guard let row = try? await supabase.client
             .from("games")
-            .select("curated_genres, curated_tags")
+            .select("curated_genres, curated_tags, curated_platforms, curated_release_year")
             .eq("id", value: gameId)
             .single()
             .execute()
             .value as CuratedRow else { return nil }
         
-        guard row.curated_genres != nil || row.curated_tags != nil else { return nil }
-        return (curatedGenres: row.curated_genres, curatedTags: row.curated_tags)
+        guard row.curated_genres != nil || row.curated_tags != nil || row.curated_platforms != nil || row.curated_release_year != nil else { return nil }
+        return (curatedGenres: row.curated_genres, curatedTags: row.curated_tags, curatedPlatforms: row.curated_platforms, curatedReleaseYear: row.curated_release_year)
     }
     
     // MARK: - Build Display List
@@ -566,6 +568,8 @@ class RecommendationManager: ObservableObject {
                 let tags: [String]?
                 let curated_genres: [String]?
                 let curated_tags: [String]?
+                let platforms: [String]?
+                let curated_platforms: [String]?
                 let metacritic_score: Int?
                 let description: String?
             }
@@ -573,7 +577,7 @@ class RecommendationManager: ObservableObject {
             do {
                 let infos: [GameInfo] = try await supabase.client
                     .from("games")
-                    .select("rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, metacritic_score")
+                    .select("rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, platforms, curated_platforms, metacritic_score")
                     .eq("id", value: rec.gameId)
                     .limit(1)
                     .execute()
@@ -614,7 +618,7 @@ class RecommendationManager: ObservableObject {
                     gameCoverUrl: info.cover_url,
                     gameRawgId: info.rawg_id,
                     genres: info.curated_genres ?? info.genres ?? [],
-                    platforms: nil,
+                    platforms: info.curated_platforms ?? info.platforms,
                     prediction: pred,
                     sourceFriendName: friendName,
                     sourceFriendRankPosition: friendRank,

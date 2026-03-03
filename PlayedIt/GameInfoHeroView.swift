@@ -40,7 +40,7 @@ struct GameInfoHeroView: View {
             if hasMetadata {
                 HStack(spacing: 16) {
                     if let year = releaseDate?.prefix(4) {
-                        Label(String(year), systemImage: "calendar")
+                        Label(String(year) == "9999" ? "TBA" : String(year), systemImage: "calendar")
                             .font(.system(size: 14, weight: .medium, design: .rounded))
                             .foregroundStyle(Color.adaptiveGray)
                     }

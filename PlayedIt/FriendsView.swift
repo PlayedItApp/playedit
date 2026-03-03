@@ -1480,13 +1480,17 @@ struct FriendProfileView: View {
                     let description: String?
                     let curated_description: String?
                     let metacritic_score: Int?
+                    let curated_genres: [String]?
+                    let curated_tags: [String]?
+                    let curated_platforms: [String]?
+                    let curated_release_year: Int?
                 }
             }
             
             // Fetch friend's games with join
             let friendRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score)")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year)")
                 .eq("user_id", value: friend.userId)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -1513,7 +1517,7 @@ struct FriendProfileView: View {
             // Fetch my games with join
             let myRows: [UserGameRow] = try await supabase.client
                 .from("user_games")
-                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score)")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -1546,7 +1550,11 @@ struct FriendProfileView: View {
                         gameId: row.game_id,
                         description: desc,
                         metacriticScore: row.games.metacritic_score,
-                        releaseDate: row.games.release_date
+                        releaseDate: row.games.release_date,
+                        curatedGenres: row.games.curated_genres,
+                        curatedTags: row.games.curated_tags,
+                        curatedPlatforms: row.games.curated_platforms,
+                        curatedReleaseYear: row.games.curated_release_year
                     )
                 }
             }
@@ -1614,6 +1622,8 @@ struct FriendWantToPlayDetailSheet: View {
     @State private var metacriticScore: Int? = nil
     @State private var curatedGenres: [String]? = nil
     @State private var curatedTags: [String]? = nil
+    @State private var curatedPlatforms: [String]? = nil
+    @State private var curatedReleaseYear: Int? = nil
     
     var body: some View {
         NavigationStack {
@@ -1710,6 +1720,8 @@ struct FriendWantToPlayDetailSheet: View {
             gameDescription = cached.description
             curatedGenres = cached.curatedGenres
             curatedTags = cached.curatedTags
+            curatedPlatforms = cached.curatedPlatforms
+            curatedReleaseYear = cached.curatedReleaseYear
             if gameDescription != nil { return }
         }
         
@@ -1721,10 +1733,12 @@ struct FriendWantToPlayDetailSheet: View {
                 let curated_description: String?
                 let curated_genres: [String]?
                 let curated_tags: [String]?
+                let curated_platforms: [String]?
+                let curated_release_year: Int?
             }
             let infos: [GameInfo] = try await SupabaseManager.shared.client
                 .from("games")
-                .select("rawg_id, metacritic_score, description, curated_description, curated_genres, curated_tags")
+                .select("rawg_id, metacritic_score, description, curated_description, curated_genres, curated_tags, curated_platforms, curated_release_year")
                 .eq("id", value: game.gameId)
                 .limit(1)
                 .execute()
@@ -1734,10 +1748,12 @@ struct FriendWantToPlayDetailSheet: View {
             metacriticScore = info.metacritic_score
             curatedGenres = info.curated_genres
             curatedTags = info.curated_tags
+            curatedPlatforms = info.curated_platforms
+            curatedReleaseYear = info.curated_release_year
 
             if let desc = info.curated_description ?? info.description, !desc.isEmpty {
                 gameDescription = desc
-                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: nil, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: nil, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
                 return
             }
             
@@ -1745,11 +1761,11 @@ struct FriendWantToPlayDetailSheet: View {
             gameDescription = details.gameDescriptionHtml ?? details.gameDescription
 
             if let desc = gameDescription, !desc.isEmpty {
-                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: nil, curatedGenres: info.curated_genres, curatedTags: info.curated_tags)
-                _ = try? await SupabaseManager.shared.client
-                    .from("games")
-                    .update(["description": desc])
-                    .eq("rawg_id", value: info.rawg_id)
+                GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: info.metacritic_score, releaseDate: nil, curatedGenres: info.curated_genres, curatedTags: info.curated_tags, curatedPlatforms: info.curated_platforms, curatedReleaseYear: info.curated_release_year)
+                    _ = try? await SupabaseManager.shared.client
+                        .from("games")
+                        .update(["description": desc])
+                        .eq("rawg_id", value: info.rawg_id)
                     .execute()
             }
         } catch {

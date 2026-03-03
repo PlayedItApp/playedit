@@ -11,6 +11,8 @@ class GameMetadataCache {
         let releaseDate: String?
         let curatedGenres: [String]?
         let curatedTags: [String]?
+        let curatedPlatforms: [String]?
+        let curatedReleaseYear: Int?
     }
     
     private var cache: [Int: CachedMetadata] = [:] // keyed by gameId
@@ -19,13 +21,15 @@ class GameMetadataCache {
         cache[gameId]
     }
     
-    func set(gameId: Int, description: String?, metacriticScore: Int?, releaseDate: String?, curatedGenres: [String]? = nil, curatedTags: [String]? = nil) {
+    func set(gameId: Int, description: String?, metacriticScore: Int?, releaseDate: String?, curatedGenres: [String]? = nil, curatedTags: [String]? = nil, curatedPlatforms: [String]? = nil, curatedReleaseYear: Int? = nil) {
         cache[gameId] = CachedMetadata(
             description: description,
             metacriticScore: metacriticScore,
             releaseDate: releaseDate,
             curatedGenres: curatedGenres,
-            curatedTags: curatedTags
+            curatedTags: curatedTags,
+            curatedPlatforms: curatedPlatforms,
+            curatedReleaseYear: curatedReleaseYear
         )
     }
 }

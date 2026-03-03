@@ -19,6 +19,8 @@ struct GameDetailFromFriendView: View {
     @State private var prediction: GamePrediction? = nil
     @State private var curatedGenres: [String]? = nil
     @State private var curatedTags: [String]? = nil
+    @State private var curatedPlatforms: [String]? = nil
+    @State private var curatedReleaseYear: Int? = nil
     
     // Check if current user has this game ranked
     private var iHaveThisGame: Bool {
@@ -114,7 +116,7 @@ struct GameDetailFromFriendView: View {
         GameInfoHeroView(
             title: userGame.gameTitle,
             coverURL: userGame.gameCoverURL,
-            releaseDate: userGame.gameReleaseDate,
+            releaseDate: curatedReleaseYear.map { String($0) } ?? userGame.gameReleaseDate,
             metacriticScore: metacriticScore,
             gameDescription: gameDescription,
             curatedGenres: curatedGenres,
@@ -431,14 +433,16 @@ struct GameDetailFromFriendView: View {
             gameDescription = cached.description
             curatedGenres = cached.curatedGenres
             curatedTags = cached.curatedTags
+            curatedPlatforms = cached.curatedPlatforms
+            curatedReleaseYear = cached.curatedReleaseYear
             if gameDescription != nil { return }
         }
         
         do {
-            struct GameDesc: Decodable { let rawg_id: Int; let description: String?; let curated_description: String?; let curated_genres: [String]?; let curated_tags: [String]? }
+            struct GameDesc: Decodable { let rawg_id: Int; let description: String?; let curated_description: String?; let curated_genres: [String]?; let curated_tags: [String]?; let curated_platforms: [String]?; let curated_release_year: Int? }
             let results: [GameDesc] = try await supabase.client
                 .from("games")
-                .select("rawg_id, description, curated_description, curated_genres, curated_tags")
+                .select("rawg_id, description, curated_description, curated_genres, curated_tags, curated_platforms, curated_release_year")
                 .eq("rawg_id", value: userGame.gameRawgId ?? userGame.gameId)
                 .limit(1)
                 .execute()
@@ -448,10 +452,12 @@ struct GameDetailFromFriendView: View {
                         
             curatedGenres = result.curated_genres
             curatedTags = result.curated_tags
+            curatedPlatforms = result.curated_platforms
+            curatedReleaseYear = result.curated_release_year
             
             if let desc = result.curated_description ?? result.description, !desc.isEmpty {
                 gameDescription = desc
-                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags)
+                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: result.curated_genres, curatedTags: result.curated_tags, curatedPlatforms: result.curated_platforms, curatedReleaseYear: result.curated_release_year)
                 return
             }
             
@@ -461,8 +467,8 @@ struct GameDetailFromFriendView: View {
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
             
             if let desc = gameDescription, !desc.isEmpty {
-                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags)
-                _ = try? await SupabaseManager.shared.client
+                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
+                    _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])
                     .eq("rawg_id", value: result.rawg_id)
