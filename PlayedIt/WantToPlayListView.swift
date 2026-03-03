@@ -105,6 +105,9 @@ struct WantToPlayListView: View {
         } message: {
             Text("This will remove all priority ordering. Your games stay, just the order gets wiped.")
         }
+        .sheet(item: $selectedGame) { game in
+            WantToPlayDetailSheet(game: game, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0)
+        }
         .sheet(item: $gameToLog, onDismiss: {
             Task {
                 await loadGames()
