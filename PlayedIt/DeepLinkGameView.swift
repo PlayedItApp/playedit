@@ -110,7 +110,8 @@ struct DeepLinkGameView: View {
                     metacriticScore: metacriticScore,
                     gameDescription: gameDescription,
                     curatedGenres: curatedGenres,
-                    curatedTags: curatedTags
+                    curatedTags: curatedTags,
+curatedPlatforms: curatedPlatforms
                 )
                 .padding(.top, 20)
                 

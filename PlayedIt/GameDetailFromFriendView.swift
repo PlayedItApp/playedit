@@ -120,7 +120,8 @@ struct GameDetailFromFriendView: View {
             metacriticScore: metacriticScore,
             gameDescription: gameDescription,
             curatedGenres: curatedGenres,
-            curatedTags: curatedTags
+            curatedTags: curatedTags,
+curatedPlatforms: curatedPlatforms
         )
         .padding(.top, 20)
     }
@@ -467,7 +468,8 @@ struct GameDetailFromFriendView: View {
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
             
             if let desc = gameDescription, !desc.isEmpty {
-                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
+                GameMetadataCache.shared.set(gameId: userGame.gameId, description: desc, metacriticScore: metacriticScore, releaseDate: userGame.gameReleaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags,
+curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                     _ = try? await SupabaseManager.shared.client
                     .from("games")
                     .update(["description": desc])

@@ -423,7 +423,8 @@ struct RecommendationDetailSheet: View {
                         gameDescription: gameDescription,
                         isLoadingDescription: isLoadingDescription,
                         curatedGenres: curatedGenres,
-                        curatedTags: curatedTags
+                        curatedTags: curatedTags,
+curatedPlatforms: curatedPlatforms
                     )
                     .padding(.top, 12)
                     
@@ -538,7 +539,7 @@ struct RecommendationDetailSheet: View {
             if let desc = infos.first?.curated_description ?? infos.first?.description, !desc.isEmpty {
                 let cleaned = desc.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
                 gameDescription = cleaned
-                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: infos.first?.release_date, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
+                GameMetadataCache.shared.set(gameId: recommendation.gameRawgId, description: cleaned, metacriticScore: metacriticScore, releaseDate: infos.first?.release_date, curatedGenres: curatedGenres, curatedTags: curatedTags,curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                 isLoadingDescription = false
                 return
             }

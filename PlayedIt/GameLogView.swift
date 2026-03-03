@@ -97,6 +97,9 @@ struct GameLogView: View {
     }
     
     private var quickPlatforms: [String] {
+        if let curated = curatedPlatforms, !curated.isEmpty {
+            return curated
+        }
         guard let userId = supabase.currentUser?.id else { return Self.popularPlatforms }
         let used = Self.usedPlatforms(for: userId)
         if used.isEmpty {
@@ -117,7 +120,8 @@ struct GameLogView: View {
                             gameDescription: gameDescription,
                             isLoadingDescription: isLoadingDescription,
                             curatedGenres: curatedGenres,
-                            curatedTags: curatedTags
+                            curatedTags: curatedTags,
+curatedPlatforms: curatedPlatforms
                         )
                         .padding(.top, 16)
                     

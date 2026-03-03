@@ -10,6 +10,7 @@ struct GameInfoHeroView: View {
     var isLoadingDescription: Bool = false
     var curatedGenres: [String]? = nil
     var curatedTags: [String]? = nil
+    var curatedPlatforms: [String]? = nil
     
     var body: some View {
         VStack(spacing: 16) {
@@ -61,6 +62,15 @@ struct GameInfoHeroView: View {
                         }
                     }
                 }
+            }
+            
+            // Platforms
+            if let platforms = curatedPlatforms, !platforms.isEmpty {
+                Text(platforms.map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }.joined(separator: " · "))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
             }
             
             // Description

@@ -20,6 +20,7 @@ struct WantToPlayListView: View {
     @State private var gameToReorder: WantToPlayGame? = nil
     @State private var showRankAllSheet = false
     @State private var predictions: [String: GamePrediction] = [:]  // keyed by WantToPlayGame.id
+    @State private var gameMetadata: [Int: (releaseYear: Int?, platforms: [String]?)] = [:]  // keyed by gameId
     @State private var predictionContext: PredictionContext? = nil
     @State private var showRecommendations = false
     @State private var rankedGameCount: Int = 0
@@ -39,6 +40,7 @@ struct WantToPlayListView: View {
         }
         .task {
             await loadGames()
+            await fetchMetadata()
             await fetchPredictions()
         }
         .onReceive(NotificationCenter.default.publisher(for: .wantToPlayShouldRefresh)) { _ in
@@ -206,7 +208,7 @@ struct WantToPlayListView: View {
                     }
                 }, onReorder: {
                     gameToReorder = game
-                }, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0, onTap: {
+                }, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0, releaseYear: gameMetadata[game.gameId]?.releaseYear, platforms: gameMetadata[game.gameId]?.platforms, onTap: {
                         selectedGame = game
                     })
             }
@@ -298,7 +300,7 @@ struct WantToPlayListView: View {
                 }
                 
                 ForEach(unrankedGames) { game in
-                    WantToPlayUnrankedRow(game: game, hasRankedGames: !rankedGames.isEmpty, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0, onRemove: {
+                    WantToPlayUnrankedRow(game: game, hasRankedGames: !rankedGames.isEmpty, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0, releaseYear: gameMetadata[game.gameId]?.releaseYear, platforms: gameMetadata[game.gameId]?.platforms, onRemove: {
                         Task {
                             let _ = await manager.removeGame(gameId: game.gameId)
                             await loadGames()
@@ -332,6 +334,34 @@ struct WantToPlayListView: View {
     // MARK: - Rank All
     private func startRankAll() {
         showRankAllSheet = true
+    }
+    
+    // MARK: - Metadata
+    private func fetchMetadata() async {
+        let allGames = rankedGames + unrankedGames
+        guard !allGames.isEmpty else { return }
+        let gameIds = allGames.map { $0.gameId }
+        
+        struct GameMeta: Decodable {
+            let id: Int
+            let curated_release_year: Int?
+            let curated_platforms: [String]?
+        }
+        
+        do {
+            let rows: [GameMeta] = try await SupabaseManager.shared.client
+                .from("games")
+                .select("id, curated_release_year, curated_platforms")
+                .in("id", values: gameIds)
+                .execute()
+                .value
+            
+            for row in rows {
+                gameMetadata[row.id] = (releaseYear: row.curated_release_year, platforms: row.curated_platforms)
+            }
+        } catch {
+            debugLog("⚠️ Metadata fetch failed: \(error)")
+        }
     }
     
     // MARK: - Predictions
@@ -420,6 +450,8 @@ struct WantToPlayRankedRow: View {
     var onReorder: () -> Void = {}
     var prediction: GamePrediction? = nil
     var myGameCount: Int = 0
+    var releaseYear: Int? = nil
+    var platforms: [String]? = nil
     
     var onTap: () -> Void = {}
         
@@ -439,6 +471,16 @@ struct WantToPlayRankedRow: View {
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(2)
+                
+                if releaseYear != nil || (platforms != nil && !platforms!.isEmpty) {
+                    Text([
+                        releaseYear.map { String($0) == "9999" ? "TBA" : String($0) },
+                        platforms?.prefix(3).joined(separator: " · ")
+                    ].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                        .lineLimit(1)
+                }
                 
                 if let pred = prediction, myGameCount >= 5, pred.predictedPercentile >= 65 || pred.predictedPercentile < 40 {
                     Text("PlayedIt Prediction: \(pred.summaryText)")
@@ -506,6 +548,8 @@ struct WantToPlayUnrankedRow: View {
     let hasRankedGames: Bool
     var prediction: GamePrediction? = nil
     var myGameCount: Int = 0
+    var releaseYear: Int? = nil
+    var platforms: [String]? = nil
     let onRemove: () -> Void
     let onRank: () -> Void
     let onPlaceAtPosition: () -> Void
@@ -529,6 +573,26 @@ struct WantToPlayUnrankedRow: View {
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(2)
+                
+                if let year = releaseYear {
+                    Text(year == 9999 ? "TBA" : String(year))
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                }
+                
+                if let platforms = platforms, !platforms.isEmpty {
+                    let used = (SupabaseManager.shared.currentUser?.id).map { GameLogView.usedPlatforms(for: $0) } ?? []
+                    let sorted = platforms.sorted { a, b in
+                        let aUsed = used.contains(a)
+                        let bUsed = used.contains(b)
+                        if aUsed != bUsed { return aUsed }
+                        return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+                    }
+                    Text(sorted.map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }.joined(separator: " · "))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray.opacity(0.7))
+                        .lineLimit(1)
+                }
                 
                 Button(action: onRank) {
                     HStack(spacing: 4) {
@@ -1489,7 +1553,8 @@ struct FirstTwoComparisonView: View {
                             metacriticScore: metacriticScore,
                             gameDescription: gameDescription,
                             curatedGenres: curatedGenres,
-                            curatedTags: curatedTags
+                            curatedTags: curatedTags,
+                            curatedPlatforms: curatedPlatforms
                         )
                         
                         // Priority position

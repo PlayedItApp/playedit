@@ -475,7 +475,8 @@ struct GameDetailSheet: View {
                         metacriticScore: metacriticScore,
                         gameDescription: gameDescription,
                         curatedGenres: curatedGenres,
-                        curatedTags: curatedTags
+                        curatedTags: curatedTags,
+                        curatedPlatforms: curatedPlatforms
                     )
                     
                     // Rank badge
