@@ -70,7 +70,7 @@ struct CSVImportView: View {
                     gamesToRank = pending.games.map { g in
                         MatchedCSVGame(
                             csvTitle: g.sourceMetadata["csv_title"] ?? g.title,
-                            csvPlatform: g.sourceMetadata["csv_platform"],
+                            csvPlatforms: g.sourceMetadata["csv_platforms"].map { $0.split(separator: ",").map(String.init) } ?? [],
                             csvNotes: g.sourceMetadata["csv_notes"],
                             rawgId: g.rawgId,
                             rawgTitle: g.title,
@@ -319,8 +319,8 @@ struct CSVImportView: View {
                     .lineLimit(1)
                 
                 HStack(spacing: 8) {
-                    if let platform = game.csvPlatform {
-                        Text(platform)
+                    if !game.csvPlatforms.isEmpty {
+                        Text(game.csvPlatforms.joined(separator: ", "))
                             .font(.system(size: 12, design: .rounded))
                             .foregroundStyle(Color.adaptiveGray)
                     }
@@ -451,7 +451,7 @@ struct CSVImportView: View {
                     let original = confirmedForRanking[index]
                     let swapped = MatchedCSVGame(
                         csvTitle: original.csvTitle,
-                        csvPlatform: original.csvPlatform,
+                        csvPlatforms: original.csvPlatforms,
                         csvNotes: original.csvNotes,
                         rawgId: selectedGame.rawgId,
                         rawgTitle: selectedGame.title,
@@ -665,8 +665,8 @@ struct CSVImportView: View {
             var metadata: [String: String] = [
                 "csv_title": game.csvTitle
             ]
-            if let platform = game.csvPlatform {
-                metadata["csv_platform"] = platform
+            if !game.csvPlatforms.isEmpty {
+                metadata["csv_platforms"] = game.csvPlatforms.joined(separator: ",")
             }
             if let notes = game.csvNotes {
                 metadata["csv_notes"] = notes
@@ -694,7 +694,7 @@ struct CSVImportView: View {
             do {
                 debugLog("📋 Parsing CSV from: \(fileURL.lastPathComponent)")
                 parsedEntries = try CSVImportService.shared.parseCSV(from: fileURL)
-                debugLog("📋 Parsed \(parsedEntries.count) entries: \(parsedEntries.map { "\($0.title) | \($0.platform ?? "no platform")" })")
+                debugLog("📋 Parsed \(parsedEntries.count) entries: \(parsedEntries.map { "\($0.title) | \($0.platforms.isEmpty ? "no platform" : $0.platforms.joined(separator: ", "))" })")
                 Task {
                     await fetchExistingRankedIds()
                     await startMatching()
@@ -853,7 +853,7 @@ struct CSVImportView: View {
             debugLog("❌ saveImportedGame GUARD FAILED: userId=\(supabase.currentUser?.id.uuidString ?? "nil"), rawgId=\(game.rawgId?.description ?? "nil")")
             return
         }
-        debugLog("💾 userId=\(userId.uuidString), rawgId=\(rawgId), csvPlatform=\(game.csvPlatform ?? "nil"), csvNotes=\(game.csvNotes ?? "nil")")
+        debugLog("💾 userId=\(userId.uuidString), rawgId=\(rawgId), csvPlatforms=\(game.csvPlatforms), csvNotes=\(game.csvNotes ?? "nil")")
         
         do {
             struct GameInsert: Encodable {
@@ -895,12 +895,7 @@ struct CSVImportView: View {
             debugLog("💾 canonicalId=\(canonicalId)")
             
             // Platform from CSV as array, or empty array if none
-            let platformArray: [AnyJSON] = {
-                if let platform = game.csvPlatform {
-                    return [AnyJSON.string(platform)]
-                }
-                return []
-            }()
+            let platformArray: [AnyJSON] = game.csvPlatforms.map { AnyJSON.string($0) }
             
             debugLog("💾 platformArray=\(platformArray)")
             

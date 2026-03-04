@@ -4,7 +4,7 @@ import Foundation
 struct CSVGameEntry: Identifiable {
     let id = UUID()
     let title: String
-    let platform: String?
+    let platforms: [String]
     let notes: String?
 }
 
@@ -12,7 +12,7 @@ struct CSVGameEntry: Identifiable {
 struct MatchedCSVGame: Identifiable {
     let id = UUID()
     let csvTitle: String
-    let csvPlatform: String?
+    let csvPlatforms: [String]
     let csvNotes: String?
     let rawgId: Int?
     let rawgTitle: String?
@@ -192,11 +192,12 @@ class CSVImportService {
             guard !seenTitles.contains(titleKey) else { continue }
             seenTitles.insert(titleKey)
             
-            let platform: String? = {
-                guard let idx = platformIndex, idx < row.count else { return nil }
+            let platforms: [String] = {
+                guard let idx = platformIndex, idx < row.count else { return [] }
                 let raw = row[idx].trimmingCharacters(in: .whitespaces)
-                guard !raw.isEmpty else { return nil }
-                return Self.normalizePlatform(raw)
+                guard !raw.isEmpty else { return [] }
+                return raw.split(separator: ",")
+                    .compactMap { Self.normalizePlatform($0.trimmingCharacters(in: .whitespaces)) }
             }()
             
             let notes: String? = {
@@ -205,8 +206,8 @@ class CSVImportService {
                 return raw.isEmpty ? nil : raw
             }()
             
-            debugLog("📋 CSV entry: title='\(title)' platform='\(platform ?? "nil")' notes='\(notes ?? "nil")'")
-            entries.append(CSVGameEntry(title: title, platform: platform, notes: notes))
+            debugLog("📋 CSV entry: title='\(title)' platforms='\(platforms)' notes='\(notes ?? "nil")'")
+            entries.append(CSVGameEntry(title: title, platforms: platforms, notes: notes))
         }
         
         guard !entries.isEmpty else {
@@ -242,7 +243,7 @@ class CSVImportService {
                 if let best = results.first {
                     matched.append(MatchedCSVGame(
                         csvTitle: entry.title,
-                        csvPlatform: entry.platform,
+                        csvPlatforms: entry.platforms,
                         csvNotes: entry.notes,
                         rawgId: best.rawgId,
                         rawgTitle: best.title,
@@ -255,7 +256,7 @@ class CSVImportService {
                 } else {
                     matched.append(MatchedCSVGame(
                         csvTitle: entry.title,
-                        csvPlatform: entry.platform,
+                        csvPlatforms: entry.platforms,
                         csvNotes: entry.notes,
                         rawgId: nil,
                         rawgTitle: nil,
@@ -270,7 +271,7 @@ class CSVImportService {
                 debugLog("⚠️ RAWG search failed for '\(entry.title)': \(error)")
                 matched.append(MatchedCSVGame(
                     csvTitle: entry.title,
-                    csvPlatform: entry.platform,
+                    csvPlatforms: entry.platforms,
                     csvNotes: entry.notes,
                     rawgId: nil,
                     rawgTitle: nil,

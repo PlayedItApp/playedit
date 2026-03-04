@@ -37,6 +37,7 @@ struct SteamImportView: View {
     @State private var currentGameId: Int?
     @State private var currentRankingItem: RankingItem?
     @State private var confirmedForRanking: [MatchedSteamGame] = []
+    @State private var selectedForReview: Set<Int> = []
     @State private var showMatchSwapSearch = false
     @State private var swappingGameIndex: Int?
     
@@ -94,6 +95,7 @@ struct SteamImportView: View {
                     currentRankIndex = pending.currentIndex
                     Task {
                         await refreshExistingGames()
+                        selectedForReview = Set(gamesToRank.map { $0.id })
                         phase = .ranking
                     }
                 }
@@ -282,17 +284,28 @@ struct SteamImportView: View {
     private var matchReviewView: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Review Matches")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.adaptiveSlate)
-                    Text("Make sure we found the right games")
-                        .font(.system(size: 14, design: .rounded))
-                        .foregroundStyle(Color.adaptiveGray)
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Review Matches")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
+                        Text("\(selectedForReview.count) selected to rank")
+                            .font(.system(size: 14, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                    }
+                    Spacer()
+                    Button {
+                        if selectedForReview.count == confirmedForRanking.count {
+                            selectedForReview.removeAll()
+                        } else {
+                            selectedForReview = Set(confirmedForRanking.map { $0.id })
+                        }
+                    } label: {
+                        Text(selectedForReview.count == confirmedForRanking.count ? "Deselect All" : "Select All")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primaryBlue)
+                    }
                 }
-                Spacer()
-            }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             
@@ -332,14 +345,14 @@ struct SteamImportView: View {
                 Button {
                     startRankingFromReview()
                 } label: {
-                    Text("Start Ranking (\(confirmedForRanking.count) games)")
+                    Text("Start Ranking (\(selectedForReview.count) games)")
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(confirmedForRanking.isEmpty)
-                .opacity(confirmedForRanking.isEmpty ? 0.4 : 1.0)
+                .disabled(selectedForReview.isEmpty)
+                .opacity(selectedForReview.isEmpty ? 0.4 : 1.0)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
             }
@@ -351,6 +364,11 @@ struct SteamImportView: View {
     
     private func matchReviewRow(game: MatchedSteamGame, index: Int) -> some View {
         HStack(spacing: 12) {
+            // Checkbox
+            Image(systemName: selectedForReview.contains(game.id) ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 22))
+                .foregroundColor(selectedForReview.contains(game.id) ? .primaryBlue : .silver)
+
             // RAWG cover art
             if let coverUrl = game.rawgCoverUrl, let url = URL(string: coverUrl) {
                 AsyncImage(url: url) { image in
@@ -400,21 +418,19 @@ struct SteamImportView: View {
                     .foregroundColor(.primaryBlue)
             }
             .buttonStyle(.plain)
-            
-            // Remove button
-            Button {
-                confirmedForRanking.remove(at: index)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.silver)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if selectedForReview.contains(game.id) {
+                selectedForReview.remove(game.id)
+            } else {
+                selectedForReview.insert(game.id)
+            }
+        }
     }
-    
+
     private func unmatchedReviewRow(game: MatchedSteamGame) -> some View {
         HStack(spacing: 12) {
             // Warning icon placeholder
@@ -865,6 +881,7 @@ struct SteamImportView: View {
             confirmedForRanking = matchedGames.filter {
                 selectedForRanking.contains($0.steamAppId) && $0.isMatched
             }
+            selectedForReview = Set(confirmedForRanking.map { $0.id })
             
             if confirmedForRanking.isEmpty && bookmarkedGames.isEmpty {
                 phase = .error("Couldn't match any of your selected games. Try different ones?")
@@ -957,7 +974,7 @@ struct SteamImportView: View {
     }
     
     private func startRankingFromReview() {
-        gamesToRank = confirmedForRanking
+        gamesToRank = confirmedForRanking.filter { selectedForReview.contains($0.id) }
         
         if gamesToRank.isEmpty {
             phase = .complete
