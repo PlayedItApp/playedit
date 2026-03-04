@@ -305,9 +305,10 @@ struct ProfileView: View {
                     .padding(.top, 8)
                 }
                 .padding(.bottom, 32)
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Profile")
+                    .iPadReadableWidth()
+                }
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showGameSearch, onDismiss: {
                 Task {

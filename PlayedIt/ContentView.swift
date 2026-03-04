@@ -3,6 +3,26 @@ import Supabase
 import Combine
 import UserNotifications
 
+struct iPadReadableWidthModifier: ViewModifier {
+    @Environment(\.horizontalSizeClass) var sizeClass
+    
+    func body(content: Content) -> some View {
+        if sizeClass == .regular {
+            content
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func iPadReadableWidth() -> some View {
+        modifier(iPadReadableWidthModifier())
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var supabase = SupabaseManager.shared
     @State private var isCheckingAuth = true
@@ -880,9 +900,10 @@ struct GameDetailSheet: View {
                     Spacer()
                 }
                 .padding(.top, 24)
-            }
-            .onAppear {
-                if !hasInitialized {
+                    .iPadReadableWidth()
+                }
+                .onAppear {
+                    if !hasInitialized {
                     displayedNotes = game.notes
                     displayedPlatforms = game.platformPlayed.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
                     hasInitialized = true

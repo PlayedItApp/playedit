@@ -157,12 +157,13 @@ struct FriendsView: View {
                 }
             }
             .padding(.vertical, 16)
-        }
-        .background(Color(.systemGroupedBackground))
-        .refreshable {
-            await fetchFriends()
-        }
-        .onAppear {
+                .iPadReadableWidth()
+            }
+            .background(Color(.systemGroupedBackground))
+            .refreshable {
+                await fetchFriends()
+            }
+            .onAppear {
             Task { await fetchFriends() }
         }
     }
@@ -951,9 +952,10 @@ struct FriendProfileView: View {
                     }
                 }
                 .padding(.vertical, 16)
+                    .iPadReadableWidth()
+                }
             }
-        }
-        .navigationTitle(friend.username)
+            .navigationTitle(friend.username)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

@@ -204,6 +204,7 @@ struct FeedView: View {
                 }
             }
             .padding(16)
+            .iPadReadableWidth()
             
             if hasMorePosts && !isLoading {
                 ProgressView()

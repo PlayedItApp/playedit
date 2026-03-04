@@ -63,8 +63,6 @@ async function createAPNsJWT(): Promise<string> {
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 
-  console.log("JWT generated, sig length:", sigBytes.length, "raw:", rawSig.length);
-
   return `${header}.${claims}.${encodedSig}`;
 }
 
@@ -100,13 +98,6 @@ serve(async (req) => {
 
   try {
     const { user_id, title, body, data } = await req.json();
-    
-    console.log("APNS_KEY_ID:", Deno.env.get("APNS_KEY_ID"));
-    console.log("APNS_TEAM_ID:", Deno.env.get("APNS_TEAM_ID"));
-    console.log("APNS_BUNDLE_ID:", Deno.env.get("APNS_BUNDLE_ID"));
-    const pk = Deno.env.get("APNS_PRIVATE_KEY") || "";
-    console.log("APNS_PRIVATE_KEY starts with:", pk.substring(0, 30));
-    console.log("APNS_PRIVATE_KEY length:", pk.length);
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
