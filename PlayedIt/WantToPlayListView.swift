@@ -71,8 +71,8 @@ struct WantToPlayListView: View {
                 existingRankedGames: rankedGames,
                 onComplete: { position in
                     Task {
+                        debugLog("🎯 onComplete fired: placing \(game.gameTitle) (id: \(game.id)) at position \(position)")
                         let _ = await mgr.placeGameAtPosition(gameId: game.id, position: position)
-                        let _ = await mgr.removeGame(gameId: game.gameId)
                         await loadGames()
                     }
                 }
@@ -214,7 +214,6 @@ struct WantToPlayListView: View {
             ForEach(rankedGames) { game in
                 WantToPlayRankedRow(game: game, isReordering: false, onRemove: {
                     Task {
-                        let _ = await manager.removeGame(gameId: game.gameId)
                         await loadGames()
                     }
                 }, onUnrank: {
@@ -330,7 +329,6 @@ struct WantToPlayListView: View {
                             // First game - just place at #1, no sheet
                             Task {
                                 let _ = await manager.placeGameAtPosition(gameId: game.id, position: 1)
-                                let _ = await manager.removeGame(gameId: game.gameId)
                                 await loadGames()
                             }
                         } else {

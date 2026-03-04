@@ -478,7 +478,7 @@ class WantToPlayManager: ObservableObject {
                 ])
                 .execute()
             
-            debugLog("✅ Placed game at position \(position)")
+            debugLog("✅ Placed game \(gameId) at position \(position)")
             return true
         } catch {
             debugLog("❌ Error placing game: \(error)")
@@ -520,7 +520,7 @@ class WantToPlayManager: ObservableObject {
                 ])
                 .execute()
             
-            debugLog("✅ Unranked game")
+            debugLog("✅ Unranked game \(gameId)")
             return true
         } catch {
             debugLog("❌ Error unranking game: \(error)")

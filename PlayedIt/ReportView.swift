@@ -61,6 +61,7 @@ struct ReportView: View {
     @State private var showConfirmation = false
     @State private var submitted = false
     @State private var errorMessage: String?
+    @FocusState private var isDetailsFocused: Bool
     
     var body: some View {
         NavigationStack {
@@ -91,6 +92,7 @@ struct ReportView: View {
                                 .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("Add details...", text: $details, axis: .vertical)
+                                .focused($isDetailsFocused)
                                 .font(.system(size: 17, weight: .regular, design: .rounded))
                                 .lineLimit(3...6)
                                 .padding(12)
@@ -173,6 +175,7 @@ struct ReportView: View {
     private func submitReport() {
         guard let reason = selectedReason else { return }
         
+        isDetailsFocused = false
         isSubmitting = true
         errorMessage = nil
         
@@ -285,7 +288,7 @@ struct ReportButton: View {
                 contentText: contentText,
                 reportedUserId: reportedUserId
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
             }
         )
     }
