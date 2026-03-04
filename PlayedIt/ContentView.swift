@@ -70,7 +70,7 @@ struct ContentView: View {
                 await checkOnboardingStatus()
                 // Small delay lets the first view's images start loading
                 // before we dismiss the splash, so users don't see a flash of placeholders
-                try? await Task.sleep(nanoseconds: 600_000_000) // 0.6s
+                await FeedPreloader.shared.preload()
             }
             
             isCheckingAuth = false

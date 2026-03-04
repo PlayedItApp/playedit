@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 final class ImageCache {
     static let shared = ImageCache()
     
@@ -16,7 +17,6 @@ final class ImageCache {
         
         memoryCache.countLimit = 200
         memoryCache.totalCostLimit = 100 * 1024 * 1024 // 100MB
-        trimDiskCacheIfNeeded()
     }
     
     // MARK: - Get image (memory → disk → network)
@@ -30,13 +30,9 @@ final class ImageCache {
         
         // 2. Disk cache
         let filePath = cacheDirectory.appendingPathComponent(key)
-        let diskImage = await Task.detached(priority: .background, operation: { () -> UIImage? in
-            guard let data = try? Data(contentsOf: filePath),
-                  let image = UIImage(data: data) else { return nil }
-            return image
-        }).value
-        if let image = diskImage {
-            memoryCache.setObject(image, forKey: key as NSString, cost: 0)
+        if let data = try? Data(contentsOf: filePath),
+           let image = UIImage(data: data) {
+            memoryCache.setObject(image, forKey: key as NSString, cost: data.count)
             return image
         }
         
@@ -52,14 +48,11 @@ final class ImageCache {
                 guard let image = UIImage(data: data) else { return nil }
                 
                 // Save to disk
-                let dataToWrite = data
-                Task.detached(priority: .background) {
-                    try? dataToWrite.write(to: filePath, options: .atomic)
-                }
+                try? data.write(to: filePath, options: .atomic)
                 
                 // Save to memory
                 memoryCache.setObject(image, forKey: key as NSString, cost: data.count)
-                trimDiskCacheIfNeeded()
+                
                 return image
             } catch {
                 return nil
@@ -80,49 +73,12 @@ final class ImageCache {
             let filePath = cacheDirectory.appendingPathComponent(key)
             if fileManager.fileExists(atPath: filePath.path) { continue }
             
-            Task { [weak self] in
-                _ = await self?.image(for: urlString)
+            Task {
+                _ = await image(for: urlString)
             }
         }
     }
     
-    // MARK: - Trim disk cache (keep newest files under limit)
-    private func trimDiskCacheIfNeeded(maxBytes: Int = 150 * 1024 * 1024, maxAgeDays: Int = 30) {
-        Task.detached(priority: .background) { [cacheDirectory, fileManager] in
-            guard let files = try? fileManager.contentsOfDirectory(
-                at: cacheDirectory,
-                includingPropertiesForKeys: [.fileSizeKey, .contentAccessDateKey],
-                options: .skipsHiddenFiles
-            ) else { return }
-
-            let cutoff = Date().addingTimeInterval(-Double(maxAgeDays) * 86400)
-
-            // Sort oldest-access first so we evict those first
-            let sorted = files.compactMap { url -> (url: URL, size: Int, accessed: Date)? in
-                let vals = try? url.resourceValues(forKeys: [.fileSizeKey, .contentAccessDateKey])
-                guard let size = vals?.fileSize, let accessed = vals?.contentAccessDate else { return nil }
-                return (url, size, accessed)
-            }.sorted { $0.accessed < $1.accessed }
-
-            // Pass 1: remove anything older than maxAgeDays
-            var remaining = sorted.filter { entry in
-                if entry.accessed < cutoff {
-                    try? fileManager.removeItem(at: entry.url)
-                    return false
-                }
-                return true
-            }
-
-            // Pass 2: evict oldest until under byte limit
-            var totalBytes = remaining.reduce(0) { $0 + $1.size }
-            while totalBytes > maxBytes, let oldest = remaining.first {
-                try? fileManager.removeItem(at: oldest.url)
-                totalBytes -= oldest.size
-                remaining.removeFirst()
-            }
-        }
-    }
-
     // MARK: - Clear cache
     func clearDiskCache() {
         try? fileManager.removeItem(at: cacheDirectory)

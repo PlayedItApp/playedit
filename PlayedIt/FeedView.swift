@@ -22,8 +22,7 @@ struct FeedView: View {
         NavigationStack {
             Group {
                 if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                    FeedSkeletonView()
                 } else if combinedFeed.isEmpty {
                     emptyStateView
                 } else {
@@ -758,8 +757,15 @@ struct FeedView: View {
             
             combinedFeed = combined
                         
-            // Prefetch cover art
-            let coverUrls = feedItems.compactMap { $0.gameCoverURL }
+            // Prefetch cover art for all entry types
+            let coverUrls: [String] = combinedFeed.flatMap { entry -> [String] in
+                switch entry {
+                case .game(let item): return [item.gameCoverURL].compactMap { $0 }
+                case .groupedGames(let group): return group.items.compactMap { $0.gameCoverURL }
+                case .wantToPlay(let wtp): return wtp.items.compactMap { $0.gameCoverURL }
+                case .activity: return []
+                }
+            }
             ImageCache.shared.prefetch(urls: coverUrls)
             
             isLoading = false
