@@ -1914,20 +1914,27 @@ struct FriendGameRow: View {
                 // Game info
                 VStack(alignment: .leading, spacing: 2) {
                     Text(game.gameTitle)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.adaptiveSlate)
-                    .lineLimit(1)
-                
-                if let myRank = myRank {
-                    Text("You: #\(myRank)")
-                        .font(.caption)
-                        .foregroundColor(.primaryBlue)
-                } else {
-                    Text("Not in your list")
-                        .font(.caption)
-                        .foregroundStyle(Color.adaptiveGray)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.adaptiveSlate)
+                        .lineLimit(1)
+                    
+                    if !game.platformPlayed.isEmpty {
+                        Text(game.platformPlayed.joined(separator: " · "))
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.adaptiveGray)
+                            .lineLimit(1)
+                    }
+                    
+                    if let myRank = myRank {
+                        Text("You: #\(myRank)")
+                            .font(.caption)
+                            .foregroundColor(.primaryBlue)
+                    } else {
+                        Text("Not in your list")
+                            .font(.caption)
+                            .foregroundStyle(Color.adaptiveSilver)
+                    }
                 }
-            }
             
             Spacer()
             

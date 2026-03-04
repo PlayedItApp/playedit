@@ -65,11 +65,15 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.3), value: isCheckingAuth)
         .task {
             await supabase.checkSession()
-            isCheckingAuth = false
             
             if supabase.isAuthenticated {
                 await checkOnboardingStatus()
+                // Small delay lets the first view's images start loading
+                // before we dismiss the splash, so users don't see a flash of placeholders
+                try? await Task.sleep(nanoseconds: 600_000_000) // 0.6s
             }
+            
+            isCheckingAuth = false
         }
         .onChange(of: supabase.isAuthenticated) { _, isAuth in
             if isAuth {
@@ -120,6 +124,7 @@ private func checkOnboardingStatus() async {
 
 // MARK: - Splash View
 struct SplashView: View {
+    @State private var isPulsing = false
     var body: some View {
         VStack(spacing: 16) {
             Image("Logo")
@@ -127,6 +132,9 @@ struct SplashView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 100, height: 100)
                 .clipShape(RoundedRectangle(cornerRadius: 22))
+                .scaleEffect(isPulsing ? 1.05 : 1.0)
+                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isPulsing)
+                .onAppear { isPulsing = true }
             
             HStack(spacing: 0) {
                 Text("played")
