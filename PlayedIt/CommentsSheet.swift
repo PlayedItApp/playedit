@@ -5,7 +5,7 @@ struct CommentsSheet: View {
     let feedItem: FeedItem
     let onDismiss: () -> Void
     
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var comments: [FeedComment] = []
     @State private var newComment = ""
     @State private var isLoading = true

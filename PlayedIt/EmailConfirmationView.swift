@@ -3,7 +3,7 @@ import Supabase
 
 struct EmailConfirmationView: View {
     let email: String
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var isChecking = false
     @State private var showLogin = false
     @State private var resendCooldown = 0

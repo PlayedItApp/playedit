@@ -3,7 +3,7 @@ import Supabase
 
 struct DeepLinkGameView: View {
     let gameId: Int  // RAWG ID from the deep link
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @Environment(\.dismiss) private var dismiss
     
     @State private var isLoading = true
@@ -448,6 +448,7 @@ curatedPlatforms: curatedPlatforms
                 let game_id: Int
                 let rank_position: Int
                 let canonical_game_id: Int?
+                let user_id: String
             }
             let myGameRows: [MyGameRow] = try await supabase.client
                 .from("user_games")
@@ -459,17 +460,20 @@ curatedPlatforms: curatedPlatforms
             let myMapped = myGameRows.map { (canonicalId: $0.canonical_game_id ?? $0.game_id, rank: $0.rank_position) }
             
             let rankedFriendIds = Array(Set(rankings.map { $0.user_id })).filter { $0.lowercased() != userId.uuidString.lowercased() }
-            var friendGameCache: [String: [(canonicalId: Int, rank: Int)]] = [:]
-            for friendId in rankedFriendIds {
-                let fGames: [MyGameRow] = try await supabase.client
-                    .from("user_games")
-                    .select("game_id, rank_position, canonical_game_id")
-                    .eq("user_id", value: friendId)
-                    .not("rank_position", operator: .is, value: "null")
-                    .execute()
-                    .value
-                friendGameCache[friendId.lowercased()] = fGames.map { (canonicalId: $0.canonical_game_id ?? $0.game_id, rank: $0.rank_position) }
-            }
+                var friendGameCache: [String: [(canonicalId: Int, rank: Int)]] = [:]
+                if !rankedFriendIds.isEmpty {
+                    let allFriendGames: [MyGameRow] = try await supabase.client
+                        .from("user_games")
+                        .select("game_id, rank_position, canonical_game_id, user_id")
+                        .in("user_id", values: rankedFriendIds)
+                        .not("rank_position", operator: .is, value: "null")
+                        .execute()
+                        .value
+                    for game in allFriendGames {
+                        let key = game.user_id.lowercased()
+                        friendGameCache[key, default: []].append((canonicalId: game.canonical_game_id ?? game.game_id, rank: game.rank_position))
+                    }
+                }
             
             var results: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
             

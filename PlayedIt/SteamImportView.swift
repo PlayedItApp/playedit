@@ -17,7 +17,7 @@ enum SteamImportPhase: Equatable {
 
 struct SteamImportView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @ObservedObject var wantToPlayManager = WantToPlayManager.shared
     
     @State private var phase: SteamImportPhase = .ready

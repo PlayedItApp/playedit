@@ -3,7 +3,7 @@ import AuthenticationServices
 import CryptoKit
 
 struct LoginView: View {
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     
     @State private var email = ""
     @State private var password = ""

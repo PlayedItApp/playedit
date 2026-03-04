@@ -24,7 +24,7 @@ extension View {
 }
 
 struct ContentView: View {
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var isCheckingAuth = true
     @State private var needsOnboarding = false
     @State private var isOnboardingComplete = false
@@ -151,7 +151,7 @@ struct MainTabView: View {
     @State private var pendingRequestCount = 0
     @State private var unreadNotificationCount = 0
     @State private var showWhatsNew = false
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @AppStorage("profileNudgeDismissCount") private var profileNudgeDismissCount = 0
     @State private var userAvatarURL: String?
     @State private var userUsername: String = ""
@@ -442,7 +442,7 @@ struct GameDetailSheet: View {
     let rank: Int
     var onRankUpdated: (() async -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     
     @State private var showComparison = false
     @State private var existingUserGames: [UserGame] = []

@@ -475,3 +475,9 @@ entrypoint = "./functions/get-suggested-friends/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/get-suggested-friends/*.html" ]
+
+[functions.moderate-text]
+enabled = true
+verify_jwt = true
+import_map = "./functions/moderate-text/deno.json"
+entrypoint = "./functions/moderate-text/index.ts"

@@ -15,21 +15,28 @@ class GameMetadataCache {
         let curatedReleaseYear: Int?
     }
     
-    private var cache: [Int: CachedMetadata] = [:] // keyed by gameId
+    private var cache: [Int: CachedMetadata] = [:]
+    private let lock = NSLock()
+    private let maxEntries = 500
     
     func get(gameId: Int) -> CachedMetadata? {
-        cache[gameId]
+        lock.withLock { cache[gameId] }
     }
     
     func set(gameId: Int, description: String?, metacriticScore: Int?, releaseDate: String?, curatedGenres: [String]? = nil, curatedTags: [String]? = nil, curatedPlatforms: [String]? = nil, curatedReleaseYear: Int? = nil) {
-        cache[gameId] = CachedMetadata(
-            description: description,
-            metacriticScore: metacriticScore,
-            releaseDate: releaseDate,
-            curatedGenres: curatedGenres,
-            curatedTags: curatedTags,
-            curatedPlatforms: curatedPlatforms,
-            curatedReleaseYear: curatedReleaseYear
-        )
+        lock.withLock {
+            if cache.count >= maxEntries, let firstKey = cache.keys.first {
+                cache.removeValue(forKey: firstKey)
+            }
+            cache[gameId] = CachedMetadata(
+                description: description,
+                metacriticScore: metacriticScore,
+                releaseDate: releaseDate,
+                curatedGenres: curatedGenres,
+                curatedTags: curatedTags,
+                curatedPlatforms: curatedPlatforms,
+                curatedReleaseYear: curatedReleaseYear
+            )
+        }
     }
 }

@@ -69,7 +69,7 @@ struct ReportView: View {
                     
                     // Header
                     Text("What's the issue?")
-                        .font(.custom("Nunito-Bold", size: 22))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundColor(Color.adaptiveSlate)
                     
                     // Reason selection
@@ -87,11 +87,11 @@ struct ReportView: View {
                     if selectedReason != nil {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Anything else? (optional)")
-                                .font(.custom("Nunito-SemiBold", size: 16))
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color.adaptiveSlate)
                             
                             TextField("Add details...", text: $details, axis: .vertical)
-                                .font(.custom("Nunito-Regular", size: 17))
+                                .font(.system(size: 17, weight: .regular, design: .rounded))
                                 .lineLimit(3...6)
                                 .padding(12)
                                 .background(Color.secondaryBackground)
@@ -103,7 +103,7 @@ struct ReportView: View {
                     // Error message
                     if let errorMessage {
                         Text(errorMessage)
-                            .font(.custom("Nunito-Regular", size: 14))
+                            .font(.system(size: 14, weight: .regular, design: .rounded))
                             .foregroundColor(Color.error)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
@@ -147,7 +147,7 @@ struct ReportView: View {
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button("Cancel") { dismiss() }
-                            .font(.custom("Nunito-SemiBold", size: 16))
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .foregroundStyle(Color.adaptiveGray)
                     }
                 }

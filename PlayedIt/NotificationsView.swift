@@ -3,7 +3,7 @@ import Supabase
 import UserNotifications
 
 struct NotificationsView: View {
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var notifications: [AppNotification] = []
     @State private var isLoading = true
     @State private var selectedFeedItem: FeedItem?

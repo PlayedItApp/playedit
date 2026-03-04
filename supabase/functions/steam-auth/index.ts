@@ -17,7 +17,25 @@ serve(async (req) => {
   // HANDLE GET — this is the Steam OpenID callback redirect
   if (req.method === "GET") {
     const params = Object.fromEntries(url.searchParams.entries());
-    const userId = params["userId"];
+    const state = params["state"];
+    if (!state) {
+      return Response.redirect("playedit://steam-callback?error=missing_state");
+    }
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    const { data: stateRow } = await supabase
+      .from("steam_auth_state")
+      .select("user_id, expires_at")
+      .eq("state", state)
+      .single();
+    if (!stateRow || new Date(stateRow.expires_at) < new Date()) {
+      return Response.redirect("playedit://steam-callback?error=invalid_state");
+    }
+    await supabase.from("steam_auth_state").delete().eq("state", state);
+    const userId = stateRow.user_id;
 
     // Validate with Steam
     const validationParams = new URLSearchParams();
@@ -53,12 +71,6 @@ serve(async (req) => {
       const steamId = steamIdMatch[1];
 
       // Save to user profile
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        { auth: { autoRefreshToken: false, persistSession: false } }
-      );
-
       await supabase
         .from("users")
         .update({ steam_id: steamId, steam_connected_at: new Date().toISOString() })
@@ -77,11 +89,22 @@ serve(async (req) => {
     const { action, userId } = await req.json();
 
     if (action === "get_login_url") {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      );
+      const state = crypto.randomUUID();
+      await supabase.from("steam_auth_state").insert({
+        state,
+        user_id: userId,
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 min
+      });
       const returnTo = "https://api.playedit.app";
       const openIdParams = new URLSearchParams({
         "openid.ns": "http://specs.openid.net/auth/2.0",
         "openid.mode": "checkid_setup",
-        "openid.return_to": returnTo + "?userId=" + userId,
+        "openid.return_to": returnTo + "?state=" + state,
         "openid.realm": returnTo,
         "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
         "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",

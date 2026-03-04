@@ -11,7 +11,7 @@ struct ResetRankingsView: View {
     let onComplete: () -> Void
     
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     
     @State private var shuffledGames: [UserGame] = []
     @State private var rankedSoFar: [UserGame] = []

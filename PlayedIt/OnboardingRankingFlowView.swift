@@ -5,7 +5,7 @@ struct OnboardingRankingFlowView: View {
     let games: [OnboardingGame]
     let onComplete: () -> Void
     
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var currentIndex = 0
     @State private var existingUserGames: [UserGame] = []
     @State private var showComparison = false

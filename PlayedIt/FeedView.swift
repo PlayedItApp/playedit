@@ -4,7 +4,7 @@ import UserNotifications
 
 struct FeedView: View {
     @Binding var unreadNotificationCount: Int
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var feedItems: [FeedItem] = []
     @State private var combinedFeed: [FeedEntry] = []
     @State private var isLoading = true
@@ -228,6 +228,21 @@ struct FeedView: View {
     private func toggleLike(for item: FeedItem) {
         guard let userId = supabase.currentUser?.id else { return }
         
+        // Optimistic update
+        combinedFeed = combinedFeed.map { entry in
+            guard case .game(let existing) = entry, existing.feedPostId == item.feedPostId else { return entry }
+            let updated = FeedItem(
+                id: existing.id, feedPostId: existing.feedPostId, userGameId: existing.userGameId,
+                userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
+                gameId: existing.gameId, gameTitle: existing.gameTitle, gameCoverURL: existing.gameCoverURL,
+                rankPosition: existing.rankPosition, loggedAt: existing.loggedAt, batchSource: existing.batchSource,
+                likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                commentCount: existing.commentCount,
+                isLikedByMe: !existing.isLikedByMe
+            )
+            return .game(updated)
+        }
+        
         Task {
             do {
                 if item.isLikedByMe {
@@ -248,10 +263,21 @@ struct FeedView: View {
                         ])
                         .execute()
                 }
-                
-                await fetchFeed()
-                
             } catch {
+                // Revert on failure
+                combinedFeed = combinedFeed.map { entry in
+                    guard case .game(let existing) = entry, existing.feedPostId == item.feedPostId else { return entry }
+                    let reverted = FeedItem(
+                        id: existing.id, feedPostId: existing.feedPostId, userGameId: existing.userGameId,
+                        userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
+                        gameId: existing.gameId, gameTitle: existing.gameTitle, gameCoverURL: existing.gameCoverURL,
+                        rankPosition: existing.rankPosition, loggedAt: existing.loggedAt, batchSource: existing.batchSource,
+                        likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                        commentCount: existing.commentCount,
+                        isLikedByMe: !existing.isLikedByMe
+                    )
+                    return .game(reverted)
+                }
                 debugLog("❌ Error toggling like: \(error)")
             }
         }
@@ -259,6 +285,19 @@ struct FeedView: View {
     
     private func toggleGroupLike(for group: GroupedFeedItem) {
         guard let userId = supabase.currentUser?.id else { return }
+        
+        combinedFeed = combinedFeed.map { entry in
+            guard case .groupedGames(let existing) = entry, existing.feedPostId == group.feedPostId else { return entry }
+            let updated = GroupedFeedItem(
+                id: existing.id, userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
+                items: existing.items, batchSource: existing.batchSource, mostRecentDate: existing.mostRecentDate,
+                feedPostId: existing.feedPostId,
+                likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                commentCount: existing.commentCount,
+                isLikedByMe: !existing.isLikedByMe
+            )
+            return .groupedGames(updated)
+        }
         
         Task {
             do {
@@ -279,10 +318,19 @@ struct FeedView: View {
                         ])
                         .execute()
                 }
-                
-                await fetchFeed()
-                
             } catch {
+                combinedFeed = combinedFeed.map { entry in
+                    guard case .groupedGames(let existing) = entry, existing.feedPostId == group.feedPostId else { return entry }
+                    let reverted = GroupedFeedItem(
+                        id: existing.id, userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
+                        items: existing.items, batchSource: existing.batchSource, mostRecentDate: existing.mostRecentDate,
+                        feedPostId: existing.feedPostId,
+                        likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                        commentCount: existing.commentCount,
+                        isLikedByMe: !existing.isLikedByMe
+                    )
+                    return .groupedGames(reverted)
+                }
                 debugLog("❌ Error toggling group like: \(error)")
             }
         }
@@ -290,6 +338,18 @@ struct FeedView: View {
     
     private func toggleWantToPlayLike(for wtp: WantToPlayGroupItem) {
         guard let userId = supabase.currentUser?.id else { return }
+        
+        combinedFeed = combinedFeed.map { entry in
+            guard case .wantToPlay(let existing) = entry, existing.feedPostId == wtp.feedPostId else { return entry }
+            let updated = WantToPlayGroupItem(
+                id: existing.id, userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
+                items: existing.items, mostRecentDate: existing.mostRecentDate, feedPostId: existing.feedPostId,
+                likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                commentCount: existing.commentCount,
+                isLikedByMe: !existing.isLikedByMe
+            )
+            return .wantToPlay(updated)
+        }
         
         Task {
             do {
@@ -310,44 +370,75 @@ struct FeedView: View {
                         ])
                         .execute()
                 }
-                
-                await fetchFeed()
             } catch {
+                combinedFeed = combinedFeed.map { entry in
+                    guard case .wantToPlay(let existing) = entry, existing.feedPostId == wtp.feedPostId else { return entry }
+                    let reverted = WantToPlayGroupItem(
+                        id: existing.id, userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
+                        items: existing.items, mostRecentDate: existing.mostRecentDate, feedPostId: existing.feedPostId,
+                        likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                        commentCount: existing.commentCount,
+                        isLikedByMe: !existing.isLikedByMe
+                    )
+                    return .wantToPlay(reverted)
+                }
                 debugLog("❌ Error toggling want to play like: \(error)")
             }
         }
     }
     
     private func toggleActivityLike(for item: ActivityFeedItem) {
-            guard let userId = supabase.currentUser?.id else { return }
-            
-            Task {
-                do {
-                    if item.isLikedByMe {
-                        try await supabase.client
-                            .from("feed_reactions")
-                            .delete()
-                            .eq("feed_post_id", value: item.feedPostId)
-                            .eq("user_id", value: userId.uuidString)
-                            .execute()
-                    } else {
-                        try await supabase.client
-                            .from("feed_reactions")
-                            .insert([
-                                "feed_post_id": item.feedPostId,
-                                "user_id": userId.uuidString,
-                                "emoji": "❤️"
-                            ])
-                            .execute()
-                    }
-                    
-                    await fetchFeed()
-                    
-                } catch {
-                    debugLog("❌ Error toggling activity like: \(error)")
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        combinedFeed = combinedFeed.map { entry in
+            guard case .activity(let existing) = entry, existing.feedPostId == item.feedPostId else { return entry }
+            let updated = ActivityFeedItem(
+                id: existing.id, feedPostId: existing.feedPostId, userId: existing.userId,
+                username: existing.username, avatarURL: existing.avatarURL, activityType: existing.activityType,
+                createdAt: existing.createdAt,
+                likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                commentCount: existing.commentCount,
+                isLikedByMe: !existing.isLikedByMe
+            )
+            return .activity(updated)
+        }
+        
+        Task {
+            do {
+                if item.isLikedByMe {
+                    try await supabase.client
+                        .from("feed_reactions")
+                        .delete()
+                        .eq("feed_post_id", value: item.feedPostId)
+                        .eq("user_id", value: userId.uuidString)
+                        .execute()
+                } else {
+                    try await supabase.client
+                        .from("feed_reactions")
+                        .insert([
+                            "feed_post_id": item.feedPostId,
+                            "user_id": userId.uuidString,
+                            "emoji": "❤️"
+                        ])
+                        .execute()
                 }
+            } catch {
+                combinedFeed = combinedFeed.map { entry in
+                    guard case .activity(let existing) = entry, existing.feedPostId == item.feedPostId else { return entry }
+                    let reverted = ActivityFeedItem(
+                        id: existing.id, feedPostId: existing.feedPostId, userId: existing.userId,
+                        username: existing.username, avatarURL: existing.avatarURL, activityType: existing.activityType,
+                        createdAt: existing.createdAt,
+                        likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
+                        commentCount: existing.commentCount,
+                        isLikedByMe: !existing.isLikedByMe
+                    )
+                    return .activity(reverted)
+                }
+                debugLog("❌ Error toggling activity like: \(error)")
             }
         }
+    }
 
     
     private func fetchFeed() async {
@@ -1469,7 +1560,7 @@ struct ActivityFeedRow: View {
 struct FeedGameDetailSheet: View {
     let item: FeedItem
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var userGame: UserGame? = nil
     @State private var friend: Friend? = nil
     @State private var myGames: [UserGame] = []

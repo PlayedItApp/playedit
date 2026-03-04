@@ -193,14 +193,14 @@ class SupabaseManager: ObservableObject {
     
     // MARK: - Sign Out
     func signOut() async {
-        do {
-            try await client.auth.signOut()
+            do {
+                try await client.auth.signOut()
+            } catch {
+                errorMessage = parseError(error)
+            }
             self.currentUser = nil
             self.isAuthenticated = false
-        } catch {
-            errorMessage = parseError(error)
         }
-    }
     
     // MARK: - Custom Password Reset (bypasses Supabase email)
     func requestPasswordReset(email: String) async -> Bool {

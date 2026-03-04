@@ -583,7 +583,7 @@ class WantToPlayManager: ObservableObject {
     
     // MARK: - Remove game by RAWG ID (for post-ranking cleanup)
     func removeGameIfPresent(rawgId: Int) async {
-        guard myWantToPlayIds.contains(rawgId) else { return }
+        guard myWantToPlayRawgIds.contains(rawgId) || myWantToPlayIds.contains(rawgId) else { return }
         let success = await removeGame(gameId: rawgId)
         if success {
             debugLog("🧹 Auto-removed \(rawgId) from Want to Play after ranking")

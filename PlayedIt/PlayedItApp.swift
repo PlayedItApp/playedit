@@ -10,7 +10,7 @@ struct PlayedItApp: App {
     @State private var pendingDeepLinkUsername: String?
     @State private var deepLinkGameId: Int?
     @State private var pendingDeepLinkGameId: Int?
-    @ObservedObject private var supabase = SupabaseManager.shared
+    @StateObject private var supabase = SupabaseManager.shared
     @StateObject private var appearanceManager = AppearanceManager()
     
     var sharedModelContainer: ModelContainer = {
@@ -29,6 +29,7 @@ struct PlayedItApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(SupabaseManager.shared)
                 .preferredColorScheme(appearanceManager.colorScheme)
                 .onAppear {
                     let resolved: ColorScheme

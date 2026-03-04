@@ -372,72 +372,91 @@ class RecommendationManager: ObservableObject {
         // Only friends with 70%+ taste match
         let qualifyingFriends = context.friends.filter { $0.tasteMatch >= 70 }
         
+        // Collect all candidate (gameId, friend metadata) pairs without querying yet
+        struct PendingCandidate {
+            let gameId: Int
+            let friendUserId: String
+            let friendUsername: String
+            let friendRank: Int
+            let friendTotal: Int
+        }
+        var seen: Set<Int> = []
+        var pending: [PendingCandidate] = []
+
         for friend in qualifyingFriends {
-            // Top 50% of their games
             let topHalfCount = max(1, friend.games.count / 2)
             let topGames = friend.games.sorted { $0.rankPosition < $1.rankPosition }.prefix(topHalfCount)
-            
             for friendGame in topGames {
                 guard !excludedIds.contains(friendGame.gameId) else { continue }
-                guard !candidates.contains(where: { $0.gameId == friendGame.gameId }) else { continue }
-                
-                // Fetch game details from games table
-                struct GameInfo: Decodable {
-                    let id: Int
-                    let rawg_id: Int
-                    let title: String
-                    let cover_url: String?
-                    let genres: [String]?
-                    let tags: [String]?
-                    let curated_genres: [String]?
-                    let curated_tags: [String]?
-                    let curated_platforms: [String]?
-                    let metacritic_score: Int?
-                    let description: String?
-                }
-                
-                do {
-                    let infos: [GameInfo] = try await supabase.client
-                        .from("games")
-                        .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, curated_platforms, metacritic_score")
-                        .eq("id", value: friendGame.gameId)
-                        .limit(1)
-                        .execute()
-                        .value
-                    
-                    guard let info = infos.first else { continue }
-                                        
-                    // Skip title variants of already-ranked games
-                    let candidateBase = baseTitle(info.title)
-                    if rankedBaseTitles.contains(candidateBase) {
-                        debugLog("🚫 Skipping variant: \(info.title) → base: \(candidateBase)")
-                        continue
-                    }
-                    
-                    // Skip if no curated platforms or no overlap with owned platforms
-                    guard let curatedPlats = info.curated_platforms, !curatedPlats.isEmpty else { continue }
-                    if !ownedPlatforms.isEmpty {
-                        guard !Set(curatedPlats).intersection(ownedPlatforms).isEmpty else { continue }
-                    }
-                    
-                    candidates.append((
-                        gameId: info.id,
-                        rawgId: info.rawg_id,
-                        title: info.title,
-                        coverUrl: info.cover_url,
-                        genres: info.curated_genres ?? info.genres ?? [],
-                        tags: info.curated_tags ?? info.tags ?? [],
-                        metacritic: info.metacritic_score,
-                        source: "friend_ranked",
-                        sourceFriendId: friend.userId,
-                        sourceFriendName: friend.username,
-                        sourceFriendRank: friendGame.rankPosition,
-                        sourceFriendTotal: friend.games.count
-                    ))
-                } catch {
+                guard seen.insert(friendGame.gameId).inserted else { continue }
+                pending.append(PendingCandidate(
+                    gameId: friendGame.gameId,
+                    friendUserId: friend.userId,
+                    friendUsername: friend.username,
+                    friendRank: friendGame.rankPosition,
+                    friendTotal: friend.games.count
+                ))
+            }
+        }
+
+        guard !pending.isEmpty else { return [] }
+
+        // Single batch query for all candidate game details
+        struct GameInfo: Decodable {
+            let id: Int
+            let rawg_id: Int
+            let title: String
+            let cover_url: String?
+            let genres: [String]?
+            let tags: [String]?
+            let curated_genres: [String]?
+            let curated_tags: [String]?
+            let curated_platforms: [String]?
+            let metacritic_score: Int?
+        }
+
+        do {
+            let allGameIds = pending.map { $0.gameId }
+            let infos: [GameInfo] = try await supabase.client
+                .from("games")
+                .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, curated_platforms, metacritic_score")
+                .in("id", values: allGameIds)
+                .execute()
+                .value
+
+            let infoMap = Dictionary(uniqueKeysWithValues: infos.map { ($0.id, $0) })
+
+            for p in pending {
+                guard let info = infoMap[p.gameId] else { continue }
+
+                let candidateBase = baseTitle(info.title)
+                if rankedBaseTitles.contains(candidateBase) {
+                    debugLog("🚫 Skipping variant: \(info.title) → base: \(candidateBase)")
                     continue
                 }
+
+                guard let curatedPlats = info.curated_platforms, !curatedPlats.isEmpty else { continue }
+                if !ownedPlatforms.isEmpty {
+                    guard !Set(curatedPlats).intersection(ownedPlatforms).isEmpty else { continue }
+                }
+
+                candidates.append((
+                    gameId: info.id,
+                    rawgId: info.rawg_id,
+                    title: info.title,
+                    coverUrl: info.cover_url,
+                    genres: info.curated_genres ?? info.genres ?? [],
+                    tags: info.curated_tags ?? info.tags ?? [],
+                    metacritic: info.metacritic_score,
+                    source: "friend_ranked",
+                    sourceFriendId: p.friendUserId,
+                    sourceFriendName: p.friendUsername,
+                    sourceFriendRank: p.friendRank,
+                    sourceFriendTotal: p.friendTotal
+                ))
             }
+        } catch {
+            debugLog("⚠️ Error batch-fetching friend candidate game details: \(error)")
         }
         
         return candidates
@@ -697,32 +716,37 @@ class RecommendationManager: ObservableObject {
         
         var displays: [RecommendationDisplay] = []
         
+        // Batch fetch all game info for pending recommendations in one query
+        struct GameInfo: Decodable {
+            let id: Int
+            let rawg_id: Int
+            let title: String
+            let cover_url: String?
+            let genres: [String]?
+            let tags: [String]?
+            let curated_genres: [String]?
+            let curated_tags: [String]?
+            let platforms: [String]?
+            let curated_platforms: [String]?
+            let metacritic_score: Int?
+        }
+        let allRecGameIds = pending.map { $0.gameId }
+        let allGameInfos: [GameInfo]
+        do {
+            allGameInfos = try await supabase.client
+                .from("games")
+                .select("id, rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, platforms, curated_platforms, metacritic_score")
+                .in("id", values: allRecGameIds)
+                .execute()
+                .value
+        } catch {
+            debugLog("⚠️ Error batch-fetching recommendation game info: \(error)")
+            return
+        }
+        let gameInfoMap = Dictionary(uniqueKeysWithValues: allGameInfos.map { ($0.id, $0) })
+
         for rec in pending {
-            struct GameInfo: Decodable {
-                let rawg_id: Int
-                let title: String
-                let cover_url: String?
-                let genres: [String]?
-                let tags: [String]?
-                let curated_genres: [String]?
-                let curated_tags: [String]?
-                let platforms: [String]?
-                let curated_platforms: [String]?
-                let metacritic_score: Int?
-                let description: String?
-            }
-            
-            do {
-                let infos: [GameInfo] = try await supabase.client
-                    .from("games")
-                    .select("rawg_id, title, cover_url, genres, tags, curated_genres, curated_tags, platforms, curated_platforms, metacritic_score")
-                    .eq("id", value: rec.gameId)
-                    .limit(1)
-                    .execute()
-                    .value
-                
-                guard let info = infos.first else { continue }
-                                    
+            guard let info = gameInfoMap[rec.gameId] else { continue }
                 let target = PredictionTarget(
                     rawgId: info.rawg_id,
                     canonicalGameId: nil,
@@ -762,9 +786,6 @@ class RecommendationManager: ObservableObject {
                     sourceFriendRankPosition: friendRank,
                     sourceFriendTotalGames: friendTotal
                 ))
-            } catch {
-                debugLog("⚠️ Error building display for game \(rec.gameId): \(error)")
-            }
         }
         
         // Sort by confidence first, then predicted percentile

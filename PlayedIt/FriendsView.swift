@@ -2,7 +2,7 @@ import SwiftUI
 import Supabase
 
 struct FriendsView: View {
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var friends: [Friend] = []
     @State private var pendingRequests: [Friend] = []
     @State private var isLoading = true
@@ -163,10 +163,7 @@ struct FriendsView: View {
             .refreshable {
                 await fetchFriends()
             }
-            .onAppear {
-            Task { await fetchFriends() }
         }
-    }
     
     private var addFriendSheet: some View {
         NavigationStack {
@@ -267,63 +264,73 @@ struct FriendsView: View {
                 debugLog("   - id: \(f.id), user_id: \(f.user_id), friend_id: \(f.friend_id), status: \(f.status)")
             }
             
+            // Build metadata map: friendUserId → (friendshipId, status, isIncoming)
+            struct FriendMeta {
+                let friendshipId: String
+                let status: String
+                let isIncoming: Bool
+            }
+            var metaByUserId: [String: FriendMeta] = [:]
+            for friendship in friendships {
+                let friendUserId = friendship.user_id.lowercased() == userId.uuidString.lowercased()
+                    ? friendship.friend_id
+                    : friendship.user_id
+                let isIncoming = friendship.friend_id.lowercased() == userId.uuidString.lowercased()
+                metaByUserId[friendUserId.lowercased()] = FriendMeta(
+                    friendshipId: friendship.id,
+                    status: friendship.status,
+                    isIncoming: isIncoming
+                )
+            }
+
+            // Single batch query for all friend user info
+            struct UserInfo: Decodable {
+                let id: String
+                let username: String?
+                let email: String?
+                let avatar_url: String?
+            }
+            let friendUserIds = Array(metaByUserId.keys)
+            let userInfos: [UserInfo] = friendUserIds.isEmpty ? [] : try await supabase.client
+                .from("users")
+                .select("id, username, email, avatar_url")
+                .in("id", values: friendUserIds)
+                .execute()
+                .value
+
+            debugLog("🔍 Fetched \(userInfos.count) users in 1 query")
+
             var acceptedFriends: [Friend] = []
             var pending: [Friend] = []
             var sent: [Friend] = []
-            
-            for friendship in friendships {
-                let friendUserId = friendship.user_id.lowercased() == userId.uuidString.lowercased() ? friendship.friend_id : friendship.user_id
-                let isIncoming = friendship.friend_id.lowercased() == userId.uuidString.lowercased()
-                
-                debugLog("🔍 Processing friendship: friendUserId=\(friendUserId), isIncoming=\(isIncoming)")
-                
-                // Fetch friend's user info
-                struct UserInfo: Decodable {
-                    let id: String
-                    let username: String?
-                    let email: String?
-                    let avatar_url: String?
-                }
-                
-                do {
-                    let userInfo: UserInfo = try await supabase.client
-                        .from("users")
-                        .select("id, username, email, avatar_url")
-                        .eq("id", value: friendUserId)
-                        .single()
-                        .execute()
-                        .value
-                    
-                    debugLog("🔍 Found user: \(userInfo.username ?? "no username")")
-                    
-                    let friend = Friend(
-                        id: friendship.id,
-                        friendshipId: friendship.id,
-                        username: userInfo.username ?? userInfo.email ?? "Unknown",
-                        userId: friendUserId,
-                        avatarURL: userInfo.avatar_url,
-                        status: friendship.status
-                    )
-                    
-                    if friendship.status == "accepted" {
-                        acceptedFriends.append(friend)
-                    } else if friendship.status == "pending" && isIncoming {
-                        pending.append(friend)
-                        debugLog("🔍 Added to pending requests")
-                    } else if friendship.status == "pending" && !isIncoming {
-                        sent.append(friend)
-                        debugLog("🔍 Added to sent requests")
-                    }
-                } catch {
-                    debugLog("❌ Error fetching user info for \(friendUserId): \(error)")
+
+            for userInfo in userInfos {
+                guard let meta = metaByUserId[userInfo.id.lowercased()] else { continue }
+                debugLog("🔍 Found user: \(userInfo.username ?? "no username")")
+                let friend = Friend(
+                    id: meta.friendshipId,
+                    friendshipId: meta.friendshipId,
+                    username: userInfo.username ?? userInfo.email ?? "Unknown",
+                    userId: userInfo.id,
+                    avatarURL: userInfo.avatar_url,
+                    status: meta.status
+                )
+                if meta.status == "accepted" {
+                    acceptedFriends.append(friend)
+                } else if meta.status == "pending" && meta.isIncoming {
+                    pending.append(friend)
+                    debugLog("🔍 Added to pending requests")
+                } else if meta.status == "pending" && !meta.isIncoming {
+                    sent.append(friend)
+                    debugLog("🔍 Added to sent requests")
                 }
             }
-            
+
             friends = acceptedFriends
             pendingRequests = pending
             sentRequests = sent
             isLoading = false
-            
+
             debugLog("🔍 Final: \(friends.count) friends, \(pendingRequests.count) pending")
             await fetchSuggestedFriends()
             
@@ -751,7 +758,7 @@ struct SuggestedFriendRow: View {
 // MARK: - Friend Profile View
 struct FriendProfileView: View {
     let friend: Friend
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var friendGames: [UserGame] = []
     @State private var myGames: [UserGame] = []
     @State private var isLoading = true
@@ -2050,4 +2057,5 @@ struct SideBySideGameCell: View {
 
 #Preview {
     FriendsView()
+        .environmentObject(SupabaseManager.shared)
 }

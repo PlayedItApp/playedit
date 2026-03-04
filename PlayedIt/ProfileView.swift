@@ -6,7 +6,7 @@ import CryptoKit
 import UserNotifications
 
 struct ProfileView: View {
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var username = ""
     @State private var originalUsername = ""
     @State private var isEditing = false

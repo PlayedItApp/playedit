@@ -5,7 +5,7 @@ struct GameLogView: View {
     let game: Game
     var source: String = "unknown"
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     
     @State private var selectedPlatforms: Set<String> = []
     @State private var customPlatform: String = ""

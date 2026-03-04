@@ -4,7 +4,7 @@ import PhotosUI
 
 struct FeedbackView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     
     @State private var feedbackType: FeedbackType = .bug
     @State private var description = ""

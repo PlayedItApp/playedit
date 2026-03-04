@@ -6,7 +6,7 @@ struct GameDetailFromFriendView: View {
     let friend: Friend              // The friend whose list we came from
     let myGames: [UserGame]         // Current user's games (passed from FriendProfileView)
     
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @Environment(\.dismiss) private var dismiss
     
     @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
@@ -666,6 +666,7 @@ curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                 let game_id: Int
                 let rank_position: Int
                 let canonical_game_id: Int?
+                let user_id: String
             }
             let myGameRows: [MyGameRow] = try await supabase.client
                 .from("user_games")
@@ -675,17 +676,21 @@ curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                 .execute()
                 .value
             
-            // Fetch each friend's games for taste match
+            // Fetch all friends' games for taste match in a single batch query
+            let friendIdsForTaste = rankedUserIds.filter { $0.lowercased() != userId.uuidString.lowercased() }
             var friendGameCache: [String: [MyGameRow]] = [:]
-            for friendId in rankedUserIds where friendId.lowercased() != userId.uuidString.lowercased() {
-                let fGames: [MyGameRow] = try await supabase.client
+            if !friendIdsForTaste.isEmpty {
+                let allFriendGames: [MyGameRow] = try await supabase.client
                     .from("user_games")
-                    .select("game_id, rank_position, canonical_game_id")
-                    .eq("user_id", value: friendId)
+                    .select("game_id, rank_position, canonical_game_id, user_id")
+                    .in("user_id", values: friendIdsForTaste)
                     .not("rank_position", operator: .is, value: "null")
                     .execute()
                     .value
-                friendGameCache[friendId.lowercased()] = fGames
+                for game in allFriendGames {
+                    let key = game.user_id.lowercased()
+                    friendGameCache[key, default: []].append(game)
+                }
             }
             
             var results: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []

@@ -3,7 +3,7 @@ import Supabase
 
 struct DeepLinkProfileView: View {
     let username: String
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @State private var isLoading = true
     @State private var userNotFound = false
     @State private var lookupUser: LookupUser?

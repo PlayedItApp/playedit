@@ -96,7 +96,7 @@ enum OnboardingGenre: String, CaseIterable, Identifiable {
 // MARK: - Onboarding Quiz View
 
 struct OnboardingQuizView: View {
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     @Binding var isOnboardingComplete: Bool
     var onSkip: (() -> Void)? = nil
     

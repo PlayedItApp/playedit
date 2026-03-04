@@ -14,7 +14,7 @@ enum CSVImportPhase: Equatable {
 
 struct CSVImportView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var supabase = SupabaseManager.shared
+    @EnvironmentObject var supabase: SupabaseManager
     
     @State private var phase: CSVImportPhase = .ready
     @State private var parsedEntries: [CSVGameEntry] = []

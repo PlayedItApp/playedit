@@ -39,6 +39,33 @@ serve(async (req) => {
     const { action, steamId, appIds } = await req.json();
 
     if (action === "fetch_library") {
+      // Verify caller owns this Steam account
+      const authHeader = req.headers.get("Authorization")!;
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { auth: { autoRefreshToken: false, persistSession: false },
+          global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: profile } = await supabase
+        .from("users")
+        .select("steam_id")
+        .eq("id", user.id)
+        .single();
+      if (!profile?.steam_id || profile.steam_id !== steamId) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       // Fetch owned games from Steam
       const steamUrl = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=${STEAM_API_KEY}&steamid=${steamId}&include_appinfo=1&include_played_free_games=1&skip_unvetted_apps=false&format=json`;
 
