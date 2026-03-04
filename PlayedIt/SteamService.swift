@@ -142,7 +142,8 @@ class SteamService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(Config.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        let session = try await SupabaseManager.shared.client.auth.session
+        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(Config.supabaseAnonKey, forHTTPHeaderField: "apikey")
         
         let body: [String: String] = [

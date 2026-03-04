@@ -223,9 +223,15 @@ struct WantToPlayListView: View {
                     }
                 }, onReorder: {
                     gameToReorder = game
-                }, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0, releaseYear: gameMetadata[game.gameId]?.releaseYear, platforms: gameMetadata[game.gameId]?.platforms, onTap: {
-                        selectedGame = game
-                    })
+                }, prediction: predictions[game.id], myGameCount: predictionContext?.myGameCount ?? 0, releaseYear: gameMetadata[game.gameId]?.releaseYear, platforms: gameMetadata[game.gameId]?.platforms, onRankGame: {
+                    lastLoggedGame = game
+                    gameToLog = game
+                    Task {
+                        gameToLogResolved = await resolveGame(from: game)
+                    }
+                }, onTap: {
+                    selectedGame = game
+                })
             }
         }
     }
@@ -500,6 +506,7 @@ struct WantToPlayRankedRow: View {
     var releaseYear: Int? = nil
     var platforms: [String]? = nil
     
+    var onRankGame: () -> Void = {}
     var onTap: () -> Void = {}
         
     var body: some View {
@@ -539,6 +546,36 @@ struct WantToPlayRankedRow: View {
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(predictionColor(pred).opacity(0.4), lineWidth: 1)
                         )
+                }
+                
+                HStack(spacing: 6) {
+                    Button(action: onUnrank) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.to.line")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Deprioritize")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundColor(.primaryBlue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.primaryBlue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    
+                    Button(action: onRankGame) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "gamecontroller.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Rank It")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundColor(.accentOrange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.accentOrange.opacity(0.1))
+                        .cornerRadius(8)
+                    }
                 }
             }
             
