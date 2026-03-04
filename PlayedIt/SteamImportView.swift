@@ -43,6 +43,7 @@ struct SteamImportView: View {
     // UI state
     @State private var showSelectAll = true
     @State private var authContext: SteamAuthPresentationContext?
+    @State private var showDiscardConfirmation = false
     
     // Resume state
     var resumingImport: PendingImport? = nil
@@ -561,7 +562,26 @@ struct SteamImportView: View {
                         )
                 }
                 .padding(.horizontal, 20)
+
+                Button {
+                    showDiscardConfirmation = true
+                } label: {
+                    Text("Discard")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundColor(.red)
+                }
                 .padding(.bottom, 8)
+            }
+            .confirmationDialog("Discard this import?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
+                Button("Discard Import", role: .destructive) {
+                    Task {
+                        await PendingImportManager.shared.delete(source: "steam_import")
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your progress will be lost and the remaining games won't be ranked.")
             }
         }
     }

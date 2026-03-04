@@ -33,6 +33,7 @@ struct CSVImportView: View {
     // Ranking state
     @State private var gamesToRank: [MatchedCSVGame] = []
     @State private var currentRankIndex = 0
+    @State private var showDiscardConfirmation = false
     
     // File picker
     @State private var showFilePicker = false
@@ -542,7 +543,26 @@ struct CSVImportView: View {
                                 )
                         }
                         .padding(.horizontal, 20)
+
+                        Button {
+                            showDiscardConfirmation = true
+                        } label: {
+                            Text("Discard")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundColor(.red)
+                        }
                         .padding(.bottom, 8)
+                    }
+                    .confirmationDialog("Discard this import?", isPresented: $showDiscardConfirmation, titleVisibility: .visible) {
+                        Button("Discard Import", role: .destructive) {
+                            Task {
+                                await PendingImportManager.shared.delete(source: "csv_import")
+                                dismiss()
+                            }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Your progress will be lost and the remaining games won't be ranked.")
                     }
                 }
             } else {
