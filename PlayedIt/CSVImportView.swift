@@ -62,6 +62,10 @@ struct CSVImportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if let pending = resumingImport {
+                    debugLog("📋 Resuming import: \(pending.games.count) games, source=\(pending.source)")
+                    for g in pending.games {
+                        debugLog("📋 Pending game: '\(g.title)' metadata=\(g.sourceMetadata)")
+                    }
                     gamesToRank = pending.games.map { g in
                         MatchedCSVGame(
                             csvTitle: g.sourceMetadata["csv_title"] ?? g.title,
@@ -667,7 +671,9 @@ struct CSVImportView: View {
             guard let fileURL = urls.first else { return }
             
             do {
+                debugLog("📋 Parsing CSV from: \(fileURL.lastPathComponent)")
                 parsedEntries = try CSVImportService.shared.parseCSV(from: fileURL)
+                debugLog("📋 Parsed \(parsedEntries.count) entries: \(parsedEntries.map { "\($0.title) | \($0.platform ?? "no platform")" })")
                 Task {
                     await fetchExistingRankedIds()
                     await startMatching()
