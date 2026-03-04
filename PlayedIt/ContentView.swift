@@ -1053,7 +1053,8 @@ struct GameDetailSheet: View {
                     rawgId: game.gameRawgId ?? game.gameId,
                     gameTitle: game.gameTitle
                 )
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
             }
             .sheet(isPresented: $showAllPlatformsSheet) {
                 PlatformPickerSheet(selectedPlatforms: $editedPlatforms)

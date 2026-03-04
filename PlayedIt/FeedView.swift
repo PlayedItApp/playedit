@@ -1411,6 +1411,7 @@ struct FeedItemRow: View {
                 reportedUserId: UUID(uuidString: item.userId) ?? UUID()
             )
             .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showGameDetail) {
             FeedGameDetailSheet(item: item)

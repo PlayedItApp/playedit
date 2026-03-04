@@ -124,7 +124,8 @@ struct GameDetailFromFriendView: View {
                 rawgId: userGame.gameRawgId ?? userGame.gameId,
                 gameTitle: userGame.gameTitle
             )
-            .presentationDetents([.medium, .large])
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showReportSheet) {
             ReportView(
@@ -134,6 +135,7 @@ struct GameDetailFromFriendView: View {
                 reportedUserId: UUID(uuidString: userGame.userId) ?? UUID()
             )
             .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
     }
     
@@ -147,7 +149,7 @@ struct GameDetailFromFriendView: View {
             gameDescription: gameDescription,
             curatedGenres: curatedGenres,
             curatedTags: curatedTags,
-curatedPlatforms: curatedPlatforms
+            curatedPlatforms: curatedPlatforms
         )
         .padding(.top, 20)
     }

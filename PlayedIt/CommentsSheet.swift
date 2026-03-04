@@ -310,6 +310,7 @@ struct CommentsSheet: View {
                     reportedUserId: UUID(uuidString: comment.userId) ?? UUID()
                 )
                 .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
             }
         }
     }

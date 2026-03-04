@@ -1023,6 +1023,7 @@ struct FriendProfileView: View {
                 reportedUserId: UUID(uuidString: friend.userId) ?? UUID()
             )
             .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
         .task {
             await loadData()

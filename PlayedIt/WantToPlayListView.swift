@@ -1872,7 +1872,8 @@ struct FirstTwoComparisonView: View {
                         rawgId: game.gameId,
                         gameTitle: game.gameTitle
                     )
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
                 }
                 .sheet(isPresented: $showLogGame, onDismiss: {
                     Task {

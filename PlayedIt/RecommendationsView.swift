@@ -512,7 +512,8 @@ curatedPlatforms: curatedPlatforms
                     rawgId: recommendation.gameRawgId,
                     gameTitle: recommendation.gameTitle
                 )
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
             }
             .task {
                 await loadDescription()

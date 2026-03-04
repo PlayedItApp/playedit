@@ -289,6 +289,7 @@ struct ReportButton: View {
                 reportedUserId: reportedUserId
             )
             .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
             }
         )
     }
