@@ -92,6 +92,7 @@ struct CSVImportView: View {
                 }
             }
         }
+        .background(Color(.systemGroupedBackground))
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [UTType.commaSeparatedText],
@@ -582,6 +583,8 @@ struct CSVImportView: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
     }
     
     // MARK: - Error View
