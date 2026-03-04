@@ -318,18 +318,16 @@ struct CSVImportView: View {
                     .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(1)
                 
-                HStack(spacing: 8) {
-                    if !game.csvPlatforms.isEmpty {
-                        Text(game.csvPlatforms.joined(separator: ", "))
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundStyle(Color.adaptiveGray)
-                    }
-                    if let notes = game.csvNotes {
-                        Text("📝 \(notes)")
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundStyle(Color.adaptiveGray)
-                            .lineLimit(1)
-                    }
+                if !game.csvPlatforms.isEmpty {
+                    Text(game.csvPlatforms.joined(separator: ", "))
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                }
+                if let notes = game.csvNotes {
+                    Text("📝 \(notes)")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundStyle(Color.adaptiveGray)
+                        .lineLimit(1)
                 }
             }
             
@@ -343,17 +341,6 @@ struct CSVImportView: View {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .font(.system(size: 14))
                     .foregroundColor(.primaryBlue)
-            }
-            .buttonStyle(.plain)
-            
-            // Remove button
-            Button {
-                selectedGameIds.remove(game.id)
-                confirmedForRanking.remove(at: index)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.silver)
             }
             .buttonStyle(.plain)
         }
