@@ -629,7 +629,7 @@ struct WantToPlayUnrankedRow: View {
                 }
                 
                 if let platforms = platforms, !platforms.isEmpty {
-                    let used = (SupabaseManager.shared.currentUser?.id).map { GameLogView.usedPlatforms(for: $0) } ?? []
+                    let used = (SupabaseManager.shared.currentUser?.id).map { GameLogView.usedPlatforms(for: $0, minimumGames: 2) } ?? []
                     let sorted = platforms.sorted { a, b in
                         let aUsed = used.contains(a)
                         let bUsed = used.contains(b)

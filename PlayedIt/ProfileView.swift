@@ -318,6 +318,15 @@ struct ProfileView: View {
             }) {
                 GameSearchView()
             }
+            .fullScreenCover(isPresented: $showSteamImport, onDismiss: {
+                Task {
+                    await fetchRankedGames()
+                    hasSteamConnected = await SteamService.shared.getSteamId() != nil
+                    pendingImport = await PendingImportManager.shared.fetchAny()
+                }
+            }) {
+                SteamImportView()
+            }
             .fullScreenCover(isPresented: $showCSVImport, onDismiss: {
                 Task {
                     await fetchRankedGames()

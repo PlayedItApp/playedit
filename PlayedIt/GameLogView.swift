@@ -58,21 +58,23 @@ struct GameLogView: View {
     ]
     
     // MARK: - UserDefaults Platform History
-    static func usedPlatforms(for userId: UUID) -> Set<String> {
-        let key = "used_platforms_\(userId.uuidString)"
-        let array = UserDefaults.standard.stringArray(forKey: key) ?? []
-        return Set(array)
+    static func usedPlatforms(for userId: UUID, minimumGames: Int = 1) -> Set<String> {
+        let key = "used_platforms_counts_\(userId.uuidString)"
+        let dict = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        return Set(dict.filter { $0.value >= minimumGames }.keys)
     }
     
     static func saveUsedPlatforms(_ platforms: Set<String>, for userId: UUID) {
-        let key = "used_platforms_\(userId.uuidString)"
-        var existing = Set(UserDefaults.standard.stringArray(forKey: key) ?? [])
-        existing.formUnion(platforms)
-        UserDefaults.standard.set(Array(existing).sorted(), forKey: key)
+        let key = "used_platforms_counts_\(userId.uuidString)"
+        var counts = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        for platform in platforms {
+            counts[platform, default: 0] += 1
+        }
+        UserDefaults.standard.set(counts, forKey: key)
     }
     
     static func backfillUsedPlatformsIfNeeded(for userId: UUID, client: SupabaseClient) async {
-        let backfillKey = "used_platforms_backfilled_\(userId.uuidString)"
+        let backfillKey = "used_platforms_counts_backfilled_\(userId.uuidString)"
         guard !UserDefaults.standard.bool(forKey: backfillKey) else { return }
         
         do {
@@ -86,9 +88,15 @@ struct GameLogView: View {
                 .execute()
                 .value
             
-            let allUsed = Set(rows.flatMap { $0.platform_played })
-            if !allUsed.isEmpty {
-                saveUsedPlatforms(allUsed, for: userId)
+            var counts: [String: Int] = [:]
+            for row in rows {
+                for platform in row.platform_played {
+                    counts[platform, default: 0] += 1
+                }
+            }
+            if !counts.isEmpty {
+                let key = "used_platforms_counts_\(userId.uuidString)"
+                UserDefaults.standard.set(counts, forKey: key)
             }
             UserDefaults.standard.set(true, forKey: backfillKey)
         } catch {
