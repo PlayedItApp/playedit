@@ -35,6 +35,7 @@ struct ProfileView: View {
     @State private var hasUnrankedGames = false
     @State private var unrankedCount = 0
     @State private var showSteamImport = false
+    @State private var showCSVImport = false
     @State private var hasSteamConnected = false
     @State private var pendingImport: PendingImport?
     
@@ -230,8 +231,9 @@ struct ProfileView: View {
                                         Button {
                                             if pending.source == "steam_import" {
                                                 showSteamImport = true
+                                            } else if pending.source == "csv_import" {
+                                                showCSVImport = true
                                             }
-                                            // Future: else if pending.source == "csv_import" { showCSVImport = true }
                                         } label: {
                                             Text("Continue")
                                                 .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -315,14 +317,13 @@ struct ProfileView: View {
             }) {
                 GameSearchView()
             }
-            .fullScreenCover(isPresented: $showSteamImport, onDismiss: {
+            .fullScreenCover(isPresented: $showCSVImport, onDismiss: {
                 Task {
                     await fetchRankedGames()
-                    hasSteamConnected = await SteamService.shared.getSteamId() != nil
                     pendingImport = await PendingImportManager.shared.fetchAny()
                 }
             }) {
-                SteamImportView(resumingImport: pendingImport)
+                CSVImportView(resumingImport: pendingImport?.source == "csv_import" ? pendingImport : nil)
             }
             .alert("Start fresh?", isPresented: $showResetRankings) {
                 Button("Yeah, let's start over", role: .destructive) {
@@ -516,6 +517,12 @@ struct ProfileView: View {
                                 showSteamImport = true
                             } label: {
                                 Label(hasSteamConnected ? "Import from Steam (Connected ✓)" : "Import from Steam", systemImage: "arrow.down.circle")
+                            }
+                            
+                            Button {
+                                showCSVImport = true
+                            } label: {
+                                Label("Import from CSV", systemImage: "doc.text")
                             }
                             
                             if !hasAppleLinked {
