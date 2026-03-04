@@ -421,6 +421,7 @@ struct RecommendationDetailSheet: View {
     @State private var curatedTags: [String]? = nil
     @State private var curatedPlatforms: [String]? = nil
     @State private var curatedReleaseYear: Int? = nil
+    @State private var showGameDataReport = false
     
     var body: some View {
         NavigationStack {
@@ -460,6 +461,20 @@ curatedPlatforms: curatedPlatforms
                         .foregroundStyle(Color.adaptiveGray)
                     }
                     
+                    // Report bad game data
+                    Button {
+                        showGameDataReport = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 13))
+                            Text("Report incorrect game info")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                        }
+                        .foregroundStyle(Color.adaptiveGray)
+                    }
+                    .buttonStyle(.plain)
+                    
                     Spacer(minLength: 40)
                 }
             }
@@ -490,6 +505,14 @@ curatedPlatforms: curatedPlatforms
                             .foregroundColor(.primaryBlue)
                     }
                 }
+            }
+            .sheet(isPresented: $showGameDataReport) {
+                ReportGameDataView(
+                    gameId: recommendation.gameRawgId,
+                    rawgId: recommendation.gameRawgId,
+                    gameTitle: recommendation.gameTitle
+                )
+                .presentationDetents([.medium, .large])
             }
             .task {
                 await loadDescription()

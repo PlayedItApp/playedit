@@ -443,6 +443,7 @@ struct GameDetailSheet: View {
     @State private var hasInitialized = false
     @State private var notesError: String?
     @State private var gameDescription: String? = nil
+    @State private var showGameDataReport = false
     @State private var metacriticScore: Int? = nil
     @State private var curatedGenres: [String]? = nil
     @State private var curatedTags: [String]? = nil
@@ -825,10 +826,26 @@ struct GameDetailSheet: View {
                     .disabled(isLoadingReRank)
                     .padding(.top, 8)
                     
-                    // Remove game button
+                    // Report bad game data
                     Button {
-                        showRemoveConfirm = true
+                        showGameDataReport = true
                     } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 13))
+                            Text("Report incorrect game info")
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                        }
+                        .foregroundStyle(Color.adaptiveGray)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.adaptiveGray.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                        Button {
+                            showRemoveConfirm = true
+                        } label: {
                         HStack(spacing: 6) {
                             if isRemoving {
                                 ProgressView()
@@ -1000,6 +1017,14 @@ struct GameDetailSheet: View {
                     }
                     .disabled(isSharing)
                 }
+            }
+            .sheet(isPresented: $showGameDataReport) {
+                ReportGameDataView(
+                    gameId: game.gameId,
+                    rawgId: game.gameRawgId ?? game.gameId,
+                    gameTitle: game.gameTitle
+                )
+                .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showAllPlatformsSheet) {
                 PlatformPickerSheet(selectedPlatforms: $editedPlatforms)

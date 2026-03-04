@@ -1574,6 +1574,7 @@ struct FirstTwoComparisonView: View {
         @State private var isLoadingFriendRankings = true
         @State private var showLogGame = false
         @State private var isAlreadyRanked = false
+        @State private var showGameDataReport = false
         
         var body: some View {
             NavigationStack {
@@ -1784,6 +1785,24 @@ struct FirstTwoComparisonView: View {
                                 .padding(.vertical, 12)
                         }
                         
+                        // Report bad game data
+                        Button {
+                            showGameDataReport = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 13))
+                                Text("Report incorrect game info")
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                            }
+                            .foregroundStyle(Color.adaptiveGray)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color.adaptiveGray.opacity(0.1))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        
                         Spacer()
                     }
                     .padding(.top, 24)
@@ -1815,6 +1834,14 @@ struct FirstTwoComparisonView: View {
                                 .foregroundColor(.primaryBlue)
                         }
                     }
+                }
+                .sheet(isPresented: $showGameDataReport) {
+                    ReportGameDataView(
+                        gameId: game.gameId,
+                        rawgId: game.gameId,
+                        gameTitle: game.gameTitle
+                    )
+                    .presentationDetents([.medium, .large])
                 }
                 .sheet(isPresented: $showLogGame, onDismiss: {
                     Task {

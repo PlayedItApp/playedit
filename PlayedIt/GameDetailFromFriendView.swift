@@ -21,6 +21,7 @@ struct GameDetailFromFriendView: View {
     @State private var curatedTags: [String]? = nil
     @State private var curatedPlatforms: [String]? = nil
     @State private var curatedReleaseYear: Int? = nil
+    @State private var showGameDataReport = false
     
     // Check if current user has this game ranked
     private var iHaveThisGame: Bool {
@@ -47,6 +48,23 @@ struct GameDetailFromFriendView: View {
                 if !friendRankings.isEmpty {
                     socialContextSection
                 }
+                // Report bad game data
+                Button {
+                    showGameDataReport = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 13))
+                        Text("Report incorrect game info")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                    }
+                    .foregroundStyle(Color.adaptiveGray)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.adaptiveGray.opacity(0.1))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.vertical, 16)
         }
@@ -99,6 +117,14 @@ struct GameDetailFromFriendView: View {
         }) {
             GameLogView(game: userGame.toGame(), source: "friend_list")
                 .presentationBackground(Color.appBackground)
+        }
+        .sheet(isPresented: $showGameDataReport) {
+            ReportGameDataView(
+                gameId: userGame.gameId,
+                rawgId: userGame.gameRawgId ?? userGame.gameId,
+                gameTitle: userGame.gameTitle
+            )
+            .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showReportSheet) {
             ReportView(
