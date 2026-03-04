@@ -518,6 +518,7 @@ struct CSVImportView: View {
                                 }
                                 await MainActor.run {
                                     phase = .complete
+                                    NotificationCenter.default.post(name: .didCompleteRanking, object: nil)
                                 }
                             }
                         }
