@@ -755,10 +755,8 @@ struct FeedView: View {
                 }
             }
             
-            combinedFeed = combined
-                        
-            // Prefetch cover art for all entry types
-            let coverUrls: [String] = combinedFeed.flatMap { entry -> [String] in
+            // Wait for above-the-fold images before dismissing skeleton
+            let coverUrls: [String] = combined.flatMap { entry -> [String] in
                 switch entry {
                 case .game(let item): return [item.gameCoverURL].compactMap { $0 }
                 case .groupedGames(let group): return group.items.compactMap { $0.gameCoverURL }
@@ -766,8 +764,16 @@ struct FeedView: View {
                 case .activity: return []
                 }
             }
-            ImageCache.shared.prefetch(urls: coverUrls)
+            let priorityUrls = Array(coverUrls.prefix(20))
+            await withTaskGroup(of: Void.self) { group in
+                for url in priorityUrls {
+                    group.addTask { _ = await ImageCache.shared.image(for: url) }
+                }
+                for await _ in group { }
+            }
+            ImageCache.shared.prefetch(urls: Array(coverUrls.dropFirst(20)))
             
+            combinedFeed = combined
             isLoading = false
             
         } catch {

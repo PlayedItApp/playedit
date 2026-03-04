@@ -4,7 +4,7 @@ import SwiftUI
 final class ImageCache {
     static let shared = ImageCache()
     
-    private let memoryCache = NSCache<NSString, UIImage>()
+    let memoryCache = NSCache<NSString, UIImage>()
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
     private var activeTasks: [String: Task<UIImage?, Never>] = [:]

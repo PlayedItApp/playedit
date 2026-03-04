@@ -1507,7 +1507,7 @@ struct FriendProfileView: View {
                 .execute()
                 .value
             
-            friendGames = friendRows.map { row in
+            let mappedFriendGames = friendRows.map { row in
                 UserGame(
                     id: row.id,
                     gameId: row.game_id,
@@ -1551,7 +1551,16 @@ struct FriendProfileView: View {
                 )
             }
             
-            ImageCache.shared.prefetch(urls: friendGames.compactMap { $0.gameCoverURL })
+            let friendCoverUrls = mappedFriendGames.compactMap { $0.gameCoverURL }
+            let priorityFriendUrls = Array(friendCoverUrls.prefix(15))
+            await withTaskGroup(of: Void.self) { group in
+                for url in priorityFriendUrls {
+                    group.addTask { _ = await ImageCache.shared.image(for: url) }
+                }
+                for await _ in group { }
+            }
+            ImageCache.shared.prefetch(urls: Array(friendCoverUrls.dropFirst(15)))
+            friendGames = mappedFriendGames
                         
             for row in (friendRows + myRows) {
                 let desc = row.games.curated_description ?? row.games.description

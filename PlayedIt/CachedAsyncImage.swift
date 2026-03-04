@@ -8,6 +8,15 @@ struct CachedAsyncImage<Placeholder: View>: View {
     @State private var image: UIImage?
     @State private var isLoading = true
     
+    private func cachedImage() -> UIImage? {
+        guard let urlString, !urlString.isEmpty else { return nil }
+        let key = urlString.utf8.reduce(into: UInt64(5381)) { result, byte in
+            result = result &* 33 &+ UInt64(byte)
+        }
+        let cacheKey = "\(key).jpg"
+        return ImageCache.shared.memoryCache.object(forKey: cacheKey as NSString)
+    }
+    
     init(
         url urlString: String?,
         contentMode: ContentMode = .fill,
@@ -20,7 +29,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
     
     var body: some View {
         Group {
-            if let image = image {
+            if let image = image ?? cachedImage() {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)

@@ -719,7 +719,7 @@ struct ProfileView: View {
                 }
             }
             
-            rankedGames = rows.map { row in
+            let mappedGames = rows.map { row in
                 UserGame(
                     id: row.id,
                     gameId: row.game_id,
@@ -735,6 +735,17 @@ struct ProfileView: View {
                     gameRawgId: row.games.rawg_id
                 )
             }
+            
+            let profileCoverUrls = mappedGames.compactMap { $0.gameCoverURL }
+            let priorityProfileUrls = Array(profileCoverUrls.prefix(15))
+            await withTaskGroup(of: Void.self) { group in
+                for url in priorityProfileUrls {
+                    group.addTask { _ = await ImageCache.shared.image(for: url) }
+                }
+                for await _ in group { }
+            }
+            ImageCache.shared.prefetch(urls: Array(profileCoverUrls.dropFirst(15)))
+            rankedGames = mappedGames
             
         } catch {
             debugLog("❌ Error fetching ranked games: \(error)")
@@ -767,7 +778,15 @@ struct ProfileView: View {
             }
         }
         
-        ImageCache.shared.prefetch(urls: rankedGames.compactMap { $0.gameCoverURL })
+        let profileCoverUrls = rankedGames.compactMap { $0.gameCoverURL }
+        let priorityProfileUrls = Array(profileCoverUrls.prefix(15))
+        await withTaskGroup(of: Void.self) { group in
+            for url in priorityProfileUrls {
+                group.addTask { _ = await ImageCache.shared.image(for: url) }
+            }
+            for await _ in group { }
+        }
+        ImageCache.shared.prefetch(urls: Array(profileCoverUrls.dropFirst(15)))
         isLoadingGames = false
         NotificationCenter.default.post(name: .wantToPlayShouldRefresh, object: nil)
     }
