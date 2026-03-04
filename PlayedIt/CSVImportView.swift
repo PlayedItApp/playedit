@@ -313,13 +313,6 @@ struct CSVImportView: View {
                     .foregroundStyle(Color.adaptiveSlate)
                     .lineLimit(1)
                 
-                if game.rawgTitle != nil && game.csvTitle.lowercased() != game.rawgTitle!.lowercased() {
-                    Text("CSV: \(game.csvTitle)")
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(Color.adaptiveGray)
-                        .lineLimit(1)
-                }
-                
                 HStack(spacing: 8) {
                     if let platform = game.csvPlatform {
                         Text(platform)
@@ -827,8 +820,13 @@ struct CSVImportView: View {
     }
     
     private func saveImportedGame(game: MatchedCSVGame, position: Int) async {
+        debugLog("💾 saveImportedGame START: \(game.displayTitle) at position \(position)")
         guard let userId = supabase.currentUser?.id,
-              let rawgId = game.rawgId else { return }
+              let rawgId = game.rawgId else {
+            debugLog("❌ saveImportedGame GUARD FAILED: userId=\(supabase.currentUser?.id.uuidString ?? "nil"), rawgId=\(game.rawgId?.description ?? "nil")")
+            return
+        }
+        debugLog("💾 userId=\(userId.uuidString), rawgId=\(rawgId), csvPlatform=\(game.csvPlatform ?? "nil"), csvNotes=\(game.csvNotes ?? "nil")")
         
         do {
             struct GameInsert: Encodable {
@@ -851,9 +849,11 @@ struct CSVImportView: View {
                 metacritic_score: game.rawgMetacriticScore ?? 0
             )
             
+            debugLog("💾 Upserting game into games table...")
             try await supabase.client.from("games")
                 .upsert(gameInsert, onConflict: "rawg_id")
                 .execute()
+            debugLog("💾 Upsert complete")
             
             struct GameIdResponse: Decodable { let id: Int }
             let gameRecord: GameIdResponse = try await supabase.client.from("games")
@@ -863,7 +863,9 @@ struct CSVImportView: View {
                 .execute()
                 .value
             
+            debugLog("💾 games table id=\(gameRecord.id), fetching canonical id...")
             let canonicalId = await RAWGService.shared.getParentGameId(for: rawgId) ?? rawgId
+            debugLog("💾 canonicalId=\(canonicalId)")
             
             // Platform from CSV as array, or empty array if none
             let platformArray: [AnyJSON] = {
@@ -872,6 +874,8 @@ struct CSVImportView: View {
                 }
                 return []
             }()
+            
+            debugLog("💾 platformArray=\(platformArray)")
             
             try await supabase.client
                 .rpc("insert_game_at_rank", params: [
@@ -886,9 +890,10 @@ struct CSVImportView: View {
                 .execute()
             
             debugLog("✅ CSV imported \(game.displayTitle) at position \(position)")
-            
-        } catch {
-            debugLog("❌ Error saving CSV imported game: \(error)")
-        }
+                        
+            } catch {
+                debugLog("❌ Error saving CSV imported game: \(error)")
+                debugLog("❌ Full error: \(String(describing: error))")
+            }
     }
 }

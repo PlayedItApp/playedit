@@ -175,6 +175,8 @@ class CSVImportService {
         
         let platformIndex = header.firstIndex(of: "platform")
         let notesIndex = header.firstIndex(of: "notes")
+        debugLog("📋 CSV headers: \(header)")
+        debugLog("📋 titleIndex=\(titleIndex) platformIndex=\(String(describing: platformIndex)) notesIndex=\(String(describing: notesIndex))")
         
         var entries: [CSVGameEntry] = []
         var seenTitles: Set<String> = []
@@ -203,6 +205,7 @@ class CSVImportService {
                 return raw.isEmpty ? nil : raw
             }()
             
+            debugLog("📋 CSV entry: title='\(title)' platform='\(platform ?? "nil")' notes='\(notes ?? "nil")'")
             entries.append(CSVGameEntry(title: title, platform: platform, notes: notes))
         }
         
@@ -216,7 +219,9 @@ class CSVImportService {
     // MARK: - Platform Normalization
     static func normalizePlatform(_ input: String) -> String? {
         let key = input.lowercased().trimmingCharacters(in: .whitespaces)
-        return platformAliases[key]
+        let result = platformAliases[key]
+        debugLog("🎮 normalizePlatform: '\(input)' → key='\(key)' → \(result ?? "nil")")
+        return result
     }
     
     // MARK: - Match Games Against RAWG

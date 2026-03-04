@@ -83,6 +83,9 @@ struct FeedView: View {
                     Task { await fetchUnreadCount() }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .didCompleteRanking)) { _ in
+                Task { await fetchFeed() }
+            }
         }
         .task {
             if combinedFeed.isEmpty {
@@ -2785,6 +2788,10 @@ struct WantToPlayExpandedRow: View {
             }
         }
     }
+}
+
+extension Notification.Name {
+    static let didCompleteRanking = Notification.Name("didCompleteRanking")
 }
 
 #Preview {

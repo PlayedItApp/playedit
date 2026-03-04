@@ -537,7 +537,10 @@ struct SteamImportView: View {
                                 ])
                                 .execute()
                         }
-                        dismiss()
+                        await MainActor.run {
+                            phase = .complete
+                        }
+                        NotificationCenter.default.post(name: .didCompleteRanking, object: nil)
                     }
                 }
             }
