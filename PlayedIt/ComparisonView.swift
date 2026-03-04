@@ -111,12 +111,12 @@ struct ComparisonView: View {
                             }
                         }
                     } else {
-                        Spacer()
-                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1, predictedRange: predictedRange) {
+                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1) {
                             onComplete(position)
                             dismiss()
                         }
-                        Spacer()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black)
                     }
                 }
             }
