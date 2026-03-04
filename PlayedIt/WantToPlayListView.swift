@@ -26,6 +26,8 @@ struct WantToPlayListView: View {
     @State private var rankedGameCount: Int = 0
     @State private var selectedGame: WantToPlayGame? = nil
     @State private var gameToLog: WantToPlayGame? = nil
+    @State private var lastLoggedGame: WantToPlayGame? = nil
+    @State private var gameToLogResolved: Game? = nil
     
     var body: some View {
         Group {
@@ -70,6 +72,7 @@ struct WantToPlayListView: View {
                 onComplete: { position in
                     Task {
                         let _ = await mgr.placeGameAtPosition(gameId: game.id, position: position)
+                        let _ = await mgr.removeGame(gameId: game.gameId)
                         await loadGames()
                     }
                 }
@@ -110,11 +113,14 @@ struct WantToPlayListView: View {
         }
         .sheet(item: $gameToLog, onDismiss: {
             Task {
+                if let game = lastLoggedGame {
+                    let _ = await manager.removeGame(gameId: game.gameId)
+                }
                 await loadGames()
                 NotificationCenter.default.post(name: NSNotification.Name("profileShouldRefresh"), object: nil)
             }
         }) { game in
-            GameLogView(game: game.toGame(), source: "want_to_play")
+            GameLogView(game: gameToLogResolved ?? game.toGame(), source: "want_to_play")
                 .presentationBackground(Color.appBackground)
         }
     }
@@ -324,6 +330,7 @@ struct WantToPlayListView: View {
                             // First game - just place at #1, no sheet
                             Task {
                                 let _ = await manager.placeGameAtPosition(gameId: game.id, position: 1)
+                                let _ = await manager.removeGame(gameId: game.gameId)
                                 await loadGames()
                             }
                         } else {
@@ -338,13 +345,39 @@ struct WantToPlayListView: View {
                             await loadGames()
                         }
                     }, onRankGame: {
+                        lastLoggedGame = game
                         gameToLog = game
+                        Task {
+                            gameToLogResolved = await resolveGame(from: game)
+                        }
                     }, onTap: {
                         selectedGame = game
                     })
                 }
             }
         }
+    
+    // MARK: - Resolve Game
+    private func resolveGame(from wtpGame: WantToPlayGame) async -> Game {
+        struct GameRow: Decodable { let id: Int; let rawg_id: Int }
+        let rows: [GameRow] = (try? await SupabaseManager.shared.client
+            .from("games")
+            .select("id, rawg_id")
+            .eq("id", value: wtpGame.gameId)
+            .limit(1)
+            .execute()
+            .value) ?? []
+        let rawgId = rows.first?.rawg_id ?? wtpGame.gameId
+        return Game(
+            id: wtpGame.gameId,
+            rawgId: rawgId,
+            title: wtpGame.gameTitle,
+            coverURL: wtpGame.gameCoverUrl,
+            genres: [], platforms: [], releaseDate: nil,
+            metacriticScore: nil, added: nil, rating: nil,
+            gameDescription: nil, gameDescriptionHtml: nil, tags: []
+        )
+    }
     
     // MARK: - Rank All
     private func startRankAll() {
@@ -1989,8 +2022,8 @@ struct FirstTwoComparisonView: View {
                     .not("rank_position", operator: .is, value: "null")
                     .execute()
                     .value
-                let rankedRawgIds = Set(rows.compactMap { $0.games?.rawg_id })
-                isAlreadyRanked = rankedRawgIds.contains(game.gameId)
+                let rankedGameIds = Set(rows.map { $0.game_id })
+                isAlreadyRanked = rankedGameIds.contains(game.gameId)
             } catch {
                 debugLog("⚠️ Error checking ranked status: \(error)")
             }

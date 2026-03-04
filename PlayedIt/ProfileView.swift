@@ -510,20 +510,20 @@ struct ProfileView: View {
                                 Label("Appearance", systemImage: "moon.circle")
                             }
                             
-                            Toggle(isOn: $hideNotifications) {
-                                Label("Hide Notifications", systemImage: "bell.slash")
-                            }
-                            
-                            Button {
-                                showSteamImport = true
+                            Menu {
+                                Button {
+                                    showSteamImport = true
+                                } label: {
+                                    Label(hasSteamConnected ? "Steam (Connected)" : "Steam", systemImage: "arrow.down.circle")
+                                }
+                                
+                                Button {
+                                    showCSVImport = true
+                                } label: {
+                                    Label("CSV", systemImage: "doc.text")
+                                }
                             } label: {
-                                Label(hasSteamConnected ? "Import from Steam (Connected ✓)" : "Import from Steam", systemImage: "arrow.down.circle")
-                            }
-                            
-                            Button {
-                                showCSVImport = true
-                            } label: {
-                                Label("Import from CSV", systemImage: "doc.text")
+                                Label("Import Library", systemImage: "square.and.arrow.down")
                             }
                             
                             if !hasAppleLinked {
@@ -532,6 +532,10 @@ struct ProfileView: View {
                                 } label: {
                                     Label("Link Apple ID", systemImage: "apple.logo")
                                 }
+                            }
+                            
+                            Toggle(isOn: $hideNotifications) {
+                                Label("Hide Notifications", systemImage: "bell.slash")
                             }
                         } label: {
                             Label("Settings", systemImage: "gearshape")
