@@ -40,7 +40,11 @@ struct ComparisonView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            ZStack {
+                Color.appBackground
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 16) {
                 // Progress indicator.
                 VStack(spacing: 8) {
                 }
@@ -111,14 +115,14 @@ struct ComparisonView: View {
                             }
                         }
                     } else {
-                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1) {
+                        RetroCompletionView(game: newGame, position: position, totalGames: existingGames.count + 1, predictedRange: predictedRange) {
                             onComplete(position)
                             dismiss()
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black)
                     }
                 }
+            }
             }
             .navigationTitle("Rank It")
             .navigationBarTitleDisplayMode(.inline)
@@ -154,7 +158,8 @@ struct ComparisonView: View {
             .onAppear {
                 setupComparison()
             }
-            .presentationBackground(Color.black)
+            .presentationBackground(Color.appBackground)
+            .background(Color.appBackground)
         }
     }
     
@@ -381,6 +386,8 @@ struct RetroCompletionView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                Color.appBackground
+                
                 ForEach(confettiParticles) { particle in
                     Rectangle()
                         .fill(particle.color.opacity(0.5))

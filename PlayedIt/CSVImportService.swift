@@ -173,7 +173,7 @@ class CSVImportService {
             throw CSVImportError.missingHeader
         }
         
-        let platformIndex = header.firstIndex(of: "platform")
+        let platformIndex = header.firstIndex(of: "platform") ?? header.firstIndex(of: "platforms")
         let notesIndex = header.firstIndex(of: "notes")
         debugLog("📋 CSV headers: \(header)")
         debugLog("📋 titleIndex=\(titleIndex) platformIndex=\(String(describing: platformIndex)) notesIndex=\(String(describing: notesIndex))")

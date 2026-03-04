@@ -483,20 +483,17 @@ struct SteamImportView: View {
             .navigationTitle("Find Game")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        // If we added an unmatched placeholder, remove it
-                        if let index = swappingGameIndex, index < confirmedForRanking.count,
-                           confirmedForRanking[index].rawgId == nil {
-                            confirmedForRanking.remove(at: index)
+                if phase != .complete {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            dismiss()
                         }
-                        showMatchSwapSearch = false
-                        swappingGameIndex = nil
+                        .foregroundColor(.primaryBlue)
                     }
-                    .foregroundColor(.primaryBlue)
                 }
             }
         }
+        .background(Color(.systemGroupedBackground))
     }
     
     // MARK: - Ranking View
@@ -509,6 +506,8 @@ struct SteamImportView: View {
                 ProgressView()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.appBackground)
     }
     
     private var rankingComparisonView: some View {
@@ -571,7 +570,6 @@ struct SteamImportView: View {
     private var completeView: some View {
         VStack(spacing: 20) {
             Spacer()
-            
             Text("🙌")
                 .font(.system(size: 60))
             
@@ -610,6 +608,8 @@ struct SteamImportView: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 40)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
     }
     
     // MARK: - Error View
