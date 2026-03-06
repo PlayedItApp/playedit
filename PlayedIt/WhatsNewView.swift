@@ -9,6 +9,63 @@ struct WhatsNewManager {
     
     static let features: [WhatsNewFeature] = [
         WhatsNewFeature(
+            icon: "arrow.down.doc.fill",
+            title: "CSV Import",
+            description: "Got a backlog spreadsheet? Import games directly from a CSV and rank them without starting from scratch. Template at playedit.app/template."
+        ),
+        WhatsNewFeature(
+            icon: "wand.and.stars",
+            title: "Curated Game Data",
+            description: "Descriptions, genres, tags, platforms, and release years have all been rewritten from scratch. No longer are we at the whim of RAWGG's API. Just accurate, useful info. Sometimes... this is an ongoing project."
+        ),
+        WhatsNewFeature(
+            icon: "sparkles",
+            title: "Smarter Recommendations",
+            description: "Recommendations now only suggest games on platforms you've actually used. Refresh without seeing the same games twice, and the background actually matches the rest of the app now."
+        ),
+        WhatsNewFeature(
+            icon: "bookmark.fill",
+            title: "Want to Play Upgrades",
+            description: "Cards now show release year and platforms. Prioritize reorders your backlog. Rank moves a game into your rankings. They're separate now so it's actually clear what you're doing."
+        )
+    ]
+    
+    static let minorImprovements: [String] = [
+        "Made it so the Rank button in Want to Play actually ranks games and add the Prioritize button to prioritize within the Want to Play list",
+        "Feed refreshes automatically after CSV and Steam imports",
+        "Genres and tags now appear on game detail views for curated games",
+        "Platforms shown on friend profiles and Want to Play lists, ordered by what you've played first",
+        "All game detail views now pull from cache instead of hitting the backend every time",
+        "Added a button to report bad descriptions, genres, tags, platforms, or release year on any game. Call me out if they're wrong. I'll take care of it",
+        "Game log view redesigned so that searching a game looks the same as tapping one in the feed",
+        "Adding a game from search now shows the new post in the feed when you close the view",
+        "Games without artwork are moved to the bottom of grouped Want to Play posts so the preview always looks clean",
+        "Only show platforms a game was actually released on in the ranking picker",
+        "Game detail views now show release year, platforms, genres, and tags sourced from our curated data layer",
+        "Optimized queries on friends, game detail, recommendations, and feed pages",
+        "Added a way to permanently discard an in-progress ranking instead of being forced to finish it"
+    ]
+    
+    static let bugFixes: [String] = [
+        "Fixed Steam import so selecting multiple games actually ranks all of them, not just one",
+        "Tapping a row in Steam import now toggles the game instead of requiring a precise tap on the checkbox",
+        "In-progress import count is now scoped to the current import, not all-time",
+        "In-progress count persists when you navigate away from your profile mid-import",
+        "Fixed coloring on the Steam import rankings view",
+        "Sign out failures no longer leave you stuck in a signed-in limbo with no way out",
+        "Fixed a race condition in the game metadata cache. No more thread safety issues",
+        "Clicking add/remove Want to Play too quickly no longer breaks the button",
+        "Want to Play detail sheets now match the dark styling of ranking feed posts",
+        "Adding from a batched Want to Play post now correctly highlights the bookmark",
+        "Feed batching now correctly groups posts of the same type within a 2-hour window",
+        "Bookmarks stay highlighted when you add a game to Want to Play via search",
+        "Ranking a game from recommendations now removes it from your recommendations list"
+    ]
+    
+    // MARK: - Previous Version (1.3.0)
+
+    static let previousFeatures_1_3_0: [WhatsNewFeature] = [
+        WhatsNewFeature(
             icon: "square.and.arrow.up.fill",
             title: "Share Games",
             description: "Found your new #1? Share any game with a slick card that shows your ranking and cover art. Send it to friends, post it wherever. Let the world know."
@@ -49,8 +106,8 @@ struct WhatsNewManager {
             description: "Game art loads way faster across onboarding, profiles, and the feed. Predictions and game details are snappier too. Less waiting, more ranking."
         )
     ]
-    
-    static let minorImprovements: [String] = [
+
+    static let previousMinorImprovements_1_3_0: [String] = [
         "Bookmark games directly from the game detail view",
         "The feed now loads older posts, no more hitting a wall",
         "Ranking a game from Want to Play now closes the sheet, refreshes your profile, and removes it from the list automatically",
@@ -69,8 +126,8 @@ struct WhatsNewManager {
         "Removed the toast when adding to Want to Play from search",
         "Send error logs directly from your profile to help us squash bugs faster"
     ]
-    
-    static let bugFixes: [String] = [
+
+    static let previousBugFixes_1_3_0: [String] = [
         "Fixed close button placement on Want to Play view and game view from recommendations. Now consistently on the left",
         "Fixed spacing between the bottom of the ranked list and the navigation bar on profiles",
         "Fixed comment text readability in dark mode",
@@ -91,7 +148,7 @@ struct WhatsNewManager {
         "Fixed inability to add games to Want to Play from batched feed posts",
         "Fixed broken \"user commented\" notification navigation"
     ]
-    
+
     // MARK: - Previous Version (1.2.5)
     
     static let previousFeatures_1_2_5: [WhatsNewFeature] = [
@@ -249,10 +306,8 @@ struct WhatsNewView: View {
             .padding(.top, 32)
             .padding(.bottom, 24)
             
-            // Features & improvements
             ScrollView {
                 VStack(spacing: 20) {
-                    // Major features
                     ForEach(WhatsNewManager.features) { feature in
                         HStack(alignment: .top, spacing: 0) {
                             ZStack {
@@ -281,7 +336,6 @@ struct WhatsNewView: View {
                         .padding(.horizontal, 24)
                     }
                     
-                    // Minor improvements section
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Minor Improvements")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -305,7 +359,6 @@ struct WhatsNewView: View {
                         .padding(.horizontal, 24)
                     }
                     
-                    // Bug fixes section
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Bug Fixes 🛠️")
                             .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -332,7 +385,6 @@ struct WhatsNewView: View {
                 .padding(.bottom, 16)
             }
             
-            // Dismiss button
             Button {
                 WhatsNewManager.markAsSeen()
                 dismiss()

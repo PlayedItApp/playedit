@@ -7,26 +7,88 @@ class RAWGService {
     private var apiKey: String { Config.rawgAPIKey }
     
     private init() {}
+
+    // MARK: - Search Cache
+    private var searchCache: [String: (results: [Game], timestamp: Date)] = [:]
+    private let searchCacheTTL: TimeInterval = 600
     
     // MARK: - Search Games
     func searchGames(query: String) async throws -> [Game] {
         guard !query.isEmpty else { return [] }
-        
-        // Try original query first
-        let results = try await performSearch(query: query)
-        
-        // If we got few results and query might be missing punctuation, try variations
-        if results.count < 20 {
-            let variations = generateQueryVariations(query)
-            for variation in variations where variation != query.lowercased() {
-                let moreResults = try await performSearch(query: variation)
-                if moreResults.count > results.count {
-                    return moreResults
+
+        let cacheKey = query.lowercased().trimmingCharacters(in: .whitespaces)
+        if let cached = searchCache[cacheKey],
+           Date().timeIntervalSince(cached.timestamp) < searchCacheTTL {
+            debugLog("📦 Returning cached search results for: \(query)")
+            return cached.results
+        }
+
+        let localResults: [Game]
+        do {
+            localResults = try await SupabaseManager.shared.searchLocalGames(query: query)
+            debugLog("🗄️ Local search returned \(localResults.count) results for: \(query)")
+        } catch {
+            debugLog("⚠️ Local search failed, falling back to RAWG: \(error)")
+            localResults = []
+        }
+
+        let queryLower = query.lowercased()
+        let hasStrongMatch = localResults.contains {
+            let title = $0.title.lowercased()
+            return title == queryLower || title.hasPrefix(queryLower)
+        }
+
+        if localResults.count >= 5 && hasStrongMatch {
+            debugLog("✅ Strong local match — skipping RAWG for: \(query)")
+            let sorted = sortByRelevance(localResults, query: query)
+            searchCache[cacheKey] = (sorted, Date())
+            return sorted
+        }
+
+        var rawgResults: [Game] = []
+        do {
+            rawgResults = try await performSearch(query: query)
+            if rawgResults.count < 20 {
+                let variations = generateQueryVariations(query)
+                for variation in variations where variation != query.lowercased() {
+                    let moreResults = try await performSearch(query: variation)
+                    if moreResults.count > rawgResults.count {
+                        rawgResults = moreResults
+                    }
                 }
             }
+        } catch {
+            debugLog("⚠️ RAWG search failed: \(error)")
+            if !localResults.isEmpty {
+                debugLog("🛟 Returning local results as RAWG fallback for: \(query)")
+                let sorted = sortByRelevance(localResults, query: query)
+                searchCache[cacheKey] = (sorted, Date())
+                return sorted
+            }
+            throw error
         }
-        
-        return results
+
+        let localRawgIds = Set(localResults.map { $0.rawgId })
+        let rawgOnly = rawgResults.filter { !localRawgIds.contains($0.rawgId) }
+        let merged = localResults + rawgOnly
+        let sorted = sortByRelevance(merged, query: query)
+        searchCache[cacheKey] = (sorted, Date())
+        return sorted
+    }
+    
+    private func sortByRelevance(_ games: [Game], query: String) -> [Game] {
+        let queryLower = query.lowercased()
+        let queryWords = Set(queryLower.split(separator: " ").map { String($0) })
+        return games.sorted { game1, game2 in
+            let score1 = relevanceScore(game: game1, name: game1.title.lowercased(), query: queryLower, queryWords: queryWords)
+            let score2 = relevanceScore(game: game2, name: game2.title.lowercased(), query: queryLower, queryWords: queryWords)
+            if score1 == score2 {
+                let year1 = Int(game1.releaseDate?.prefix(4) ?? "9999") ?? 9999
+                let year2 = Int(game2.releaseDate?.prefix(4) ?? "9999") ?? 9999
+                return year1 < year2
+            }
+            return score1 > score2
+        }
     }
     
     private func performSearch(query: String) async throws -> [Game] {

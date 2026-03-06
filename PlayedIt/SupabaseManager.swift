@@ -374,6 +374,48 @@ class SupabaseManager: ObservableObject {
             return false
         }
     }
+    
+    // MARK: - Local Game Search
+    func searchLocalGames(query: String) async throws -> [Game] {
+        struct LocalGameRow: Decodable {
+            let id: Int
+            let rawg_id: Int
+            let title: String
+            let cover_url: String?
+            let genres: [String]?
+            let platforms: [String]?
+            let release_date: String?
+            let metacritic_score: Int?
+            let tags: [String]?
+            let curated_genres: [String]?
+            let curated_tags: [String]?
+        }
+
+        let rows: [LocalGameRow] = try await client
+            .from("games")
+            .select("id, rawg_id, title, cover_url, genres, platforms, release_date, metacritic_score, tags, curated_genres, curated_tags")
+            .ilike("title", pattern: "%\(query)%")
+            .limit(20)
+            .execute()
+            .value
+
+        return rows.map { row in
+            Game(
+                id: row.id,
+                rawgId: row.rawg_id,
+                title: row.title,
+                coverURL: row.cover_url,
+                genres: row.curated_genres ?? row.genres ?? [],
+                platforms: row.platforms ?? [],
+                releaseDate: row.release_date,
+                metacriticScore: row.metacritic_score,
+                added: nil,
+                rating: nil,
+                gameDescription: nil,
+                tags: row.curated_tags ?? row.tags ?? []
+            )
+        }
+    }
 
     // MARK: - Check if Apple ID is linked
     func hasAppleIdentity() async -> Bool {
