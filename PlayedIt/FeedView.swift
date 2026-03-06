@@ -16,6 +16,7 @@ struct FeedView: View {
     @State private var hasMorePosts = true
     @State private var oldestPostDate: String? = nil
     @State private var cachedFeedUserIds: [String]? = nil
+    @State private var lastFetched: Date? = nil
     private let pageSize = 30
     
     var body: some View {
@@ -88,10 +89,11 @@ struct FeedView: View {
             }
         }
         .task {
-            if combinedFeed.isEmpty {
-                AnalyticsService.shared.track(.feedOpened)
-                await fetchFeed()
-            }
+            let isStale = lastFetched.map { Date().timeIntervalSince($0) > 120 } ?? true
+                if combinedFeed.isEmpty || isStale {
+                    AnalyticsService.shared.track(.feedOpened)
+                    await fetchFeed()
+                }
             if !hideNotifications {
                 await fetchUnreadCount()
             }
@@ -781,6 +783,7 @@ struct FeedView: View {
             ImageCache.shared.prefetch(urls: Array(coverUrls.dropFirst(20)))
             
             combinedFeed = combined
+            lastFetched = Date()
             isLoading = false
             
         } catch {

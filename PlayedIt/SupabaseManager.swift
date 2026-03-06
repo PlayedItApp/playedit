@@ -80,6 +80,10 @@ class SupabaseManager: ObservableObject {
         Task {
             await checkSession()
         }
+
+        Task {
+            await setupAuthListener()
+        }
     }
     
     // MARK: - Check Existing Session
@@ -97,6 +101,42 @@ class SupabaseManager: ObservableObject {
         } catch {
             self.isAuthenticated = false
             self.currentUser = nil
+        }
+    }
+    
+    // MARK: - Validate Session (called on foreground)
+    func validateSession() async {
+        do {
+            let session = try await client.auth.session
+            await MainActor.run {
+                self.currentUser = session.user
+                self.isAuthenticated = true
+            }
+            debugLog("✅ Session valid, token refreshed if needed")
+        } catch {
+            debugLog("⚠️ Session validation failed: \(error)")
+            await MainActor.run {
+                self.currentUser = nil
+                self.isAuthenticated = false
+            }
+        }
+    }
+    
+    // MARK: - Auth State Listener
+    private func setupAuthListener() async {
+        for await (event, session) in client.auth.authStateChanges {
+            await MainActor.run {
+                switch event {
+                case .signedIn, .tokenRefreshed:
+                    self.currentUser = session?.user
+                    self.isAuthenticated = true
+                case .signedOut:
+                    self.currentUser = nil
+                    self.isAuthenticated = false
+                default:
+                    break
+                }
+            }
         }
     }
     

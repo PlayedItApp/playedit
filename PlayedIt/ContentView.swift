@@ -2,6 +2,7 @@ import SwiftUI
 import Supabase
 import Combine
 import UserNotifications
+import Network
 
 struct iPadReadableWidthModifier: ViewModifier {
     @Environment(\.horizontalSizeClass) var sizeClass
@@ -155,6 +156,7 @@ struct MainTabView: View {
     var forceProfileTab: Bool = false
     @AppStorage("startTab") private var startTab = 0
     @AppStorage("hideNotifications") private var hideNotifications = false
+    @Environment(\.scenePhase) var scenePhase
     @State private var selectedTab: Int = 0
     @State private var pendingRequestCount = 0
     @State private var unreadNotificationCount = 0
@@ -164,6 +166,7 @@ struct MainTabView: View {
     @State private var userAvatarURL: String?
     @State private var userUsername: String = ""
     @State private var profileNudgeVisible = false
+    @State private var isOffline = false
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -223,6 +226,22 @@ struct MainTabView: View {
                 await fetchProfileForNudge()
             }
         .overlay(alignment: .top) {
+            if isOffline {
+                HStack(spacing: 6) {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("You're offline")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(Color.red.opacity(0.85))
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.3), value: isOffline)
+            }
+        }
+        .overlay(alignment: .top) {
             if profileNudgeVisible {
                 HStack(spacing: 6) {
                     Button {
@@ -261,6 +280,29 @@ struct MainTabView: View {
                 .background(Capsule().fill(Color.primaryBlue))
                 .padding(.top, 54)
                 .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .task(id: "network-monitor") {
+            let monitor = NWPathMonitor()
+            let stream = AsyncStream<Bool> { continuation in
+                monitor.pathUpdateHandler = { path in
+                    continuation.yield(path.status != .satisfied)
+                }
+                monitor.start(queue: DispatchQueue(label: "NetworkMonitor"))
+            }
+            for await offline in stream {
+                await MainActor.run { isOffline = offline }
+            }
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active && oldPhase == .inactive {
+                Task {
+                    await supabase.validateSession()
+                    await fetchPendingCount()
+                    if !hideNotifications {
+                        await fetchUnreadNotificationCount()
+                    }
+                }
             }
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
