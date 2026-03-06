@@ -21,15 +21,21 @@ struct ComparisonView: View {
     @State private var selectedSide: String? = nil
     @State private var comparisonHistory: [ComparisonState] = []
     @State private var showCancelAlert = false
+    @State private var skippedIndices: Set<Int> = []
     
     // History state for undo
     struct ComparisonState {
         let lowIndex: Int
         let highIndex: Int
         let comparisonCount: Int
+        let skippedIndices: Set<Int>
     }
     
-    private let maxComparisons = 10
+    private var maxComparisons: Int {
+        let count = existingGames.count
+        if count <= 1 { return 1 }
+        return min(Int(ceil(log2(Double(count)))) + 2, 15)
+    }
     
     private let prompts = [
         "Which did you enjoy more?",
@@ -106,6 +112,13 @@ struct ComparisonView: View {
                     
                     Spacer()
                     
+                    Button("Can't remember this one") {
+                        skipComparison()
+                    }
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+                    .padding(.bottom, 16)
+                    
                 } else if let position = finalPosition {
                     if skipCelebration {
                         Color.clear.onAppear {
@@ -163,12 +176,6 @@ struct ComparisonView: View {
         }
     }
     
-    private var estimatedTotal: Int {
-        let count = existingGames.count
-        if count <= 1 { return 1 }
-        return min(Int(ceil(log2(Double(count)))) + 2, maxComparisons)
-    }
-    
     private func setupComparison() {
         guard !existingGames.isEmpty else {
             finalPosition = 1
@@ -201,12 +208,40 @@ struct ComparisonView: View {
         }
         
         let standardMid = (lowIndex + highIndex) / 2
-        let midIndex: Int
+        let rawMid: Int
         if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(lowIndex, min(predicted - 1, highIndex))
-            debugLog("🎯 Biased first comparison to index \(midIndex) (predicted #\(predicted)) instead of standard \(standardMid)")
+            rawMid = max(lowIndex, min(predicted - 1, highIndex))
+            debugLog("🎯 Biased first comparison to index \(rawMid) (predicted #\(predicted)) instead of standard \(standardMid)")
         } else {
-            midIndex = standardMid
+            rawMid = standardMid
+        }
+        
+        // Find nearest non-skipped index, searching outward from rawMid
+        let midIndex: Int
+        if !skippedIndices.contains(rawMid) {
+            midIndex = rawMid
+        } else {
+            // Search outward from rawMid for a non-skipped index within range
+            var found: Int? = nil
+            for offset in 1...(highIndex - lowIndex + 1) {
+                let lower = rawMid - offset
+                let upper = rawMid + offset
+                if lower >= lowIndex && !skippedIndices.contains(lower) {
+                    found = lower; break
+                }
+                if upper <= highIndex && !skippedIndices.contains(upper) {
+                    found = upper; break
+                }
+            }
+            if let f = found {
+                midIndex = f
+            } else {
+                // All indices in range are skipped — just insert at midpoint
+                finalPosition = rawMid + 1
+                currentComparison = nil
+                debugLog("📊 RESULT (all skipped): '\(newGame.title)' → #\(rawMid + 1)")
+                return
+            }
         }
         currentComparison = existingGames[midIndex]
         
@@ -240,7 +275,8 @@ struct ComparisonView: View {
         comparisonHistory.append(ComparisonState(
             lowIndex: lowIndex,
             highIndex: highIndex,
-            comparisonCount: comparisonCount
+            comparisonCount: comparisonCount,
+            skippedIndices: skippedIndices
         ))
         
         // Use the same midIndex that was shown to the user
@@ -262,7 +298,8 @@ struct ComparisonView: View {
         comparisonHistory.append(ComparisonState(
             lowIndex: lowIndex,
             highIndex: highIndex,
-            comparisonCount: comparisonCount
+            comparisonCount: comparisonCount,
+            skippedIndices: skippedIndices
         ))
         
         // Use the same midIndex that was shown to the user
@@ -280,6 +317,34 @@ struct ComparisonView: View {
         nextComparison()
     }
     
+    private func skipComparison() {
+        guard let currentOpponent = currentComparison else { return }
+        
+        let midIndex: Int
+        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+        } else {
+            midIndex = (lowIndex + highIndex) / 2
+        }
+        
+        comparisonHistory.append(ComparisonState(
+            lowIndex: lowIndex,
+            highIndex: highIndex,
+            comparisonCount: comparisonCount,
+            skippedIndices: skippedIndices
+        ))
+        
+        skippedIndices.insert(midIndex)
+        comparisonCount += 1
+        
+        debugLog("📊 SKIP: '\(currentOpponent.gameTitle)' at index \(midIndex) | range=[\(lowIndex)...\(highIndex)]")
+        
+        let lightFeedback = UIImpactFeedbackGenerator(style: .light)
+        lightFeedback.impactOccurred()
+        
+        nextComparison()
+    }
+    
     private func undoLastComparison() {
         guard let lastState = comparisonHistory.popLast() else { return }
         AnalyticsService.shared.track(.rankingUndoUsed)
@@ -288,6 +353,7 @@ struct ComparisonView: View {
         lowIndex = lastState.lowIndex
         highIndex = lastState.highIndex
         comparisonCount = lastState.comparisonCount
+        skippedIndices = lastState.skippedIndices
         finalPosition = nil
         
         // Show the comparison again
