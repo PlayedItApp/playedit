@@ -559,6 +559,7 @@ curatedPlatforms: curatedPlatforms
                 let notes: String?
                 let logged_at: String?
                 let canonical_game_id: Int?
+                let status: String?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -589,6 +590,7 @@ curatedPlatforms: curatedPlatforms
                     notes: row.notes,
                     loggedAt: row.logged_at,
                     canonicalGameId: row.canonical_game_id,
+                    status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date,

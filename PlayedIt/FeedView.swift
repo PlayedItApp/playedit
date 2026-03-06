@@ -1600,6 +1600,7 @@ struct FeedGameDetailSheet: View {
             notes: nil,
             loggedAt: item.loggedAt,
             canonicalGameId: nil,
+            status: .played,
             gameTitle: item.gameTitle,
             gameCoverURL: item.gameCoverURL,
             gameReleaseDate: nil,
@@ -1679,6 +1680,7 @@ struct FeedGameDetailSheet: View {
                 let notes: String?
                 let logged_at: String?
                 let canonical_game_id: Int?
+                let status: String?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -1688,7 +1690,6 @@ struct FeedGameDetailSheet: View {
                     let rawg_id: Int?
                 }
             }
-            
             // 1. Fetch the user_game entry (or use pre-built data if userGameId is empty, e.g. batch taps)
             if !item.userGameId.isEmpty {
                 let row: UserGameRow = try await supabase.client
@@ -1708,27 +1709,15 @@ struct FeedGameDetailSheet: View {
                         notes: row.notes,
                         loggedAt: row.logged_at,
                         canonicalGameId: row.canonical_game_id,
+                        status: .played,
                         gameTitle: row.games.title,
                         gameCoverURL: row.games.cover_url,
                         gameReleaseDate: row.games.release_date,
                         gameRawgId: row.games.rawg_id
                     )
-                } else {
+            } else {
                 // Fallback: build from FeedItem data (no DB fetch needed)
-                userGame = UserGame(
-                    id: item.id,
-                    gameId: item.gameId,
-                    userId: item.userId,
-                    rankPosition: item.rankPosition ?? 0,
-                    platformPlayed: [],
-                    notes: nil,
-                    loggedAt: item.loggedAt,
-                    canonicalGameId: nil,
-                    gameTitle: item.gameTitle,
-                    gameCoverURL: item.gameCoverURL,
-                    gameReleaseDate: nil,
-                    gameRawgId: nil
-                )
+                userGame = prebuiltUserGame
             }
             
             // Skip friend/myGames fetch if it's own post
@@ -1795,6 +1784,7 @@ struct FeedGameDetailSheet: View {
                     notes: r.notes,
                     loggedAt: r.logged_at,
                     canonicalGameId: r.canonical_game_id,
+                    status: GameStatus(rawValue: r.status ?? "played") ?? .played,
                     gameTitle: r.games.title,
                     gameCoverURL: r.games.cover_url,
                     gameReleaseDate: r.games.release_date,
@@ -2480,7 +2470,9 @@ struct WantToPlayFeedRow: View {
                     note: nil,
                     isVisible: true,
                     createdAt: nil,
-                    sortPosition: nil
+                    sortPosition: nil,
+                    rawgId: nil,
+                    sourceFriendName: nil
                 )
             )
         }
@@ -2693,7 +2685,9 @@ struct WantToPlayExpandedRow: View {
                     note: nil,
                     isVisible: true,
                     createdAt: nil,
-                    sortPosition: nil
+                    sortPosition: nil,
+                    rawgId: nil,
+                    sourceFriendName: nil
                 )
             )
         }

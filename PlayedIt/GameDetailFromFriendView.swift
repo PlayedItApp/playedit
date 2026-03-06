@@ -846,6 +846,7 @@ curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                 let notes: String?
                 let logged_at: String?
                 let canonical_game_id: Int?
+                let status: String?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -875,6 +876,7 @@ curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                     notes: row.notes,
                     loggedAt: row.logged_at,
                     canonicalGameId: row.canonical_game_id,
+                    status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date,
@@ -893,15 +895,16 @@ curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
             userGame: UserGame(
                 id: "preview-1",
                 gameId: 1,
-                userId: "friend-1",
-                rankPosition: 5,
+                userId: "user-1",
+                rankPosition: 1,
                 platformPlayed: ["PlayStation 5"],
-                notes: "One of the best open-world games I've ever played. The sense of discovery is unmatched.",
-                loggedAt: "2025-01-15T10:30:00Z",
+                notes: nil,
+                loggedAt: nil,
                 canonicalGameId: nil,
-                gameTitle: "The Legend of Zelda: Breath of the Wild",
+                status: .played,
+                gameTitle: "Elden Ring",
                 gameCoverURL: nil,
-                gameReleaseDate: "2017-03-03",
+                gameReleaseDate: nil,
                 gameRawgId: nil
             ),
             friend: Friend(

@@ -579,8 +579,8 @@ class WantToPlayManager: ObservableObject {
         }
     }
     
-    // MARK: - Check status for a game
-    func status(for gameId: Int, rankedGameIds: Set<Int>) -> GameStatus {
+    // MARK: - Check bookmark state for a game
+    func bookmarkState(for gameId: Int, rankedGameIds: Set<Int>) -> BookmarkState {
         if rankedGameIds.contains(gameId) {
             return .ranked
         } else if myWantToPlayIds.contains(gameId) || myWantToPlayRawgIds.contains(gameId) {
@@ -590,11 +590,11 @@ class WantToPlayManager: ObservableObject {
         }
     }
     
-    enum GameStatus {
-            case ranked
-            case wantToPlay
-            case none
-        }
+    enum BookmarkState {
+        case ranked
+        case wantToPlay
+        case none
+    }
     
     // MARK: - Remove game by RAWG ID (for post-ranking cleanup)
     func removeGameIfPresent(rawgId: Int) async {

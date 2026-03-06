@@ -521,6 +521,7 @@ struct GameDetailSheet: View {
     @State private var curatedReleaseYear: Int? = nil
     @State private var totalRankedGames: Int = 0
     @State private var isSharing = false
+    @State private var currentStatus: GameStatus = .played
     @State private var friendRankings: [(username: String, rank: Int, avatarURL: String?, tasteMatch: Int)] = []
     @State private var isLoadingFriendRankings = true
     @State private var computedPredictedRange: (lower: Int, upper: Int)? = nil
@@ -554,7 +555,32 @@ struct GameDetailSheet: View {
                     Text("Ranked #\(rank)")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundColor(rank == 1 ? .accentOrange : .primaryBlue)
-                    
+/*
+                    // Status picker
+                    Menu {
+                        ForEach(GameStatus.allCases, id: \.self) { status in
+                            Button {
+                                Task { await updateStatus(status) }
+                            } label: {
+                                Label(status.displayName, systemImage: status.icon)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: currentStatus.icon)
+                                .font(.system(size: 13, weight: .semibold))
+                            Text(currentStatus.displayName)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(currentStatus.color)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(currentStatus.color.opacity(0.12))
+                        .cornerRadius(20)
+                    }
+*/
                     Divider()
                         .padding(.horizontal, 40)
                     
@@ -956,6 +982,7 @@ struct GameDetailSheet: View {
                     if !hasInitialized {
                     displayedNotes = game.notes
                     displayedPlatforms = game.platformPlayed.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                        currentStatus = game.status
                     hasInitialized = true
                 }
             }
@@ -1319,6 +1346,7 @@ struct GameDetailSheet: View {
                 let platform_played: [String]
                 let notes: String?
                 let logged_at: String?
+                let status: String?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -1349,6 +1377,7 @@ struct GameDetailSheet: View {
                     notes: row.notes,
                     loggedAt: row.logged_at,
                     canonicalGameId: nil,
+                    status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date,
@@ -1444,6 +1473,21 @@ struct GameDetailSheet: View {
         }
     }
     
+    // MARK: - Update Status
+    private func updateStatus(_ status: GameStatus) async {
+        currentStatus = status
+        do {
+            try await supabase.client
+                .from("user_games")
+                .update(["status": status.rawValue])
+                .eq("id", value: game.id)
+                .execute()
+            debugLog("✅ Status updated to \(status.rawValue)")
+        } catch {
+            debugLog("❌ Error updating status: \(error)")
+        }
+    }
+
     // MARK: - Save Platforms
         private func savePlatforms() async {
             isSavingPlatforms = true

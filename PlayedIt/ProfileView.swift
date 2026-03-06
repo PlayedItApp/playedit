@@ -677,6 +677,7 @@ struct ProfileView: View {
                 let platform_played: [String]
                 let notes: String?
                 let logged_at: String?
+                let status: String?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -729,6 +730,7 @@ struct ProfileView: View {
                     notes: row.notes,
                     loggedAt: row.logged_at,
                     canonicalGameId: nil,
+                    status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date,
@@ -802,6 +804,7 @@ struct ProfileView: View {
                 let platform_played: [String]
                 let notes: String?
                 let logged_at: String?
+                let status: String?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -811,7 +814,6 @@ struct ProfileView: View {
                     let rawg_id: Int?
                 }
             }
-            
             let rows: [UserGameRow] = try await supabase.client
                 .from("user_games")
                 .select("*, games(title, cover_url, release_date, rawg_id)")
@@ -829,6 +831,7 @@ struct ProfileView: View {
                     notes: row.notes,
                     loggedAt: row.logged_at,
                     canonicalGameId: nil,
+                    status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
                     gameReleaseDate: row.games.release_date,
