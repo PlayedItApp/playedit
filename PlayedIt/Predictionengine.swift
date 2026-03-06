@@ -84,7 +84,7 @@ struct PredictionContext {
     var weights: PredictionWeights = .default
 
     var myGameCount: Int { myGames.count }
-    var hasEnoughData: Bool { myGames.count >= 5 }
+    var hasEnoughData: Bool { myGames.count >= 3 }
 }
 
 struct RankedGameData {
@@ -285,8 +285,8 @@ class PredictionEngine {
     // MARK: - Tier 2: Genre Affinity
     
     private func computeGenreAffinity(genres: [String], context: PredictionContext) -> Double? {
-        guard !genres.isEmpty, context.myGameCount >= 5 else { return nil }
-        
+        guard !genres.isEmpty, context.myGameCount >= 3 else { return nil }
+                
         // For each genre, find user's average rank percentile
         var genrePercentiles: [Double] = []
         
@@ -325,7 +325,7 @@ class PredictionEngine {
     // MARK: - Tier 2: Genre Pair Affinity
 
     private func computeGenrePairAffinity(genres: [String], context: PredictionContext) -> Double? {
-        guard genres.count >= 2, context.myGameCount >= 5 else { return nil }
+        guard genres.count >= 2, context.myGameCount >= 3 else { return nil }
 
         // Build all pairs from the target game's genres
         var pairs: [(String, String)] = []
@@ -380,7 +380,7 @@ class PredictionEngine {
     // MARK: - Tier 2: Tag Affinity
     
     private func computeTagAffinity(tags: [String], context: PredictionContext) -> Double? {
-        guard !tags.isEmpty, context.myGameCount >= 5 else { return nil }
+        guard !tags.isEmpty, context.myGameCount >= 3 else { return nil }
         
         var tagPercentiles: [Double] = []
         

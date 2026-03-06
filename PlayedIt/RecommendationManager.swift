@@ -162,6 +162,7 @@ class RecommendationManager: ObservableObject {
         
         // 4. Build prediction context
         guard let context = await PredictionEngine.shared.getContext() else {
+            await generateColdStartRecommendations(userId: userId.uuidString)
             await buildDisplayList()
             return
         }
@@ -970,6 +971,109 @@ class RecommendationManager: ObservableObject {
             return true  // We'll check in the view with context.myGameCount
         } catch {
             return false
+        }
+    }
+    
+    // MARK: - Cold-Start Recommendations (< 3 ranked games)
+    private func generateColdStartRecommendations(userId: String) async {
+        let platforms = UserDefaults.standard.stringArray(forKey: "onboarding_platforms") ?? []
+        let genres = UserDefaults.standard.stringArray(forKey: "onboarding_genres") ?? []
+
+        guard !platforms.isEmpty || !genres.isEmpty else {
+            debugLog("🥶 Cold start: no onboarding data saved, skipping")
+            return
+        }
+
+        debugLog("🥶 Cold start: platforms=\(platforms), genres=\(genres)")
+
+        // Map onboarding genre keys to curated genre names used in games table
+        let genreMap: [String: [String]] = [
+            "action_adventure": ["Action", "Adventure"],
+            "rpgs": ["RPG"],
+            "shooters": ["Shooter"],
+            "platformers": ["Platformer"],
+            "strategy": ["Strategy"],
+            "sports": ["Sports"],
+            "horror": ["Action"],
+            "indie": ["Indie"],
+            "fighting": ["Fighting"],
+            "racing": ["Racing"]
+        ]
+        let wantedGenres = genres.flatMap { genreMap[$0] ?? [] }
+
+        do {
+            struct ColdCandidate: Decodable {
+                let id: Int
+                let rawg_id: Int
+                let title: String
+                let cover_url: String?
+                let curated_genres: [String]?
+                let genres: [String]?
+                let metacritic_score: Int?
+            }
+
+            let excludedIds = await buildExclusionSet(userId: userId, existingPendingIds: [], currentRound: 1)
+
+            let candidates: [ColdCandidate] = try await supabase.client
+                .from("games")
+                .select("id, rawg_id, title, cover_url, curated_genres, genres, metacritic_score")
+                .not("metacritic_score", operator: .is, value: "null")
+                .not("curated_genres", operator: .is, value: "null")
+                .order("metacritic_score", ascending: false)
+                .limit(300)
+                .execute()
+                .value
+
+            let matched = candidates.filter { game in
+                guard !excludedIds.contains(game.id) else { return false }
+                let gameGenres = game.curated_genres ?? game.genres ?? []
+                return gameGenres.contains { wantedGenres.contains($0) }
+            }
+
+            debugLog("🥶 Cold start: \(matched.count) genre-matched candidates")
+
+            let top = Array(matched.prefix(8))
+
+            struct Insert: Encodable {
+                let user_id: String
+                let game_id: Int
+                let source: String
+                let source_friend_id: String?
+                let predicted_percentile: Double
+                let predicted_summary: String
+                let confidence: Int
+                let tiers_used: [String]
+                let round_number: Int
+            }
+
+            for game in top {
+                let metacriticNorm = Double(game.metacritic_score ?? 75)
+                let predictedPercentile = max(65, min(85, (metacriticNorm - 70) * 1.5 + 65))
+
+                do {
+                    try await supabase.client
+                        .from("recommendations")
+                        .upsert(Insert(
+                            user_id: userId,
+                            game_id: game.id,
+                            source: "cold_start",
+                            source_friend_id: nil,
+                            predicted_percentile: predictedPercentile,
+                            predicted_summary: "Matches your genre taste",
+                            confidence: 1,
+                            tiers_used: ["cold_start"],
+                            round_number: 1
+                        ))
+                        .execute()
+                } catch {
+                    debugLog("⚠️ Cold start insert error for \(game.title): \(error)")
+                }
+            }
+
+            debugLog("🥶 Cold start: inserted \(top.count) recommendations")
+
+        } catch {
+            debugLog("❌ Cold start fetch error: \(error)")
         }
     }
 }

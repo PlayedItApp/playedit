@@ -603,6 +603,8 @@ struct OnboardingQuizView: View {
     }
     
     private func startRanking() {
+        UserDefaults.standard.set(selectedPlatforms.map { $0.rawValue }, forKey: "onboarding_platforms")
+        UserDefaults.standard.set(selectedGenres.map { $0.rawValue }, forKey: "onboarding_genres")
         gamesToRank = filteredGames.filter { selectedGameIds.contains($0.id) }
         AnalyticsService.shared.track(.onboardingGamesSelected, properties: [
             "count": gamesToRank.count
@@ -610,6 +612,9 @@ struct OnboardingQuizView: View {
         AnalyticsService.shared.track(.onboardingRankingStarted, properties: [
             "game_count": gamesToRank.count
         ])
+        // Persist picks for cold-start recommendations
+        UserDefaults.standard.set(selectedPlatforms.map { $0.rawValue }, forKey: "onboarding_platforms")
+        UserDefaults.standard.set(selectedGenres.map { $0.rawValue }, forKey: "onboarding_genres")
         showRankingFlow = true
     }
 }
