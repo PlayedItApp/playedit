@@ -81,7 +81,8 @@ struct FriendSignal {
 struct PredictionContext {
     let myGames: [RankedGameData]
     let friends: [FriendData]
-    
+    var weights: PredictionWeights = .default
+
     var myGameCount: Int { myGames.count }
     var hasEnoughData: Bool { myGames.count >= 5 }
 }
@@ -121,6 +122,19 @@ struct PredictionTarget {
     let tags: [String]
     let metacriticScore: Int?
     var releaseYear: Int? = nil
+}
+
+// MARK: - Per-User Weight Adjustments
+
+struct PredictionWeights {
+    var genreWeight: Double = 1.0
+    var friendWeight: Double = 1.0
+    var tagWeight: Double = 1.0
+
+    static let `default` = PredictionWeights()
+
+    static let minMultiplier: Double = 0.5
+    static let maxMultiplier: Double = 1.5
 }
 
 // MARK: - Prediction Engine
@@ -172,8 +186,9 @@ class PredictionEngine {
         
         // Tier 2: Genre/Tag affinity
         let genreAffinity = computeGenreAffinity(genres: game.genres, context: context)
+        let genrePairAffinity = computeGenrePairAffinity(genres: game.genres, context: context)
         let tagAffinity = computeTagAffinity(tags: game.tags, context: context)
-        let genreTagScore = blendGenreTag(genre: genreAffinity, tag: tagAffinity)
+        let genreTagScore = blendGenreTag(genre: genreAffinity, genrePair: genrePairAffinity, tag: tagAffinity)
         
         // Tier 3: Metacritic correlation (disabled — not used in blend)
         let metacriticScore: Double? = nil
@@ -219,6 +234,7 @@ class PredictionEngine {
     private struct FriendResult {
         let percentile: Double
         let signals: [FriendSignal]
+        let negativeSignalStrength: Double
     }
     
     private func computeFriendWeightedRank(game: PredictionTarget, context: PredictionContext) -> FriendResult? {
@@ -259,7 +275,11 @@ class PredictionEngine {
         let weightedSum = signals.reduce(0.0) { $0 + $1.friendRankPercentile * $1.weight }
         let percentile = weightedSum / totalWeight
         
-        return FriendResult(percentile: percentile, signals: signals)
+        let negativeSignals = signals.filter { $0.friendRankPercentile <= 20.0 }
+        let negativeWeight = negativeSignals.reduce(0.0) { $0 + $1.weight }
+        let negativeStrength = negativeWeight / totalWeight
+
+        return FriendResult(percentile: percentile, signals: signals, negativeSignalStrength: negativeStrength)
     }
     
     // MARK: - Tier 2: Genre Affinity
@@ -302,6 +322,61 @@ class PredictionEngine {
         return genrePercentiles.reduce(0.0, +) / Double(genrePercentiles.count)
     }
     
+    // MARK: - Tier 2: Genre Pair Affinity
+
+    private func computeGenrePairAffinity(genres: [String], context: PredictionContext) -> Double? {
+        guard genres.count >= 2, context.myGameCount >= 5 else { return nil }
+
+        // Build all pairs from the target game's genres
+        var pairs: [(String, String)] = []
+        for i in 0..<genres.count {
+            for j in (i + 1)..<genres.count {
+                pairs.append((genres[i], genres[j]))
+            }
+        }
+
+        // Score each pair against the user's library
+        var pairScores: [(score: Double, count: Int)] = []
+
+        for (genreA, genreB) in pairs {
+            let matchingGames = context.myGames.filter {
+                $0.genres.contains(genreA) && $0.genres.contains(genreB)
+            }
+            guard matchingGames.count >= 2 else { continue }
+
+            var weightedSum: Double = 0
+            var totalWeight: Double = 0
+            for game in matchingGames {
+                let percentile = (1.0 - (Double(game.rankPosition - 1) / Double(max(context.myGameCount - 1, 1)))) * 100.0
+                let weight = max(10, percentile)
+                weightedSum += percentile * weight
+                totalWeight += weight
+            }
+            let weightedAvg = weightedSum / totalWeight
+
+            let countBoost: Double = matchingGames.count >= 5 ? 1.0 : matchingGames.count >= 3 ? 0.9 : 0.75
+            var adjusted = weightedAvg
+            if weightedAvg > 50 {
+                adjusted = weightedAvg + (weightedAvg - 50) * 0.5 * countBoost
+            }
+
+            pairScores.append((score: adjusted, count: matchingGames.count))
+        }
+
+        guard !pairScores.isEmpty else { return nil }
+
+        // Weight by game count so well-represented pairs have more influence
+        // Cap at top 15 pairs to avoid noise
+        let topPairs = pairScores
+            .sorted { $0.count > $1.count }
+            .prefix(15)
+
+        let totalWeight = topPairs.reduce(0.0) { $0 + Double($1.count) }
+        let weightedSum = topPairs.reduce(0.0) { $0 + $1.score * Double($1.count) }
+
+        return weightedSum / totalWeight
+    }
+
     // MARK: - Tier 2: Tag Affinity
     
     private func computeTagAffinity(tags: [String], context: PredictionContext) -> Double? {
@@ -341,10 +416,24 @@ class PredictionEngine {
     
     // MARK: - Blend Genre + Tag
     
-    private func blendGenreTag(genre: Double?, tag: Double?) -> Double? {
-        switch (genre, tag) {
+    private func blendGenreTag(genre: Double?, genrePair: Double?, tag: Double?) -> Double? {
+        // Combine individual genre + pair affinity first
+        let combinedGenre: Double?
+        switch (genre, genrePair) {
+        case let (g?, p?):
+            // Pair affinity takes 40% weight — it's more specific but needs enough data
+            combinedGenre = g * 0.6 + p * 0.4
+        case let (g?, nil):
+            combinedGenre = g
+        case let (nil, p?):
+            combinedGenre = p
+        case (nil, nil):
+            combinedGenre = nil
+        }
+
+        // Then blend combined genre with tag affinity
+        switch (combinedGenre, tag) {
         case let (g?, t?):
-            // Tags are more specific signals than genre
             return g * 0.3 + t * 0.7
         case let (g?, nil):
             return g
@@ -433,6 +522,10 @@ class PredictionEngine {
             genreTagWeight = hasGenreTag ? 1.0 : 0.0
         }
         
+        // Apply per-user learned multipliers before normalization
+        friendWeight *= context.weights.friendWeight
+        genreTagWeight *= context.weights.genreWeight
+
         // Normalize weights to sum to 1
         let totalWeight = friendWeight + genreTagWeight + metacriticWeight
         guard totalWeight > 0 else { return nil }
@@ -473,6 +566,15 @@ class PredictionEngine {
             blended += eraModifier
         }
         
+        if let fr = friendResult, fr.negativeSignalStrength > 0 {
+            let countMultiplier = min(1.0, Double(fr.signals.count) / 3.0)
+            let negativePenalty = fr.negativeSignalStrength * countMultiplier * 25.0
+            blended -= negativePenalty
+            if negativePenalty > 1 {
+                debugLog("👎 Negative signal penalty: -\(String(format: "%.1f", negativePenalty)) (strength=\(String(format: "%.2f", fr.negativeSignalStrength)), friends=\(fr.signals.count))")
+            }
+        }
+
         return max(0, min(100, blended))
     }
     
@@ -528,8 +630,12 @@ class PredictionEngine {
             result.signals.reduce(0) { $0 + $1.tasteMatch } / max(result.signals.count, 1)
         } ?? 0
         
+        let hasStrongNegativeConsensus = (friendResult?.negativeSignalStrength ?? 0) >= 0.66 && friendCount >= 2
+
         if friendCount >= 3 && avgTasteMatch >= 50 && hasStrongGenreTag {
             return 5  // Very High
+        } else if hasStrongNegativeConsensus && avgTasteMatch >= 50 {
+            return 4  // High
         } else if friendCount >= 2 && avgTasteMatch >= 40 {
             return 4  // High
         } else if (friendCount >= 2) || (hasStrongGenreTag && hasMetacritic) {
@@ -547,6 +653,62 @@ class PredictionEngine {
         }
     }
     
+    // MARK: - Weight Self-Tuning
+
+    static func computeWeights() async -> PredictionWeights {
+        guard let userId = SupabaseManager.shared.currentUser?.id else { return .default }
+
+        do {
+            struct OutcomeRow: Decodable {
+                let tiers_used: [String]
+                let prediction_accuracy: Double
+            }
+
+            let outcomes: [OutcomeRow] = try await SupabaseManager.shared.client
+                .from("recommendations")
+                .select("tiers_used, prediction_accuracy")
+                .eq("user_id", value: userId.uuidString)
+                .not("prediction_accuracy", operator: .is, value: "null")
+                .execute()
+                .value
+
+            guard outcomes.count >= 5 else { return .default }
+
+            var tierErrors: [String: [Double]] = ["genre": [], "friends": []]
+
+            for outcome in outcomes {
+                for tier in outcome.tiers_used {
+                    switch tier {
+                    case "genre", "friends":
+                        tierErrors[tier, default: []].append(outcome.prediction_accuracy)
+                    default:
+                        continue
+                    }
+                }
+            }
+
+            func multiplierFor(errors: [Double]?) -> Double {
+                guard let errors = errors, errors.count >= 5 else { return 1.0 }
+                let meanBias = errors.reduce(0, +) / Double(errors.count)
+                let adjustment = -(meanBias / 10.0) * 0.1
+                return max(PredictionWeights.minMultiplier, min(PredictionWeights.maxMultiplier, 1.0 + adjustment))
+            }
+
+            var weights = PredictionWeights()
+            weights.genreWeight = multiplierFor(errors: tierErrors["genre"])
+            weights.friendWeight = multiplierFor(errors: tierErrors["friends"])
+            weights.tagWeight = weights.genreWeight
+
+            debugLog("⚖️ Prediction weights: genre=\(String(format: "%.2f", weights.genreWeight)), friend=\(String(format: "%.2f", weights.friendWeight)) (from \(outcomes.count) outcomes)")
+
+            return weights
+
+        } catch {
+            debugLog("⚠️ Failed to compute prediction weights: \(error)")
+            return .default
+        }
+    }
+
     // MARK: - Context Builder (fetches data from Supabase)
     
     static func buildContext() async -> PredictionContext? {
@@ -680,7 +842,8 @@ class PredictionEngine {
                 ))
             }
             
-            return PredictionContext(myGames: myGames, friends: friends)
+            let weights = await computeWeights()
+            return PredictionContext(myGames: myGames, friends: friends, weights: weights)
             
         } catch {
             debugLog("❌ Error building prediction context: \(error)")
