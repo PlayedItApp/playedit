@@ -94,6 +94,7 @@ class WantToPlayManager: ObservableObject {
     // MARK: - Add game (unranked by default)
     func addGame(gameId: Int, gameTitle: String, gameCoverUrl: String?, source: String, sourceFriendId: String? = nil) async -> Bool {
         guard let userId = supabase.currentUser?.id else { return false }
+        if gameId == 0 { debugLog("⚠️ addGame called with rawgId=0 for '\(gameTitle)'") }
         guard !myWantToPlayIds.contains(gameId) else {
             debugLog("ℹ️ \(gameTitle) already in Want to Play set, skipping")
             return true
@@ -203,6 +204,7 @@ class WantToPlayManager: ObservableObject {
                 .value
             
             if let existing = rawgRows.first {
+                debugLog("🔍 resolveLocalGameId: found existing local ID \(existing.id) for RAWG \(rawgOrLocalId)")
                 return existing.id
             }
             

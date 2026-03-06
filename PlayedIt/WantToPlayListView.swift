@@ -71,7 +71,6 @@ struct WantToPlayListView: View {
                 existingRankedGames: rankedGames,
                 onComplete: { position in
                     Task {
-                        debugLog("🎯 onComplete fired: placing \(game.gameTitle) (id: \(game.id)) at position \(position)")
                         let _ = await mgr.placeGameAtPosition(gameId: game.id, position: position)
                         await loadGames()
                     }
@@ -332,7 +331,6 @@ struct WantToPlayListView: View {
                             await loadGames()
                         }
                     }, onRank: {
-                        debugLog("🎯 Ranking: \(game.gameTitle), against \(rankedGames.map { $0.gameTitle })")
                         if rankedGames.isEmpty {
                             // First game - just place at #1, no sheet
                             Task {

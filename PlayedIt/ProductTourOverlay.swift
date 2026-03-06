@@ -102,10 +102,10 @@ struct ProductTourOverlay: View {
             switch step.anchorKey {
             case "plusButton":
                 // + button is top-left toolbar item
-                return CGPoint(x: 38, y: 82)
+                return CGPoint(x: 38, y: topInset + 44)
             case "settingsButton":
                 // ... button is top-right toolbar item
-                return CGPoint(x: width - 38, y: 84)
+                return CGPoint(x: width - 38, y: topInset + 44)
             case "friendsTab":
                 // Friends is the middle tab (2nd of 3)
                 return CGPoint(x: width / 2, y: height - 48)

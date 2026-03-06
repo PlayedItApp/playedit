@@ -455,8 +455,6 @@ struct GameDetailFromFriendView: View {
     }
     
     private func fetchGameDescription() async {
-        debugLog("📖 DESC DEBUG: gameId=\(userGame.gameId), gameRawgId=\(String(describing: userGame.gameRawgId)), title=\(userGame.gameTitle)")
-        
         if let cached = GameMetadataCache.shared.get(gameId: userGame.gameId) {
             metacriticScore = cached.metacriticScore
             gameDescription = cached.description
@@ -490,9 +488,7 @@ struct GameDetailFromFriendView: View {
                 return
             }
             
-            debugLog("📖 Fetching RAWG details for rawg_id: \(result.rawg_id)")
             let details = try await RAWGService.shared.getGameDetails(id: result.rawg_id)
-            debugLog("📖 RAWG returned title: \(details.title), desc prefix: \(String((details.gameDescription ?? "nil").prefix(60)))")
             gameDescription = details.gameDescription ?? details.gameDescriptionHtml
             
             if let desc = gameDescription, !desc.isEmpty {

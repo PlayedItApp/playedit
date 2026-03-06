@@ -594,7 +594,7 @@ struct OnboardingQuizView: View {
             step = .gameGrid
             
         } catch {
-            debugLog("Error fetching onboarding games: \(error)")
+            debugLog("❌ Error fetching onboarding games: \(error)")
             isLoadingGames = false
             step = .gameGrid
         }
@@ -602,7 +602,6 @@ struct OnboardingQuizView: View {
     
     private func startRanking() {
         gamesToRank = filteredGames.filter { selectedGameIds.contains($0.id) }
-        debugLog("🎮 Starting ranking with \(gamesToRank.count) games")
         AnalyticsService.shared.track(.onboardingGamesSelected, properties: [
             "count": gamesToRank.count
         ])
@@ -807,7 +806,7 @@ struct OnboardingGameSearchSheet: View {
         do {
             searchResults = try await RAWGService.shared.searchGames(query: searchText)
         } catch {
-            debugLog("Search error: \(error)")
+            debugLog("❌ Search error for '\(searchText)': \(error)")
             searchResults = []
             searchError = "Can't reach the game database right now. Check your connection and try again."
         }

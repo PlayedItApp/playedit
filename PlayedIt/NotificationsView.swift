@@ -421,7 +421,7 @@ struct NotificationsView: View {
                         .value
                     rankPosition = rows.first?.rank_position
                 } catch {
-                    debugLog("❌ Error fetching rank for notification: \(error)")
+                    debugLog("❌ Error fetching rank for notification \(notification.id) (type: \(notification.type.rawValue)): \(error)")
                 }
                 
                 selectedFeedItem = FeedItem(

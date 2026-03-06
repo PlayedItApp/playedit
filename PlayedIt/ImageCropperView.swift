@@ -144,11 +144,6 @@ struct ImageCropperView: View {
         let cropX = absoluteCropCenterX - cropSizeInPixels / 2
         let cropY = absoluteCropCenterY - cropSizeInPixels / 2
         
-        debugLog("📐 Crop center: (\(absoluteCropCenterX), \(absoluteCropCenterY))")
-        debugLog("📐 Crop rect: (\(cropX), \(cropY), \(cropSizeInPixels), \(cropSizeInPixels))")
-        debugLog("📐 Image size: \(image.size)")
-        debugLog("📐 Offset: \(offset)")
-        
         // Create output image with white background
         let outputSize = CGSize(width: 400, height: 400)
         let format = UIGraphicsImageRendererFormat()

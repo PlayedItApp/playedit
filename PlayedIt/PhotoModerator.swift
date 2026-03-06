@@ -42,12 +42,12 @@ final class PhotoModerator {
         guard isAvailable else {
             // Framework not available or disabled — allow the upload
             // The image is still subject to user reporting
-            debugLog("[PhotoModerator] SensitiveContentAnalysis not available, allowing upload")
+            debugLog("⚠️ SensitiveContentAnalysis not available, allowing upload")
             return .ok
         }
         
         guard let cgImage = image.cgImage else {
-            debugLog("[PhotoModerator] Could not get CGImage, allowing upload")
+            debugLog("⚠️ PhotoModerator: could not get CGImage, allowing upload")
             return .ok
         }
         
@@ -66,7 +66,7 @@ final class PhotoModerator {
         } catch {
             // If analysis fails for any reason, allow the upload
             // Better to let a photo through than block legitimate uploads
-            debugLog("[PhotoModerator] Analysis failed: \(error.localizedDescription), allowing upload")
+            debugLog("⚠️ PhotoModerator: analysis failed: \(error.localizedDescription), allowing upload")
             return .ok
         }
     }
@@ -76,7 +76,7 @@ final class PhotoModerator {
     /// - Returns: PhotoModerationResult indicating if the image is allowed
     func checkImageData(_ data: Data) async -> PhotoModerationResult {
         guard let image = UIImage(data: data) else {
-            debugLog("[PhotoModerator] Could not create UIImage from data, allowing upload")
+            debugLog("⚠️ PhotoModerator: could not create UIImage from data, allowing upload")
             return .ok
         }
         

@@ -173,7 +173,6 @@ struct GameSearchView: View {
     
     private func fetchRankedGameIds() async {
         guard let userId = SupabaseManager.shared.currentUser?.id else {
-            debugLog("❌ No user ID found")
             return
         }
         
@@ -187,7 +186,6 @@ struct GameSearchView: View {
                 .value
             
             rankedGameIds = Set(response.compactMap { $0.games?.rawg_id })
-            debugLog("✅ Fetched ranked RAWG IDs: \(rankedGameIds)")
         } catch {
             debugLog("❌ Failed to fetch ranked game IDs: \(error)")
         }

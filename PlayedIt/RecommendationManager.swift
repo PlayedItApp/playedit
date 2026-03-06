@@ -152,7 +152,6 @@ class RecommendationManager: ObservableObject {
                 .execute()
                 .value
             rankedBaseTitles = Set(titles.map { baseTitle($0.title) })
-            debugLog("🎯 Ranked base titles (\(rankedBaseTitles.count)): \(rankedBaseTitles.sorted().prefix(20))")
         } catch {
             debugLog("⚠️ Error building ranked titles: \(error)")
         }
@@ -170,9 +169,6 @@ class RecommendationManager: ObservableObject {
         debugLog("🎯 Building recommendations. Slots to fill: \(slotsToFill)")
         debugLog("🎯 Excluded game IDs: \(excludedGameIds.count)")
         debugLog("🎯 Context: \(context.myGames.count) games, \(context.friends.count) friends")
-        for friend in context.friends {
-            debugLog("   🤝 \(friend.username): \(friend.tasteMatch)% taste match, \(friend.games.count) games")
-        }
         
         // 5. Gather candidates from all sources
         var candidates: [(gameId: Int, rawgId: Int, title: String, coverUrl: String?, genres: [String], tags: [String], metacritic: Int?, source: String, sourceFriendId: String?, sourceFriendName: String?, sourceFriendRank: Int?, sourceFriendTotal: Int?)] = []
@@ -208,14 +204,7 @@ class RecommendationManager: ObservableObject {
             }
         }
         
-        debugLog("🎯 Total scored candidates: \(scoredCandidates.count)")
-        for sc in scoredCandidates.sorted(by: { $0.prediction.predictedPercentile > $1.prediction.predictedPercentile }).prefix(15) {
-            let p = sc.prediction
-            let genreStr = p.topGenreAffinity.map { "genre=\(Int($0))%" } ?? "genre=n/a"
-            let tagStr = p.topTagAffinity.map { "tag=\(Int($0))%" } ?? "tag=n/a"
-            let friendStr = p.friendSignals.isEmpty ? "friends=none" : "friends=\(p.friendSignals.map { "\($0.friendName)(\(Int($0.friendRankPercentile))%)" }.joined(separator: ","))"
-            debugLog("   🔮 \(sc.candidate.title): \(Int(p.predictedPercentile))% [\(sc.candidate.source)] | \(genreStr) \(tagStr) \(friendStr) | tiers=\(p.tiersUsed) conf=\(p.confidenceLabel)")
-        }
+        debugLog("🎯 Total scored candidates: \(scoredCandidates.count), inserting top \(min(scoredCandidates.count, slotsToFill)) for round \(currentRound)")
         
         // 7. Only show "You'll love this" tier (65%+)
         scoredCandidates = scoredCandidates.filter { $0.prediction.predictedPercentile >= 65 }
@@ -650,6 +639,7 @@ class RecommendationManager: ObservableObject {
                 .value
             
             if let first = existing.first {
+                debugLog("📦 ensureGameInTable: found existing game \(game.rawgId) → id=\(first.id)")
                 return first.id
             }
             

@@ -539,7 +539,6 @@ class PredictionEngine {
         if let gt = genreTagScore { blended += gt * genreTagWeight }
         if let mc = metacriticScore { blended += mc * metacriticWeight }
         
-        debugLog("🧮 Blend: friend=\(friendResult?.percentile ?? -1), genreTag=\(genreTagScore ?? -1), blended=\(blended)")
         // Genre drag: if friends love it but genre/tag affinity doesn't match, limit friend influence
         if let fr = friendResult, !fr.signals.isEmpty {
             if let gt = genreTagScore {
@@ -868,10 +867,6 @@ class PredictionEngine {
         }
         
         guard !shared.isEmpty else { return 0 }
-        debugLog("📊 Taste match: \(shared.count) shared games, myGames=\(myGames.count), friendGames=\(friendGames.count)")
-        for s in shared {
-            debugLog("   📊 myRank=\(s.myRank), theirRank=\(s.theirRank)")
-        }
         
         if shared.count == 1 {
             let maxDiff = max(myGames.count, friendGames.count)

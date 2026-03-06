@@ -402,7 +402,7 @@ struct CommentsSheet: View {
             
             isLoading = false
         } catch {
-            debugLog("❌ Error fetching comments: \(error)")
+            debugLog("❌ Error fetching comments for post \(feedItem.feedPostId): \(error)")
             isLoading = false
         }
     }
@@ -449,7 +449,7 @@ struct CommentsSheet: View {
                 await fetchComments()
                 
             } catch {
-                debugLog("❌ Error sending comment: \(error)")
+                debugLog("❌ Error sending comment on post \(feedItem.feedPostId): \(error)")
             }
             
             isSending = false
@@ -468,7 +468,7 @@ struct CommentsSheet: View {
                     await fetchComments()
                     
                 } catch {
-                    debugLog("❌ Error deleting comment: \(error)")
+                    debugLog("❌ Error deleting comment \(comment.id): \(error)")
                 }
             }
         }
@@ -498,7 +498,7 @@ struct CommentsSheet: View {
                         mutedCommentIds.insert(comment.id)
                     }
                 } catch {
-                    debugLog("❌ Error toggling thread mute: \(error)")
+                    debugLog("❌ Error toggling thread mute for comment \(comment.id): \(error)")
                 }
             }
         }
@@ -548,7 +548,7 @@ struct CommentsSheet: View {
                     }
                     isPostMuted.toggle()
                 } catch {
-                    debugLog("❌ Error toggling mute: \(error)")
+                    debugLog("❌ Error toggling mute for post \(feedItem.feedPostId): \(error)")
                 }
             }
         }
@@ -596,7 +596,7 @@ struct CommentsSheet: View {
                     }
                     await fetchComments()
                 } catch {
-                    debugLog("❌ Error toggling comment like: \(error)")
+                    debugLog("❌ Error toggling comment like for comment \(comment.id): \(error)")
                 }
             }
         }
@@ -630,7 +630,7 @@ struct CommentsSheet: View {
                     editText = ""
                     
                 } catch {
-                    debugLog("❌ Error editing comment: \(error)")
+                    debugLog("❌ Error editing comment \(comment.id): \(error)")
                 }
                 
                 isSending = false

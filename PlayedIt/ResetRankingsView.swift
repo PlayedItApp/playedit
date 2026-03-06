@@ -374,9 +374,6 @@ struct ResetRankingsView: View {
         vm.highIndex = rankedSoFar.count - 1
         vm.comparisonCount = 0
         isComparing = true
-        
-        debugLog("📊 RESET RANK: '\(shuffledGames[currentGameIndex].gameTitle)' into \(rankedSoFar.count) ranked games")
-        
         nextComparison()
     }
     
@@ -386,7 +383,6 @@ struct ResetRankingsView: View {
         
         if vm.lowIndex > vm.highIndex || vm.comparisonCount >= maxComparisons {
             let position = vm.lowIndex + 1
-            debugLog("📊 RESET RESULT: '\(shuffledGames[currentGameIndex].gameTitle)' → #\(position) after \(vm.comparisonCount) comparisons | range was [\(vm.lowIndex)...\(vm.highIndex)]")
             isComparing = false
             vm.currentOpponent = nil
             Task { await placeGame(shuffledGames[currentGameIndex], at: position) }
@@ -397,13 +393,10 @@ struct ResetRankingsView: View {
         let midIndex: Int
         if vm.comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
             midIndex = max(vm.lowIndex, min(biased, vm.highIndex))
-            debugLog("🎯 RESET biased first comparison to index \(midIndex) (old rank scaled) instead of standard \(standardMid)")
         } else {
             midIndex = standardMid
         }
         vm.currentOpponent = rankedSoFar[midIndex]
-        
-        debugLog("📊 RESET COMPARE #\(vm.comparisonCount + 1): '\(shuffledGames[currentGameIndex].gameTitle)' vs '\(rankedSoFar[midIndex].gameTitle)' (rank #\(rankedSoFar[midIndex].rankPosition)) | mid=\(midIndex) range=[\(vm.lowIndex)...\(vm.highIndex)]")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             showCards = true
@@ -453,10 +446,8 @@ struct ResetRankingsView: View {
             }
             
             if side == "left" {
-                debugLog("📊 RESET CHOSE: current game > '\(rankedSoFar[midIndex].gameTitle)' → highIndex: \(vm.highIndex) → \(midIndex - 1)")
                 vm.highIndex = midIndex - 1
             } else {
-                debugLog("📊 RESET CHOSE: '\(rankedSoFar[midIndex].gameTitle)' > current game → lowIndex: \(vm.lowIndex) → \(midIndex + 1)")
                 vm.lowIndex = midIndex + 1
             }
             vm.comparisonCount += 1
@@ -595,7 +586,6 @@ struct ResetRankingsView: View {
                     previousRanks[game.id] = game.rankPosition
                 }
             }
-            debugLog("📊 RESET: Captured \(previousRanks.count) previous ranks out of \(totalGames) games")
             
             shuffledGames = games.shuffled()
             rankedSoFar = []

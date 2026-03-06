@@ -115,9 +115,7 @@ struct OnboardingRankingFlowView: View {
     
     // MARK: - Process Current Game
     private func processCurrentGame() async {
-        debugLog("🎯 processCurrentGame: index=\(currentIndex), total=\(games.count)")
         guard let game = currentGame else {
-            debugLog("🎯 No more games, calling onComplete")
             if let userId = supabase.currentUser?.id {
                 _ = try? await supabase.client
                     .rpc("renormalize_ranks", params: [
@@ -292,7 +290,7 @@ struct OnboardingRankingFlowView: View {
             }
             
         } catch {
-            debugLog("❌ Error processing game: \(error)")
+            debugLog("❌ Error processing onboarding game '\(game.title)': \(error)")
             errorMessage = "Something went wrong. Skipping..."
             isSaving = false
             
@@ -337,7 +335,6 @@ struct OnboardingRankingFlowView: View {
     private func moveToNext() async {
         showComparison = false
         currentIndex += 1
-        debugLog("🎯 moveToNext: now at index \(currentIndex) of \(games.count)")
         
         if currentIndex >= games.count {
             // Safety net: renormalize in case any gaps occurred

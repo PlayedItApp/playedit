@@ -547,7 +547,6 @@ struct SteamImportView: View {
                     await refreshExistingGames()
                     await MainActor.run {
                         currentRankIndex += 1
-                        debugLog("🎮 Ranked game \(currentRankIndex) of \(gamesToRank.count): \(game.displayTitle)")
                     }
                     await PendingImportManager.shared.updateIndex(source: "steam_import", currentIndex: currentRankIndex)
                     if currentRankIndex >= gamesToRank.count {
@@ -562,6 +561,7 @@ struct SteamImportView: View {
                         AnalyticsService.shared.track(.steamImportCompleted, properties: [
                             "games_ranked": currentRankIndex
                         ])
+                        debugLog("📊 Steam import complete: \(currentRankIndex) games ranked")
                         await MainActor.run {
                             phase = .complete
                         }

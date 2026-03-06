@@ -548,7 +548,6 @@ struct FeedView: View {
             // Track pagination state
             hasMorePosts = allPosts.count >= pageSize
             oldestPostDate = allPosts.last?.created_at
-            debugLog("📄 Feed loaded \(allPosts.count) top-level posts, hasMore: \(hasMorePosts), oldest: \(oldestPostDate ?? "nil")")
             
             // Fetch all batch children for any batch_ranked posts in this page
             let batchParentIds = allPosts.filter { $0.post_type == "batch_ranked" || $0.post_type == "batch_want_to_play" }.map { $0.id }
@@ -693,7 +692,6 @@ struct FeedView: View {
                         commentCount: comments,
                         isLikedByMe: isLiked
                     )
-                    debugLog("🔍 Batch \(post.id) - \(childItems.count) children, covers: \(childItems.map { $0.gameCoverURL ?? "nil" })")
                     combined.append(.groupedGames(group))
                     
                 case "batch_want_to_play":
@@ -809,7 +807,6 @@ struct FeedView: View {
         
         do {
             guard let feedUserIds = cachedFeedUserIds, !feedUserIds.isEmpty else {
-                debugLog("📄 loadMorePosts: no cached feed user IDs, skipping")
                 isLoadingMore = false
                 hasMorePosts = false
                 return
@@ -874,8 +871,6 @@ struct FeedView: View {
                 isLoadingMore = false
                 return
             }
-            
-            debugLog("📄 Loaded \(olderPosts.count) more posts")
             
             // Update pagination cursor
             hasMorePosts = olderPosts.count >= pageSize

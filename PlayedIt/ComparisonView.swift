@@ -215,7 +215,6 @@ struct ComparisonView: View {
         let rawMid: Int
         if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
             rawMid = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
-            debugLog("🎯 Biased first comparison to index \(rawMid) (predicted #\(predicted)) instead of standard \(standardMid)")
         } else {
             rawMid = standardMid
         }
@@ -248,8 +247,6 @@ struct ComparisonView: View {
             }
         }
         vm.currentComparison = existingGames[midIndex]
-                
-        debugLog("📊 COMPARE #\(vm.comparisonCount + 1): '\(newGame.title)' vs '\(existingGames[midIndex].gameTitle)' (rank #\(existingGames[midIndex].rankPosition)) | midIndex=\(midIndex) range=[\(vm.lowIndex)...\(vm.highIndex)]")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             showCards = true
@@ -291,8 +288,6 @@ struct ComparisonView: View {
             midIndex = (vm.lowIndex + vm.highIndex) / 2
         }
         
-        debugLog("📊 CHOSE: '\(newGame.title)' > '\(existingGames[midIndex].gameTitle)' → highIndex: \(vm.highIndex) → \(midIndex - 1)")
-        
         vm.highIndex = midIndex - 1
         vm.comparisonCount += 1
         nextComparison()
@@ -313,8 +308,6 @@ struct ComparisonView: View {
         } else {
             midIndex = (vm.lowIndex + vm.highIndex) / 2
         }
-        
-        debugLog("📊 CHOSE: '\(existingGames[midIndex].gameTitle)' > '\(newGame.title)' → lowIndex: \(vm.lowIndex) → \(midIndex + 1)")
         
         vm.lowIndex = midIndex + 1
         vm.comparisonCount += 1
@@ -530,7 +523,6 @@ struct RetroCompletionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .onAppear {
-                debugLog("🎉 RetroCompletionView: position=\(position), predictedRange=\(String(describing: predictedRange))")
                 generateConfetti(in: geometry.size)
                 
                 let notification = UINotificationFeedbackGenerator()
@@ -675,7 +667,6 @@ struct ScaleButtonStyle: ButtonStyle {
         ),
         existingGames: [],
         onComplete: { position in
-            debugLog("Final position: \(position)")
         }
     )
 }

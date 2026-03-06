@@ -87,7 +87,6 @@ struct GameDescriptionView: View {
             }
         }
         .onAppear {
-            debugLog("📝 Description length: \(strippedText.count), text: \(strippedText.prefix(50))")
             isTruncated = strippedText.count > 100
         }
     }

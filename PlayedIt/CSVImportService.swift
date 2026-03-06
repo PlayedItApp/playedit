@@ -175,8 +175,6 @@ class CSVImportService {
         
         let platformIndex = header.firstIndex(of: "platform") ?? header.firstIndex(of: "platforms")
         let notesIndex = header.firstIndex(of: "notes")
-        debugLog("📋 CSV headers: \(header)")
-        debugLog("📋 titleIndex=\(titleIndex) platformIndex=\(String(describing: platformIndex)) notesIndex=\(String(describing: notesIndex))")
         
         var entries: [CSVGameEntry] = []
         var seenTitles: Set<String> = []
@@ -206,7 +204,6 @@ class CSVImportService {
                 return raw.isEmpty ? nil : raw
             }()
             
-            debugLog("📋 CSV entry: title='\(title)' platforms='\(platforms)' notes='\(notes ?? "nil")'")
             entries.append(CSVGameEntry(title: title, platforms: platforms, notes: notes))
         }
         
@@ -221,7 +218,6 @@ class CSVImportService {
     static func normalizePlatform(_ input: String) -> String? {
         let key = input.lowercased().trimmingCharacters(in: .whitespaces)
         let result = platformAliases[key]
-        debugLog("🎮 normalizePlatform: '\(input)' → key='\(key)' → \(result ?? "nil")")
         return result
     }
     

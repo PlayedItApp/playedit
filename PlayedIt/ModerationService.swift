@@ -53,7 +53,7 @@ final class ModerationService {
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
                 // Server error — fall back to allowing (client-side already filtered)
-                debugLog("[ModerationService] Server returned non-200, falling back to allow")
+                debugLog("⚠️ Moderation server returned non-200, falling back to allow")
                 return .ok
             }
             
@@ -66,7 +66,7 @@ final class ModerationService {
             
         } catch {
             // Network error — fall back to allowing (client-side already filtered)
-            debugLog("[ModerationService] Network error: \(error.localizedDescription), falling back to allow")
+            debugLog("⚠️ Moderation network error: \(error.localizedDescription), falling back to allow")
             return .ok
         }
     }

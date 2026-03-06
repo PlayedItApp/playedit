@@ -19,7 +19,7 @@ class PushNotificationManager: NSObject, UNUserNotificationCenterDelegate {
     
     func saveDeviceToken(_ deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        debugLog("🔔 Device token: \(token)")
+        debugLog("🔔 Device token registered (\(token.count) chars)")
         
         guard let userId = SupabaseManager.shared.currentUser?.id else { return }
         

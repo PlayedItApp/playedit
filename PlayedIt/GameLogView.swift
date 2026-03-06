@@ -444,7 +444,6 @@ struct GameLogView: View {
                 .from("games")
                 .upsert(upsert, onConflict: "rawg_id")
                 .execute()
-            debugLog("📖 Upserted game + description for \(game.title)")
         } catch {
             debugLog("⚠️ Could not fetch game description: \(error)")
         }
@@ -504,14 +503,10 @@ struct GameLogView: View {
         metacriticScore: Int?
     ) -> Int? {
         if existingUserGames.count < 6 {
-            debugLog("🎯 predictedPositionForGame: bail (not enough games) existingGames=\(existingUserGames.count)")
             return nil
         }
 
-        debugLog("🎯 predictedPositionForGame: existingGames=\(existingUserGames.count), cachedContext=\(PredictionEngine.shared.cachedContext != nil)")
-
         guard let context = PredictionEngine.shared.cachedContext else {
-            debugLog("🎯 predictedPositionForGame: bail (context=nil)")
             return nil
         }
 
@@ -524,14 +519,11 @@ struct GameLogView: View {
         )
 
         guard let prediction = PredictionEngine.shared.predict(game: target, context: context) else {
-            debugLog("🎯 predictedPositionForGame: bail (prediction=nil) rawgId=\(game.rawgId) genres=\(genres.count) tags=\(tags.count) metacritic=\(String(describing: metacriticScore))")
             return nil
         }
 
         let totalGames = existingUserGames.count + 1
         let position = max(1, Int(round(Double(totalGames) * (1.0 - prediction.predictedPercentile / 100.0))))
-
-        debugLog("🎯 Predicted position for \(game.title): #\(position) of \(totalGames) (percentile: \(Int(prediction.predictedPercentile))%)")
 
         return position
     }
@@ -604,8 +596,6 @@ struct GameLogView: View {
                 !excludedTags.contains(tag) &&
                 tag.allSatisfy { $0.isASCII || $0 == " " || $0 == "-" }
             }
-
-            debugLog("🏷️ Prediction inputs for \(game.title): genres=\(predictionGenres.count) tags=\(predictionTags.count) metacritic=\(String(describing: predictionMetacritic))")
             
             let gameInsert = GameInsert(
                 rawg_id: game.rawgId,
@@ -699,7 +689,6 @@ struct GameLogView: View {
                     let genres = curatedGenres ?? predictionGenres
                     let tags = curatedTags ?? predictionTags
                     let mc = metacriticScore ?? predictionMetacritic
-                    debugLog("🎯 Prediction inputs: genres=\(genres.count) tags=\(tags.count) metacritic=\(String(describing: mc)) rawgId=\(game.rawgId)")
                     
                     let target = PredictionTarget(
                         rawgId: game.rawgId,
@@ -711,15 +700,8 @@ struct GameLogView: View {
                     if let prediction = PredictionEngine.shared.predict(game: target, context: context) {
                         let range = prediction.estimatedRank(inListOf: existingUserGames.count)
                         self.computedPredictedRange = (lower: range.lower, upper: range.upper)
-                        debugLog("🎯 Stored computedPredictedRange: ~#\(range.lower)–\(range.upper) (percentile: \(Int(prediction.predictedPercentile))%, confidence: \(prediction.confidence))")
-                    } else {
-                        debugLog("🎯 Prediction engine returned nil for \(game.title)")
                     }
-                } else {
-                    debugLog("🎯 cachedContext is nil after refreshContext() call")
                 }
-            } else {
-                debugLog("🎯 Skipping prediction: only \(existingUserGames.count) existing games (need 6+)")
             }
 
             if existingUserGames.isEmpty && existingUserGame == nil {
@@ -822,7 +804,6 @@ struct GameLogView: View {
         
         // Recalculate prediction at rank time for comparison
         guard let context = await PredictionEngine.shared.getContext() else {
-            debugLog("📊 Prediction log skipped: no context")
             return
         }
         
@@ -835,7 +816,6 @@ struct GameLogView: View {
         )
         
         guard let recalcPrediction = PredictionEngine.shared.predict(game: target, context: context) else {
-            debugLog("📊 Prediction log skipped: recalc failed")
             return
         }
         
@@ -884,10 +864,6 @@ struct GameLogView: View {
                 .from("prediction_logs")
                 .insert(log)
                 .execute()
-            
-            let originalDelta = abs(originalPercentile - actualPercentile)
-            let recalcDelta = abs(recalcPrediction.predictedPercentile - actualPercentile)
-            debugLog("📊 Prediction logged: original=\(Int(originalPercentile))%, recalc=\(Int(recalcPrediction.predictedPercentile))%, actual=\(Int(actualPercentile))%, originalΔ=\(Int(originalDelta))%, recalcΔ=\(Int(recalcDelta))%")
         } catch {
             debugLog("⚠️ Failed to log prediction: \(error)")
         }

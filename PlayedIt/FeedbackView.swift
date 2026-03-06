@@ -261,7 +261,7 @@ struct FeedbackView: View {
             showSuccess = true
             
         } catch {
-            debugLog("❌ Error submitting feedback: \(error)")
+            debugLog("❌ Error submitting feedback (hasScreenshot: \(screenshotData != nil)): \(error)")
             errorMessage = "Couldn't send feedback. Try again?"
         }
         

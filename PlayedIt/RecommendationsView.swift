@@ -590,7 +590,7 @@ curatedPlatforms: curatedPlatforms
                 return
             }
         } catch {
-            print("⚠️ Error loading description from DB: \(error)")
+            debugLog("⚠️ Error loading description from DB: \(error)")
         }
         
         // Fallback to RAWG API
@@ -610,7 +610,7 @@ curatedPlatforms: curatedPlatforms
                     .execute()
             }
         } catch {
-            print("⚠️ Error loading description from RAWG: \(error)")
+            debugLog("⚠️ Error loading description from RAWG: \(error)")
             gameDescription = nil
         }
         

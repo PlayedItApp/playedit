@@ -33,6 +33,11 @@ struct PlayedItApp: App {
                 .preferredColorScheme(appearanceManager.colorScheme)
                 .onAppear {
                     AnalyticsService.shared.track(.appOpened)
+                    let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                    let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                    let iosVersion = UIDevice.current.systemVersion
+                    let deviceModel = UIDevice.current.model
+                    debugLog("🚀 App launched: v\(appVersion) (\(buildNumber)), iOS \(iosVersion), \(deviceModel)")
                     AnalyticsService.shared.track(.sessionStarted)
                     let resolved: ColorScheme
                     if let manual = appearanceManager.colorScheme {
@@ -122,7 +127,7 @@ struct PlayedItApp: App {
             Task {
                 do {
                     let session = try await SupabaseManager.shared.client.auth.session(from: url)
-                    debugLog("✅ Auto-logged in from email confirmation: \(session.user.email ?? "unknown")")
+                    debugLog("✅ Auto-logged in from email confirmation")
                 } catch {
                     debugLog("❌ Auto-login from confirmation failed: \(error)")
                 }

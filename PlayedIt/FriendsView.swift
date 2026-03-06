@@ -235,15 +235,6 @@ struct FriendsView: View {
             isLoading = false
             return
         }
-        
-        // Check if we have a valid session
-        let session = try? await supabase.client.auth.session
-        debugLog("🔍 Session exists: \(session != nil), token prefix: \(String(session?.accessToken.prefix(20) ?? "nil"))")
-        
-        debugLog("🔍 Current user ID: \(userId.uuidString)")
-        debugLog("🔍 Query filter: user_id.eq.\(userId.uuidString.lowercased()),friend_id.eq.\(userId.uuidString.lowercased())")
-
-        
         do {
             struct FriendshipRow: Decodable {
                 let id: String
@@ -258,11 +249,6 @@ struct FriendsView: View {
                 .or("user_id.eq.\(userId.uuidString.lowercased()),friend_id.eq.\(userId.uuidString.lowercased())")
                 .execute()
                 .value
-            
-            debugLog("🔍 Found \(friendships.count) friendships")
-            for f in friendships {
-                debugLog("   - id: \(f.id), user_id: \(f.user_id), friend_id: \(f.friend_id), status: \(f.status)")
-            }
             
             // Build metadata map: friendUserId → (friendshipId, status, isIncoming)
             struct FriendMeta {
@@ -298,15 +284,12 @@ struct FriendsView: View {
                 .execute()
                 .value
 
-            debugLog("🔍 Fetched \(userInfos.count) users in 1 query")
-
             var acceptedFriends: [Friend] = []
             var pending: [Friend] = []
             var sent: [Friend] = []
 
             for userInfo in userInfos {
                 guard let meta = metaByUserId[userInfo.id.lowercased()] else { continue }
-                debugLog("🔍 Found user: \(userInfo.username ?? "no username")")
                 let friend = Friend(
                     id: meta.friendshipId,
                     friendshipId: meta.friendshipId,
@@ -319,10 +302,8 @@ struct FriendsView: View {
                     acceptedFriends.append(friend)
                 } else if meta.status == "pending" && meta.isIncoming {
                     pending.append(friend)
-                    debugLog("🔍 Added to pending requests")
                 } else if meta.status == "pending" && !meta.isIncoming {
                     sent.append(friend)
-                    debugLog("🔍 Added to sent requests")
                 }
             }
 
@@ -331,7 +312,6 @@ struct FriendsView: View {
             sentRequests = sent
             isLoading = false
 
-            debugLog("🔍 Final: \(friends.count) friends, \(pendingRequests.count) pending")
             await fetchSuggestedFriends()
             
         } catch {
@@ -467,9 +447,6 @@ struct FriendsView: View {
                 )
                 return (friend: friend, mutualCount: row.mutual_count)
             }
-            
-            debugLog("🔍 Found \(suggestedFriends.count) suggested friends")
-            
         } catch {
             debugLog("❌ Error fetching suggested friends: \(error)")
             suggestedFriends = []

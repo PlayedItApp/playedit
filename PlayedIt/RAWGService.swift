@@ -147,8 +147,14 @@ class RAWGService {
             try await URLSession.shared.data(from: url)
         }
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw RAWGError.invalidResponse
+        }
+        if httpResponse.statusCode == 429 {
+            debugLog("⚠️ RAWG rate limited (429) for query: \(cleanedQuery)")
+            throw RAWGError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
             throw RAWGError.invalidResponse
         }
         
@@ -174,12 +180,6 @@ class RAWGService {
             }
             
             return score1 > score2
-        }
-        
-        for game in sortedGames.prefix(5) {
-            let name = game.title.lowercased()
-            let score = relevanceScore(game: game, name: name, query: queryLower, queryWords: queryWords)
-            debugLog("📊 \(game.title) | added: \(game.added ?? 0) | metacritic: \(game.metacriticScore ?? 0) | score: \(score)")
         }
         
         return Array(sortedGames.prefix(20))
@@ -452,8 +452,14 @@ class RAWGService {
         
         let (data, response) = try await URLSession.shared.data(from: url)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw RAWGError.invalidResponse
+        }
+        if httpResponse.statusCode == 404 {
+            debugLog("⚠️ RAWG game not found (404): id=\(id)")
+            throw RAWGError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
             throw RAWGError.invalidResponse
         }
         

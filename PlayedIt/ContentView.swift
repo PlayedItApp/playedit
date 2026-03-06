@@ -412,7 +412,6 @@ struct MainTabView: View {
                 .count ?? 0
             
             unreadNotificationCount = count
-                debugLog("🔔 MainTab unread count: \(count) for user: \(userId.uuidString)")
                 try? await UNUserNotificationCenter.current().setBadgeCount(count)
                 
             } catch {
@@ -1461,10 +1460,8 @@ struct GameDetailSheet: View {
                         computedPredictedRange = (lower: range.lower, upper: range.upper)
                         debugLog("🎯 Re-rank prediction: ~#\(range.lower)–\(range.upper) (percentile: \(Int(prediction.predictedPercentile))%, confidence: \(prediction.confidence))")
                     } else {
-                        debugLog("🎯 Re-rank prediction returned nil")
                     }
                 } else {
-                    debugLog("🎯 Re-rank: cachedContext is nil")
                 }
             }
             
@@ -1553,7 +1550,6 @@ struct GameDetailSheet: View {
                     .eq("id", value: game.id)
                     .execute()
                 
-                debugLog("✅ Platforms saved")
                 displayedPlatforms = Array(editedPlatforms).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
                 isEditingPlatforms = false
                 customPlatform = ""
@@ -1593,7 +1589,6 @@ struct GameDetailSheet: View {
                
                 .execute()
             
-            debugLog("✅ Notes saved")
             displayedNotes = trimmed
             isEditingNotes = false
             NotificationCenter.default.post(name: .didUpdateGameNote, object: nil)

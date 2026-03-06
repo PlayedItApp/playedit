@@ -614,12 +614,9 @@ struct ProfileView: View {
         .onChange(of: selectedPhoto) { _, newValue in
             if let newValue = newValue {
                 Task {
-                    debugLog("📸 Photo selected, loading...")
                     do {
                         if let data = try await newValue.loadTransferable(type: Data.self) {
-                            debugLog("📸 Data loaded: \(data.count) bytes")
                             if let uiImage = UIImage(data: data) {
-                                debugLog("📸 Image created: \(uiImage.size)")
                                 await MainActor.run {
                                     selectedImage = uiImage
                                 }
@@ -920,6 +917,7 @@ struct ProfileView: View {
         }
         
         do {
+            debugLog("📸 Uploading photo (\(Int(image.size.width))x\(Int(image.size.height)))")
             guard let compressedData = image.jpegData(compressionQuality: 0.7) else {
                 debugLog("❌ Could not compress image")
                 isUploadingPhoto = false
@@ -961,7 +959,7 @@ struct ProfileView: View {
             }
             
         } catch {
-            debugLog("❌ Error uploading photo: \(error)")
+            debugLog("❌ Error uploading photo (\(Int(image.size.width))x\(Int(image.size.height))): \(error)")
         }
         
         isUploadingPhoto = false

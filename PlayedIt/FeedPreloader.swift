@@ -76,8 +76,7 @@ final class FeedPreloader: ObservableObject {
             }
 
             let urls = posts.compactMap { $0.user_games?.games?.cover_url ?? $0.metadata?.game_cover_url }
-            debugLog("🔵 Prefetching \(urls.count) URLs (including batch children)")
-
+            
             // Await the first 15 URLs (above-the-fold) before dismissing splash
             let priorityUrls = Array(urls.prefix(30))
             await withTaskGroup(of: Void.self) { group in

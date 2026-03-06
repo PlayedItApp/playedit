@@ -98,9 +98,11 @@ class SupabaseManager: ObservableObject {
             }
             self.currentUser = session.user
             self.isAuthenticated = true
+            debugLog("✅ Session restored for user \(session.user.id.uuidString.prefix(8))…")
         } catch {
             self.isAuthenticated = false
             self.currentUser = nil
+            debugLog("ℹ️ No valid session found")
         }
     }
     
@@ -145,7 +147,7 @@ class SupabaseManager: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        debugLog("📝 Starting signup for email: \(email), username: \(username)")
+        debugLog("📝 Starting signup for username: \(username)")
         
         do {
             // Create auth user with username in metadata
@@ -171,7 +173,6 @@ class SupabaseManager: ObservableObject {
             
         } catch {
             debugLog("❌ Signup error: \(error)")
-            debugLog("❌ Error details: \(error.localizedDescription)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -224,7 +225,6 @@ class SupabaseManager: ObservableObject {
             
         } catch {
             debugLog("❌ Sign in error: \(error)")
-            debugLog("❌ Error details: \(error.localizedDescription)")
             errorMessage = parseError(error)
             isLoading = false
             return false
@@ -233,14 +233,15 @@ class SupabaseManager: ObservableObject {
     
     // MARK: - Sign Out
     func signOut() async {
-            do {
-                try await client.auth.signOut()
-            } catch {
-                errorMessage = parseError(error)
-            }
-            self.currentUser = nil
-            self.isAuthenticated = false
+        do {
+            try await client.auth.signOut()
+        } catch {
+            errorMessage = parseError(error)
         }
+        debugLog("👋 User signed out")
+        self.currentUser = nil
+        self.isAuthenticated = false
+    }
     
     // MARK: - Custom Password Reset (bypasses Supabase email)
     func requestPasswordReset(email: String) async -> Bool {
