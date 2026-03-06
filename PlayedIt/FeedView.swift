@@ -2115,6 +2115,13 @@ struct GroupedFeedRow: View {
                                     Text("#\(item.rankPosition ?? 0)")
                                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                                         .foregroundColor(.primaryBlue)
+                                    
+                                    if let note = item.note, !note.isEmpty {
+                                        Text(note)
+                                            .font(.system(size: 12, design: .rounded))
+                                            .foregroundStyle(Color.adaptiveGray)
+                                            .lineLimit(2)
+                                    }
                                 }
                                 
                                 Spacer()
