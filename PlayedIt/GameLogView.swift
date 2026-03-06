@@ -246,6 +246,8 @@ struct GameLogView: View {
                     
                     Spacer().frame(height: 20)
                 }
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("Log Game")
             .navigationBarTitleDisplayMode(.inline)

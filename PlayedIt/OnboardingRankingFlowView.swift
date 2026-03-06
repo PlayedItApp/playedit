@@ -6,6 +6,7 @@ struct OnboardingRankingFlowView: View {
     let onComplete: () -> Void
     
     @EnvironmentObject var supabase: SupabaseManager
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var currentIndex = 0
     @State private var existingUserGames: [UserGame] = []
     @State private var showComparison = false
@@ -62,7 +63,8 @@ struct OnboardingRankingFlowView: View {
                                         .foregroundStyle(Color.adaptiveSilver)
                                 )
                         }
-                        .frame(width: 160, height: 200)
+                        .frame(width: horizontalSizeClass == .regular ? 200 : 160,
+                               height: horizontalSizeClass == .regular ? 250 : 200)
                         .clipped()
                         .cornerRadius(12)
                         .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)

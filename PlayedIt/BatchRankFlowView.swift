@@ -17,6 +17,8 @@ struct BatchRankFlowView: View {
         "\(currentIndex + 1) of \(games.count)"
     }
     
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
@@ -45,7 +47,8 @@ struct BatchRankFlowView: View {
                         CachedAsyncImage(url: game.gameCoverURL) {
                             GameArtworkPlaceholder(genre: nil, size: .large)
                         }
-                        .frame(width: 150, height: 200)
+                        .frame(width: horizontalSizeClass == .regular ? 200 : 150,
+                               height: horizontalSizeClass == .regular ? 267 : 200)
                         .cornerRadius(12)
                         .clipped()
                         .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)

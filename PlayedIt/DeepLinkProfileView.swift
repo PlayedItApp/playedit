@@ -199,6 +199,8 @@ struct DeepLinkProfileView: View {
             
             Spacer()
         }
+        .frame(maxWidth: 700)
+        .frame(maxWidth: .infinity)
     }
     
     // MARK: - Lookup & Check Friendship

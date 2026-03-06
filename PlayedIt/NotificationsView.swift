@@ -102,6 +102,8 @@ struct NotificationsView: View {
             }
         }
         .listStyle(.plain)
+        .frame(maxWidth: 700)
+        .frame(maxWidth: .infinity)
         .refreshable {
             await fetchNotifications()
         }

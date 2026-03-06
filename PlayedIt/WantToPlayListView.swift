@@ -167,6 +167,8 @@ struct WantToPlayListView: View {
                 unrankedSection
             }
         }
+        .frame(maxWidth: 700)
+        .frame(maxWidth: .infinity)
     }
     
     // MARK: - Ranked Section

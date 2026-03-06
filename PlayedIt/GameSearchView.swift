@@ -107,6 +107,8 @@ struct GameSearchView: View {
                             }
                         }
                         .padding(16)
+                        .frame(maxWidth: 700)
+                        .frame(maxWidth: .infinity)
 
                         rawgAttribution
                     }

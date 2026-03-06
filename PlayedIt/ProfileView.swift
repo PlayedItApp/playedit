@@ -38,6 +38,7 @@ struct ProfileView: View {
     @State private var showCSVImport = false
     @State private var hasSteamConnected = false
     @State private var pendingImport: PendingImport?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     var body: some View {
         NavigationStack {
@@ -288,13 +289,25 @@ struct ProfileView: View {
                                     .padding(.horizontal, 20)
                                 }
                                 
-                                ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
-                                    RankedGameRow(rank: index + 1, game: game) {
-                                        await fetchRankedGames()
+                                if horizontalSizeClass == .regular {
+                                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                        ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
+                                            RankedGameRow(rank: index + 1, game: game) {
+                                                await fetchRankedGames()
+                                            }
+                                        }
                                     }
+                                    .padding(.horizontal, 20)
+                                    .tourAnchor("rankedList")
+                                } else {
+                                    ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
+                                        RankedGameRow(rank: index + 1, game: game) {
+                                            await fetchRankedGames()
+                                        }
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .tourAnchor("rankedList")
                                 }
-                                .padding(.horizontal, 20)
-                                .tourAnchor("rankedList")
                             }
                         } else {
                             // Want to Play
@@ -318,7 +331,7 @@ struct ProfileView: View {
             }) {
                 GameSearchView()
             }
-            .fullScreenCover(isPresented: $showSteamImport, onDismiss: {
+            .sheet(isPresented: $showSteamImport, onDismiss: {
                 Task {
                     await fetchRankedGames()
                     hasSteamConnected = await SteamService.shared.getSteamId() != nil
@@ -326,14 +339,16 @@ struct ProfileView: View {
                 }
             }) {
                 SteamImportView()
+                    .presentationDetents(horizontalSizeClass == .regular ? [.large] : [.large])
             }
-            .fullScreenCover(isPresented: $showCSVImport, onDismiss: {
+            .sheet(isPresented: $showCSVImport, onDismiss: {
                 Task {
                     await fetchRankedGames()
                     pendingImport = await PendingImportManager.shared.fetchAny()
                 }
             }) {
                 CSVImportView(resumingImport: pendingImport?.source == "csv_import" ? pendingImport : nil)
+                    .presentationDetents(horizontalSizeClass == .regular ? [.large] : [.large])
             }
             .alert("Start fresh?", isPresented: $showResetRankings) {
                 Button("Yeah, let's start over", role: .destructive) {

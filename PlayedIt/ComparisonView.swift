@@ -1,5 +1,24 @@
 import SwiftUI
 
+// MARK: - Comparison ViewModel
+@Observable
+class ComparisonViewModel {
+    var lowIndex = 0
+    var highIndex = 0
+    var comparisonCount = 0
+    var skippedIndices: Set<Int> = []
+    var comparisonHistory: [ComparisonState] = []
+    var finalPosition: Int?
+    var currentComparison: UserGame?
+
+    struct ComparisonState {
+        let lowIndex: Int
+        let highIndex: Int
+        let comparisonCount: Int
+        let skippedIndices: Set<Int>
+    }
+}
+
 struct ComparisonView: View {
     let newGame: Game
     let existingGames: [UserGame]
@@ -11,25 +30,10 @@ struct ComparisonView: View {
     let onComplete: (Int) -> Void
     
     @Environment(\.dismiss) var dismiss
-    @State private var comparisonQueue: [UserGame] = []
-    @State private var currentComparison: UserGame?
-    @State private var lowIndex = 0
-    @State private var highIndex = 0
-    @State private var comparisonCount = 0
-    @State private var finalPosition: Int?
+    @State private var vm = ComparisonViewModel()
     @State private var showCards = false
     @State private var selectedSide: String? = nil
-    @State private var comparisonHistory: [ComparisonState] = []
     @State private var showCancelAlert = false
-    @State private var skippedIndices: Set<Int> = []
-    
-    // History state for undo
-    struct ComparisonState {
-        let lowIndex: Int
-        let highIndex: Int
-        let comparisonCount: Int
-        let skippedIndices: Set<Int>
-    }
     
     private var maxComparisons: Int {
         let count = existingGames.count
@@ -54,72 +58,72 @@ struct ComparisonView: View {
                 // Progress indicator.
                 VStack(spacing: 8) {
                 }
-                .padding(.top, 12)
+                .padding(.top, 4)
                 
                 // Prompt
-                if finalPosition == nil {
-                    Text(prompts[comparisonCount % prompts.count])
+                if vm.finalPosition == nil {
+                    Text(prompts[vm.comparisonCount % prompts.count])
                         .font(Font.system(size: 22, weight: .bold, design: .rounded))
-                                                .foregroundStyle(Color.adaptiveSlate)
+                        .foregroundStyle(Color.adaptiveSlate)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
-                        .padding(.top, 8)
+                        .padding(.top, 4)
                 }
                 
-                if let opponent = currentComparison {
-                    // Head-to-head comparison
-                    HStack(spacing: 8) {
-                        // New game (left)
-                        GameComparisonCard(
-                            title: newGame.title,
-                            coverURL: newGame.coverURL,
-                            year: String(newGame.releaseDate?.prefix(4) ?? ""),
-                            isHighlighted: selectedSide == "left"
-                        ) {
-                            selectGame(side: "left")
-                        }
-                        .opacity(showCards ? 1 : 0)
-                        .offset(x: showCards ? 0 : -50)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.1), value: showCards)
-                        
-                        // Pixel VS
-                        PixelVS()
+                    if let opponent = vm.currentComparison {
+                        // Head-to-head comparison
+                        HStack(spacing: 8) {
+                            // New game (left)
+                            GameComparisonCard(
+                                title: newGame.title,
+                                coverURL: newGame.coverURL,
+                                year: String(newGame.releaseDate?.prefix(4) ?? ""),
+                                isHighlighted: selectedSide == "left"
+                            ) {
+                                selectGame(side: "left")
+                            }
                             .opacity(showCards ? 1 : 0)
-                            .scaleEffect(showCards ? 1 : 0.5)
-                            .animation(.spring(response: 0.4).delay(0.2), value: showCards)
-                        
-                        // Existing game (right)
-                        GameComparisonCard(
-                            title: opponent.gameTitle,
-                            coverURL: opponent.gameCoverURL,
-                            year: String(opponent.gameReleaseDate?.prefix(4) ?? ""),
-                            isHighlighted: selectedSide == "right"
-                        ) {
-                            selectGame(side: "right")
+                            .offset(x: showCards ? 0 : -50)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.1), value: showCards)
+                            
+                            // Pixel VS
+                            PixelVS()
+                                .opacity(showCards ? 1 : 0)
+                                .scaleEffect(showCards ? 1 : 0.5)
+                                .animation(.spring(response: 0.4).delay(0.2), value: showCards)
+                            
+                            // Existing game (right)
+                            GameComparisonCard(
+                                title: opponent.gameTitle,
+                                coverURL: opponent.gameCoverURL,
+                                year: String(opponent.gameReleaseDate?.prefix(4) ?? ""),
+                                isHighlighted: selectedSide == "right"
+                            ) {
+                                selectGame(side: "right")
+                            }
+                            .opacity(showCards ? 1 : 0)
+                            .offset(x: showCards ? 0 : 50)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.15), value: showCards)
                         }
-                        .opacity(showCards ? 1 : 0)
-                        .offset(x: showCards ? 0 : 50)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.15), value: showCards)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 16)
-                    
-                    // Tip
-                    Text("Tap the game you liked better")
-                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 16)
+                        
+                        // Tip
+                        Text("Tap the game you liked better")
+                            .font(.caption)
+                            .foregroundStyle(Color.adaptiveGray)
+                            .padding(.top, 8)
+                        
+                        Spacer()
+                        
+                        Button("Can't remember this one") {
+                            skipComparison()
+                        }
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.adaptiveGray)
-                        .padding(.top, 8)
-                    
-                    Spacer()
-                    
-                    Button("Can't remember this one") {
-                        skipComparison()
-                    }
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color.adaptiveGray)
-                    .padding(.bottom, 16)
-                    
-                } else if let position = finalPosition {
+                        .padding(.bottom, 16)
+                        
+                    } else if let position = vm.finalPosition {
                     if skipCelebration {
                         Color.clear.onAppear {
                             onComplete(position)
@@ -140,7 +144,7 @@ struct ComparisonView: View {
             .navigationTitle("Rank It")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if finalPosition == nil {
+                if vm.finalPosition == nil {
                     ToolbarItem(placement: .navigationBarLeading) {
                         if !hideCancel {
                             Button("Cancel") {
@@ -155,8 +159,8 @@ struct ComparisonView: View {
                         } label: {
                             Image(systemName: "arrow.uturn.backward")
                         }
-                        .foregroundColor(comparisonHistory.isEmpty ? .gray : .primaryBlue)
-                        .disabled(comparisonHistory.isEmpty)
+                        .foregroundColor(vm.comparisonHistory.isEmpty ? .gray : .primaryBlue)
+                        .disabled(vm.comparisonHistory.isEmpty)
                     }
                 }
             }
@@ -178,18 +182,18 @@ struct ComparisonView: View {
     
     private func setupComparison() {
         guard !existingGames.isEmpty else {
-            finalPosition = 1
-            currentComparison = nil
+            vm.finalPosition = 1
+            vm.currentComparison = nil
             return
         }
         
-        lowIndex = 0
-        highIndex = existingGames.count - 1
-        comparisonCount = 0
+        vm.lowIndex = 0
+        vm.highIndex = existingGames.count - 1
+        vm.comparisonCount = 0
         
         AnalyticsService.shared.track(.comparisonStarted, properties: [
-            "low": lowIndex,
-            "high": highIndex,
+            "low": vm.lowIndex,
+            "high": vm.highIndex,
             "list_size": existingGames.count
         ])
         debugLog("📊 RANKING START: '\(newGame.title)' into list of \(existingGames.count) games | predicted=#\(predictedPosition ?? -1)")
@@ -200,17 +204,17 @@ struct ComparisonView: View {
         showCards = false
         selectedSide = nil
         
-        if lowIndex > highIndex || comparisonCount >= maxComparisons {
-            finalPosition = lowIndex + 1
-            currentComparison = nil
-            debugLog("📊 RESULT: '\(newGame.title)' → #\(lowIndex + 1) after \(comparisonCount) comparisons | range was [\(lowIndex)...\(highIndex)]")
+        if vm.lowIndex > vm.highIndex || vm.comparisonCount >= maxComparisons {
+            vm.finalPosition = vm.lowIndex + 1
+            vm.currentComparison = nil
+            debugLog("📊 RESULT: '\(newGame.title)' → #\(vm.lowIndex + 1) after \(vm.comparisonCount) comparisons | range was [\(vm.lowIndex)...\(vm.highIndex)]")
             return
         }
         
-        let standardMid = (lowIndex + highIndex) / 2
+        let standardMid = (vm.lowIndex + vm.highIndex) / 2
         let rawMid: Int
-        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            rawMid = max(lowIndex, min(predicted - 1, highIndex))
+        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            rawMid = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
             debugLog("🎯 Biased first comparison to index \(rawMid) (predicted #\(predicted)) instead of standard \(standardMid)")
         } else {
             rawMid = standardMid
@@ -218,18 +222,18 @@ struct ComparisonView: View {
         
         // Find nearest non-skipped index, searching outward from rawMid
         let midIndex: Int
-        if !skippedIndices.contains(rawMid) {
+        if !vm.skippedIndices.contains(rawMid) {
             midIndex = rawMid
         } else {
             // Search outward from rawMid for a non-skipped index within range
             var found: Int? = nil
-            for offset in 1...(highIndex - lowIndex + 1) {
+            for offset in 1...(vm.highIndex - vm.lowIndex + 1) {
                 let lower = rawMid - offset
                 let upper = rawMid + offset
-                if lower >= lowIndex && !skippedIndices.contains(lower) {
+                if lower >= vm.lowIndex && !vm.skippedIndices.contains(lower) {
                     found = lower; break
                 }
-                if upper <= highIndex && !skippedIndices.contains(upper) {
+                if upper <= vm.highIndex && !vm.skippedIndices.contains(upper) {
                     found = upper; break
                 }
             }
@@ -237,15 +241,15 @@ struct ComparisonView: View {
                 midIndex = f
             } else {
                 // All indices in range are skipped — just insert at midpoint
-                finalPosition = rawMid + 1
-                currentComparison = nil
+                vm.finalPosition = rawMid + 1
+                vm.currentComparison = nil
                 debugLog("📊 RESULT (all skipped): '\(newGame.title)' → #\(rawMid + 1)")
                 return
             }
         }
-        currentComparison = existingGames[midIndex]
-        
-        debugLog("📊 COMPARE #\(comparisonCount + 1): '\(newGame.title)' vs '\(existingGames[midIndex].gameTitle)' (rank #\(existingGames[midIndex].rankPosition)) | midIndex=\(midIndex) range=[\(lowIndex)...\(highIndex)]")
+        vm.currentComparison = existingGames[midIndex]
+                
+        debugLog("📊 COMPARE #\(vm.comparisonCount + 1): '\(newGame.title)' vs '\(existingGames[midIndex].gameTitle)' (rank #\(existingGames[midIndex].rankPosition)) | midIndex=\(midIndex) range=[\(vm.lowIndex)...\(vm.highIndex)]")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             showCards = true
@@ -261,7 +265,7 @@ struct ComparisonView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             AnalyticsService.shared.track(.comparisonChoiceMade, properties: [
                 "chose": side == "left" ? "new" : "existing",
-                "comparison_number": comparisonCount + 1
+                "comparison_number": vm.comparisonCount + 1
             ])
             if side == "left" {
                 userChoseNewGame()
@@ -272,72 +276,72 @@ struct ComparisonView: View {
     }
     
     private func userChoseNewGame() {
-        comparisonHistory.append(ComparisonState(
-            lowIndex: lowIndex,
-            highIndex: highIndex,
-            comparisonCount: comparisonCount,
-            skippedIndices: skippedIndices
+        vm.comparisonHistory.append(ComparisonViewModel.ComparisonState(
+            lowIndex: vm.lowIndex,
+            highIndex: vm.highIndex,
+            comparisonCount: vm.comparisonCount,
+            skippedIndices: vm.skippedIndices
         ))
         
         // Use the same midIndex that was shown to the user
         let midIndex: Int
-        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
         } else {
-            midIndex = (lowIndex + highIndex) / 2
+            midIndex = (vm.lowIndex + vm.highIndex) / 2
         }
         
-        debugLog("📊 CHOSE: '\(newGame.title)' > '\(existingGames[midIndex].gameTitle)' → highIndex: \(highIndex) → \(midIndex - 1)")
+        debugLog("📊 CHOSE: '\(newGame.title)' > '\(existingGames[midIndex].gameTitle)' → highIndex: \(vm.highIndex) → \(midIndex - 1)")
         
-        highIndex = midIndex - 1
-        comparisonCount += 1
+        vm.highIndex = midIndex - 1
+        vm.comparisonCount += 1
         nextComparison()
     }
     
     private func userChoseExistingGame() {
-        comparisonHistory.append(ComparisonState(
-            lowIndex: lowIndex,
-            highIndex: highIndex,
-            comparisonCount: comparisonCount,
-            skippedIndices: skippedIndices
+        vm.comparisonHistory.append(ComparisonViewModel.ComparisonState(
+            lowIndex: vm.lowIndex,
+            highIndex: vm.highIndex,
+            comparisonCount: vm.comparisonCount,
+            skippedIndices: vm.skippedIndices
         ))
         
         // Use the same midIndex that was shown to the user
         let midIndex: Int
-        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
         } else {
-            midIndex = (lowIndex + highIndex) / 2
+            midIndex = (vm.lowIndex + vm.highIndex) / 2
         }
         
-        debugLog("📊 CHOSE: '\(existingGames[midIndex].gameTitle)' > '\(newGame.title)' → lowIndex: \(lowIndex) → \(midIndex + 1)")
+        debugLog("📊 CHOSE: '\(existingGames[midIndex].gameTitle)' > '\(newGame.title)' → lowIndex: \(vm.lowIndex) → \(midIndex + 1)")
         
-        lowIndex = midIndex + 1
-        comparisonCount += 1
+        vm.lowIndex = midIndex + 1
+        vm.comparisonCount += 1
         nextComparison()
     }
     
     private func skipComparison() {
-        guard let currentOpponent = currentComparison else { return }
+        guard let currentOpponent = vm.currentComparison else { return }
         
         let midIndex: Int
-        if comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(lowIndex, min(predicted - 1, highIndex))
+        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            midIndex = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
         } else {
-            midIndex = (lowIndex + highIndex) / 2
+            midIndex = (vm.lowIndex + vm.highIndex) / 2
         }
         
-        comparisonHistory.append(ComparisonState(
-            lowIndex: lowIndex,
-            highIndex: highIndex,
-            comparisonCount: comparisonCount,
-            skippedIndices: skippedIndices
+        vm.comparisonHistory.append(ComparisonViewModel.ComparisonState(
+            lowIndex: vm.lowIndex,
+            highIndex: vm.highIndex,
+            comparisonCount: vm.comparisonCount,
+            skippedIndices: vm.skippedIndices
         ))
         
-        skippedIndices.insert(midIndex)
-        comparisonCount += 1
+        vm.skippedIndices.insert(midIndex)
+        vm.comparisonCount += 1
         
-        debugLog("📊 SKIP: '\(currentOpponent.gameTitle)' at index \(midIndex) | range=[\(lowIndex)...\(highIndex)]")
+        debugLog("📊 SKIP: '\(currentOpponent.gameTitle)' at index \(midIndex) | range=[\(vm.lowIndex)...\(vm.highIndex)]")
         
         let lightFeedback = UIImpactFeedbackGenerator(style: .light)
         lightFeedback.impactOccurred()
@@ -346,15 +350,15 @@ struct ComparisonView: View {
     }
     
     private func undoLastComparison() {
-        guard let lastState = comparisonHistory.popLast() else { return }
+        guard let lastState = vm.comparisonHistory.popLast() else { return }
         AnalyticsService.shared.track(.rankingUndoUsed)
         
         // Restore previous state
-        lowIndex = lastState.lowIndex
-        highIndex = lastState.highIndex
-        comparisonCount = lastState.comparisonCount
-        skippedIndices = lastState.skippedIndices
-        finalPosition = nil
+        vm.lowIndex = lastState.lowIndex
+        vm.highIndex = lastState.highIndex
+        vm.comparisonCount = lastState.comparisonCount
+        vm.skippedIndices = lastState.skippedIndices
+        vm.finalPosition = nil
         
         // Show the comparison again
         nextComparison()
@@ -392,7 +396,10 @@ struct GameComparisonCard: View {
     var isHighlighted: Bool = false
     let onTap: () -> Void
     
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    
     var body: some View {
+        let size = Theme.comparisonCardSize(for: horizontalSizeClass)
         Button(action: onTap) {
             VStack(spacing: 10) {
                 // Retro frame around image
@@ -400,16 +407,16 @@ struct GameComparisonCard: View {
                     // Pixel border effect
                     Rectangle()
                         .fill(isHighlighted ? Color.primaryBlue : Color.adaptiveSlate.opacity(0.3))
-                        .frame(width: 148, height: 195)
+                        .frame(width: size.borderWidth, height: size.borderHeight)
                     
                     Rectangle()
                         .fill(isHighlighted ? Color.primaryBlue.opacity(0.3) : Color.secondaryBackground)
-                        .frame(width: 144, height: 191)
+                        .frame(width: size.borderWidth - 4, height: size.borderHeight - 4)
                     
                     CachedAsyncImage(url: coverURL) {
                         GameArtworkPlaceholder(genre: nil, size: .large)
                     }
-                    .frame(width: 140, height: 187)
+                    .frame(width: size.imageWidth, height: size.imageHeight)
                     .clipped()
                 }
                 .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)

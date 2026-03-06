@@ -5,6 +5,22 @@ private nonisolated struct ResetParams: Encodable, Sendable {
     let p_user_id: String
 }
 
+// MARK: - Reset Rankings ViewModel
+@Observable
+class ResetRankingsViewModel {
+    var lowIndex = 0
+    var highIndex = 0
+    var comparisonCount = 0
+    var currentOpponent: UserGame?
+    var comparisonHistory: [ComparisonState] = []
+
+    struct ComparisonState {
+        let lowIndex: Int
+        let highIndex: Int
+        let comparisonCount: Int
+    }
+}
+
 struct ResetRankingsView: View {
     let games: [UserGame]
     var resuming: Bool = false
@@ -23,14 +39,10 @@ struct ResetRankingsView: View {
     @State private var errorMessage: String?
     
     // Inline comparison state
+    @State private var vm = ResetRankingsViewModel()
     @State private var isComparing = false
-    @State private var lowIndex = 0
-    @State private var highIndex = 0
-    @State private var comparisonCount = 0
-    @State private var currentOpponent: UserGame?
     @State private var showCards = false
     @State private var selectedSide: String? = nil
-    @State private var comparisonHistory: [ComparisonState] = []
     @State private var gameHistory: [GameSnapshot] = []
     @State private var previousRanks: [String: Int] = [:]  // game ID → old rank position
     
@@ -42,12 +54,6 @@ struct ResetRankingsView: View {
         "Head to head: your pick?",
         "If you could only replay one..."
     ]
-    
-    struct ComparisonState {
-        let lowIndex: Int
-        let highIndex: Int
-        let comparisonCount: Int
-    }
 
     struct GameSnapshot {
         let gameIndex: Int
@@ -62,7 +68,7 @@ struct ResetRankingsView: View {
                     introView
                 } else if isComplete {
                     completionView
-                } else if isComparing, let opponent = currentOpponent, let currentGame = currentGame {
+                } else if isComparing, let opponent = vm.currentOpponent, let currentGame = currentGame {
                     comparisonView(currentGame: currentGame, opponent: opponent)
                 } else if let currentGame = currentGame {
                     // Brief transition showing which game is next
@@ -80,7 +86,7 @@ struct ResetRankingsView: View {
                     }
                     
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        if isComparing && !(comparisonHistory.isEmpty && gameHistory.isEmpty) {
+                        if isComparing && !(vm.comparisonHistory.isEmpty && gameHistory.isEmpty) {
                             Button {
                                 undoLastComparison()
                             } label: {
@@ -226,7 +232,7 @@ struct ResetRankingsView: View {
             .padding(.top, 12)
             
             // Prompt
-            Text(prompts[comparisonCount % prompts.count])
+            Text(prompts[vm.comparisonCount % prompts.count])
                 .font(.system(size: 22, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.adaptiveSlate)
                 .multilineTextAlignment(.center)
@@ -342,8 +348,8 @@ struct ResetRankingsView: View {
     private func startComparisonForCurrentGame() {
         guard let _ = currentGame else { return }
         
-        comparisonHistory = []
-        
+        vm.comparisonHistory = []
+                
         if rankedSoFar.isEmpty && currentGameIndex == 0 {
             // First two games — show head-to-head, winner gets #1, loser gets #2
             guard shuffledGames.count >= 2 else {
@@ -352,8 +358,8 @@ struct ResetRankingsView: View {
                 return
             }
             
-            currentOpponent = shuffledGames[1]
-            comparisonCount = 0
+            vm.currentOpponent = shuffledGames[1]
+            vm.comparisonCount = 0
             isComparing = true
             showCards = false
             selectedSide = nil
@@ -364,9 +370,9 @@ struct ResetRankingsView: View {
             return
         }
         
-        lowIndex = 0
-        highIndex = rankedSoFar.count - 1
-        comparisonCount = 0
+        vm.lowIndex = 0
+        vm.highIndex = rankedSoFar.count - 1
+        vm.comparisonCount = 0
         isComparing = true
         
         debugLog("📊 RESET RANK: '\(shuffledGames[currentGameIndex].gameTitle)' into \(rankedSoFar.count) ranked games")
@@ -378,26 +384,26 @@ struct ResetRankingsView: View {
         showCards = false
         selectedSide = nil
         
-        if lowIndex > highIndex || comparisonCount >= maxComparisons {
-            let position = lowIndex + 1
-            debugLog("📊 RESET RESULT: '\(shuffledGames[currentGameIndex].gameTitle)' → #\(position) after \(comparisonCount) comparisons | range was [\(lowIndex)...\(highIndex)]")
+        if vm.lowIndex > vm.highIndex || vm.comparisonCount >= maxComparisons {
+            let position = vm.lowIndex + 1
+            debugLog("📊 RESET RESULT: '\(shuffledGames[currentGameIndex].gameTitle)' → #\(position) after \(vm.comparisonCount) comparisons | range was [\(vm.lowIndex)...\(vm.highIndex)]")
             isComparing = false
-            currentOpponent = nil
+            vm.currentOpponent = nil
             Task { await placeGame(shuffledGames[currentGameIndex], at: position) }
             return
         }
         
-        let standardMid = (lowIndex + highIndex) / 2
+        let standardMid = (vm.lowIndex + vm.highIndex) / 2
         let midIndex: Int
-        if comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
-            midIndex = max(lowIndex, min(biased, highIndex))
+        if vm.comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
+            midIndex = max(vm.lowIndex, min(biased, vm.highIndex))
             debugLog("🎯 RESET biased first comparison to index \(midIndex) (old rank scaled) instead of standard \(standardMid)")
         } else {
             midIndex = standardMid
         }
-        currentOpponent = rankedSoFar[midIndex]
+        vm.currentOpponent = rankedSoFar[midIndex]
         
-        debugLog("📊 RESET COMPARE #\(comparisonCount + 1): '\(shuffledGames[currentGameIndex].gameTitle)' vs '\(rankedSoFar[midIndex].gameTitle)' (rank #\(rankedSoFar[midIndex].rankPosition)) | mid=\(midIndex) range=[\(lowIndex)...\(highIndex)]")
+        debugLog("📊 RESET COMPARE #\(vm.comparisonCount + 1): '\(shuffledGames[currentGameIndex].gameTitle)' vs '\(rankedSoFar[midIndex].gameTitle)' (rank #\(rankedSoFar[midIndex].rankPosition)) | mid=\(midIndex) range=[\(vm.lowIndex)...\(vm.highIndex)]")
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             showCards = true
@@ -414,7 +420,7 @@ struct ResetRankingsView: View {
             // Special case: first matchup (game 0 vs game 1)
             if rankedSoFar.isEmpty && currentGameIndex == 0 {
                 isComparing = false
-                currentOpponent = nil
+                vm.currentOpponent = nil
                 
                 let winner: UserGame
                 let loser: UserGame
@@ -432,28 +438,28 @@ struct ResetRankingsView: View {
                 return
             }
             
-            comparisonHistory.append(ComparisonState(
-                lowIndex: lowIndex,
-                highIndex: highIndex,
-                comparisonCount: comparisonCount
+            vm.comparisonHistory.append(ResetRankingsViewModel.ComparisonState(
+                lowIndex: vm.lowIndex,
+                highIndex: vm.highIndex,
+                comparisonCount: vm.comparisonCount
             ))
             
             // Use the same midIndex that was shown to the user
             let midIndex: Int
-            if comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
-                midIndex = max(lowIndex, min(biased, highIndex))
+            if vm.comparisonCount == 0, let biased = predictedIndex(for: shuffledGames[currentGameIndex]) {
+                midIndex = max(vm.lowIndex, min(biased, vm.highIndex))
             } else {
-                midIndex = (lowIndex + highIndex) / 2
+                midIndex = (vm.lowIndex + vm.highIndex) / 2
             }
             
             if side == "left" {
-                debugLog("📊 RESET CHOSE: current game > '\(rankedSoFar[midIndex].gameTitle)' → highIndex: \(highIndex) → \(midIndex - 1)")
-                highIndex = midIndex - 1
+                debugLog("📊 RESET CHOSE: current game > '\(rankedSoFar[midIndex].gameTitle)' → highIndex: \(vm.highIndex) → \(midIndex - 1)")
+                vm.highIndex = midIndex - 1
             } else {
-                debugLog("📊 RESET CHOSE: '\(rankedSoFar[midIndex].gameTitle)' > current game → lowIndex: \(lowIndex) → \(midIndex + 1)")
-                lowIndex = midIndex + 1
+                debugLog("📊 RESET CHOSE: '\(rankedSoFar[midIndex].gameTitle)' > current game → lowIndex: \(vm.lowIndex) → \(midIndex + 1)")
+                vm.lowIndex = midIndex + 1
             }
-            comparisonCount += 1
+            vm.comparisonCount += 1
             nextComparison()
         }
     }
@@ -510,10 +516,10 @@ struct ResetRankingsView: View {
     
     private func undoLastComparison() {
         // If we have comparison history within the current game, undo that
-        if let lastState = comparisonHistory.popLast() {
-            lowIndex = lastState.lowIndex
-            highIndex = lastState.highIndex
-            comparisonCount = lastState.comparisonCount
+        if let lastState = vm.comparisonHistory.popLast() {
+            vm.lowIndex = lastState.lowIndex
+            vm.highIndex = lastState.highIndex
+            vm.comparisonCount = lastState.comparisonCount
             nextComparison()
         } else {
             // No comparison history — go back to previous game
@@ -558,7 +564,7 @@ struct ResetRankingsView: View {
                 // Restore local state
                 rankedSoFar = snapshot.rankedSoFar
                 currentGameIndex = snapshot.gameIndex
-                comparisonHistory = []
+                vm.comparisonHistory = []
                 
                 // Restart comparisons for this game
                 startComparisonForCurrentGame()

@@ -194,6 +194,19 @@ struct MainTabView: View {
                 .tag(2)
         }
         .tint(.primaryBlue)
+        .overlay {
+            Group {
+                Button("") { selectedTab = 0 }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("") { selectedTab = 1 }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("") { selectedTab = 2 }
+                    .keyboardShortcut("3", modifiers: .command)
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
         .sheet(isPresented: $showWhatsNew) {
             WhatsNewView()
         }
@@ -414,7 +427,8 @@ struct RankedGameRow: View {
     let game: UserGame
     var onUpdate: (() async -> Void)? = nil
     @State private var showDetail = false
-    
+    @EnvironmentObject var supabase: SupabaseManager
+
     var body: some View {
         Button {
             showDetail = true
@@ -468,6 +482,46 @@ struct RankedGameRow: View {
             )
         }
         .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+        .contextMenu {
+            Button {
+                showDetail = true
+            } label: {
+                Label("Edit / Details", systemImage: "pencil")
+            }
+
+            Button {
+                Task {
+                    await GameShareService.shared.shareGame(
+                        gameTitle: game.gameTitle,
+                        coverURL: game.gameCoverURL,
+                        rankPosition: rank,
+                        platforms: game.platformPlayed,
+                        totalGames: 0,
+                        gameId: game.gameRawgId ?? game.gameId
+                    )
+                }
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                Task {
+                    guard let userId = supabase.currentUser?.id else { return }
+                    _ = try? await supabase.client
+                        .rpc("remove_game_and_rerank", params: [
+                            "p_user_game_id": AnyJSON.string(game.id),
+                            "p_user_id": AnyJSON.string(userId.uuidString)
+                        ])
+                        .execute()
+                    await onUpdate?()
+                }
+            } label: {
+                Label("Remove from List", systemImage: "trash")
+            }
+        }
         .sheet(isPresented: $showDetail, onDismiss: {
             Task { await onUpdate?() }
         }) {

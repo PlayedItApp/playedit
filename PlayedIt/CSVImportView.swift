@@ -37,9 +37,11 @@ struct CSVImportView: View {
     
     // File picker
     @State private var showFilePicker = false
-    
+        
     // Resume state
     var resumingImport: PendingImport? = nil
+    
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     var body: some View {
         NavigationStack {

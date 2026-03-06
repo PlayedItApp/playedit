@@ -384,6 +384,8 @@ struct WhatsNewView: View {
                 }
                 .padding(.bottom, 16)
             }
+            .frame(maxWidth: 600)
+            .frame(maxWidth: .infinity)
             
             Button {
                 WhatsNewManager.markAsSeen()
@@ -401,6 +403,7 @@ struct WhatsNewView: View {
             .padding(.bottom, 32)
         }
         .presentationDetents([.large])
+        .presentationContentInteraction(.scrolls)
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled()
     }

@@ -54,6 +54,24 @@ extension Color {
     }
 }
 
+// MARK: - Adaptive Sizes
+struct Theme {
+    struct CardSize {
+        let borderWidth: CGFloat
+        let borderHeight: CGFloat
+        let imageWidth: CGFloat
+        let imageHeight: CGFloat
+    }
+
+    static func comparisonCardSize(for horizontalSizeClass: UserInterfaceSizeClass?) -> CardSize {
+        if horizontalSizeClass == .regular {
+            return CardSize(borderWidth: 200, borderHeight: 264, imageWidth: 196, imageHeight: 260)
+        } else {
+            return CardSize(borderWidth: 148, borderHeight: 195, imageWidth: 140, imageHeight: 187)
+        }
+    }
+}
+
 // MARK: - Button Styles
 struct PrimaryButtonStyle: ButtonStyle {
     var isLoading: Bool = false

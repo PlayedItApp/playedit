@@ -248,10 +248,12 @@ curatedPlatforms: curatedPlatforms
                 }
                 
                 Spacer(minLength: 40)
+                }
+                .padding(.vertical, 16)
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.vertical, 16)
         }
-    }
     
     // MARK: - Helpers
     

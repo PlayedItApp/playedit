@@ -238,6 +238,8 @@ struct RecommendationsView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+            .frame(maxWidth: 700)
+            .frame(maxWidth: .infinity)
         }
         .background(Color.appBackground)
     }
