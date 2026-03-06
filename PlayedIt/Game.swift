@@ -80,7 +80,7 @@ struct Game: Identifiable, Codable {
         }
     
     init(from rawgGame: RAWGGame) {
-        self.id = rawgGame.id
+        self.id = 0  // DB ID unknown until inserted; rawgId is the RAWG identifier
         self.rawgId = rawgGame.id
         self.title = rawgGame.name
         self.coverURL = rawgGame.backgroundImage

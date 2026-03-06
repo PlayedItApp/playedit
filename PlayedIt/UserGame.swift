@@ -35,20 +35,19 @@ struct UserGame: Identifiable, Codable {
 extension UserGame {
     func toGame() -> Game {
         Game(
-            from: RAWGGame(
-                id: gameRawgId ?? gameId,
-                name: gameTitle,
-                backgroundImage: gameCoverURL,
-                released: gameReleaseDate,
-                metacritic: nil,
-                genres: nil,
-                platforms: nil,
-                added: nil,
-                rating: nil,
-                descriptionRaw: nil,
-                descriptionHtml: nil,
-                tags: nil
-            )
+            id: gameId,
+            rawgId: gameRawgId ?? 0,
+            title: gameTitle,
+            coverURL: gameCoverURL,
+            genres: [],
+            platforms: [],
+            releaseDate: gameReleaseDate,
+            metacriticScore: nil,
+            added: nil,
+            rating: nil,
+            gameDescription: nil,
+            gameDescriptionHtml: nil,
+            tags: []
         )
     }
 }

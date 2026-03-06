@@ -663,24 +663,28 @@ class RecommendationManager: ObservableObject {
                 let metacritic_score: Int?
             }
             
-            struct InsertedGame: Decodable { let id: Int }
-            
-            let inserted: InsertedGame = try await supabase.client
+            try await supabase.client
                 .from("games")
-                .insert(NewGame(
+                .upsert(NewGame(
                     rawg_id: game.rawgId,
                     title: game.title,
                     cover_url: game.coverURL,
                     genres: game.genres,
                     tags: game.tags,
                     metacritic_score: game.metacriticScore
-                ))
+                ), onConflict: "rawg_id")
+                .execute()
+            
+            struct InsertedGame: Decodable { let id: Int }
+            let fetched: [InsertedGame] = try await supabase.client
+                .from("games")
                 .select("id")
-                .single()
+                .eq("rawg_id", value: game.rawgId)
+                .limit(1)
                 .execute()
                 .value
             
-            return inserted.id
+            return fetched.first?.id
             
         } catch {
             debugLog("⚠️ Error ensuring game in table: \(error)")

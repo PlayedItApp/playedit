@@ -184,21 +184,7 @@ class WantToPlayManager: ObservableObject {
     /// returns the local games table ID (creating the row if needed).
     private func resolveLocalGameId(rawgOrLocalId: Int, title: String, coverUrl: String?) async -> Int {
         do {
-            // First check if it's already a valid local ID
-            struct LocalCheck: Decodable { let id: Int }
-            let localRows: [LocalCheck] = try await supabase.client
-                .from("games")
-                .select("id")
-                .eq("id", value: rawgOrLocalId)
-                .limit(1)
-                .execute()
-                .value
-            
-            if localRows.first != nil {
-                return rawgOrLocalId
-            }
-            
-            // Not a local ID — treat as RAWG ID. Check if this RAWG ID exists.
+            // Check by rawg_id first — avoids collision between RAWG IDs and local DB IDs
             struct RawgCheck: Decodable { let id: Int }
             let rawgRows: [RawgCheck] = try await supabase.client
                 .from("games")
@@ -210,6 +196,20 @@ class WantToPlayManager: ObservableObject {
             
             if let existing = rawgRows.first {
                 return existing.id
+            }
+            
+            // Fall back to local DB ID check
+            struct LocalCheck: Decodable { let id: Int }
+            let localRows: [LocalCheck] = try await supabase.client
+                .from("games")
+                .select("id")
+                .eq("id", value: rawgOrLocalId)
+                .limit(1)
+                .execute()
+                .value
+            
+            if localRows.first != nil {
+                return rawgOrLocalId
             }
             
             // Doesn't exist at all — create it, enriched with RAWG data
