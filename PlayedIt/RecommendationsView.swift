@@ -66,6 +66,9 @@ struct RecommendationsView: View {
                             await manager.generateRecommendations()
                         }
                         hasGenerated = true
+                    AnalyticsService.shared.track(.recommendationsViewed, properties: [
+                        "count": manager.recommendations.count
+                    ])
                 }
             }
             .sheet(isPresented: $showHowItWorks) {
@@ -198,9 +201,15 @@ struct RecommendationsView: View {
                     RecommendationCard(
                         recommendation: rec,
                         onRankIt: {
+                            AnalyticsService.shared.track(.recommendationRankItTapped, properties: [
+                                "game_title": rec.gameTitle
+                            ])
                             gameToLog = rec
                         },
                         onWantToPlay: {
+                            AnalyticsService.shared.track(.recommendationWantToPlayTapped, properties: [
+                                "game_title": rec.gameTitle
+                            ])
                             Task {
                                 let added = await WantToPlayManager.shared.addGame(
                                     gameId: rec.recommendation.gameId,

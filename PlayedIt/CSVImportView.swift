@@ -504,6 +504,9 @@ struct CSVImportView: View {
                                         ])
                                         .execute()
                                 }
+                                AnalyticsService.shared.track(.csvImportCompleted, properties: [
+                                    "games_ranked": currentRankIndex
+                                ])
                                 await MainActor.run {
                                     phase = .complete
                                     NotificationCenter.default.post(name: .didCompleteRanking, object: nil)
@@ -778,6 +781,9 @@ struct CSVImportView: View {
             )
             await refreshExistingGames()
             currentRankIndex = 0
+            AnalyticsService.shared.track(.csvImportStarted, properties: [
+                "game_count": gamesToRank.count
+            ])
             phase = .ranking
         }
     }

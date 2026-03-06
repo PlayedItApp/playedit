@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		01C5006F2F1D837D002110A2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 01C5006E2F1D837D002110A2 /* Supabase */; };
 		01D9B41B2F3EC193008282B6 /* SensitiveContentAnalysis.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 01D9B41A2F3EC193008282B6 /* SensitiveContentAnalysis.framework */; };
+		01ED67AE2F5B363C00E7A092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 01ED67AD2F5B363C00E7A092 /* PostHog */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				01ED67AE2F5B363C00E7A092 /* PostHog in Frameworks */,
 				01C5006F2F1D837D002110A2 /* Supabase in Frameworks */,
 				01D9B41B2F3EC193008282B6 /* SensitiveContentAnalysis.framework in Frameworks */,
 			);
@@ -143,6 +145,7 @@
 			name = PlayedIt;
 			packageProductDependencies = (
 				01C5006E2F1D837D002110A2 /* Supabase */,
+				01ED67AD2F5B363C00E7A092 /* PostHog */,
 			);
 			productName = PlayedIt;
 			productReference = 01C5001C2F1D7DF0002110A2 /* PlayedIt.app */;
@@ -228,6 +231,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				01C500482F1D7F28002110A2 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				01ED67AC2F5B363C00E7A092 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 01C5001D2F1D7DF0002110A2 /* Products */;
@@ -667,6 +671,14 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		01ED67AC2F5B363C00E7A092 /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.45.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -674,6 +686,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 01C500482F1D7F28002110A2 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		01ED67AD2F5B363C00E7A092 /* PostHog */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 01ED67AC2F5B363C00E7A092 /* XCRemoteSwiftPackageReference "posthog-ios" */;
+			productName = PostHog;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

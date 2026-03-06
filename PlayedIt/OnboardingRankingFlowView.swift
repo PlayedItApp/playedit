@@ -11,6 +11,7 @@ struct OnboardingRankingFlowView: View {
     @State private var showComparison = false
     @State private var currentGameId: Int?
     @State private var isSaving = false
+    @State private var rankingStartTime = Date()
     @State private var errorMessage: String?
     
     private var currentGame: OnboardingGame? {
@@ -344,6 +345,13 @@ struct OnboardingRankingFlowView: View {
                     .execute()
             }
             // All done!
+            AnalyticsService.shared.track(.onboardingRankingCompleted, properties: [
+                "games_ranked": games.count,
+                "duration_seconds": Int(Date().timeIntervalSince(rankingStartTime))
+            ])
+            AnalyticsService.shared.track(.onboardingCompleted, properties: [
+                "total_games_ranked": games.count
+            ])
             onComplete()
         } else {
             // Small delay between games

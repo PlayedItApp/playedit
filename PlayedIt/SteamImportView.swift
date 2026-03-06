@@ -553,6 +553,9 @@ struct SteamImportView: View {
                                 ])
                                 .execute()
                         }
+                        AnalyticsService.shared.track(.steamImportCompleted, properties: [
+                            "games_ranked": currentRankIndex
+                        ])
                         await MainActor.run {
                             phase = .complete
                         }
@@ -990,6 +993,9 @@ struct SteamImportView: View {
             )
             await refreshExistingGames()
             currentRankIndex = 0
+            AnalyticsService.shared.track(.steamImportStarted, properties: [
+                "game_count": gamesToRank.count
+            ])
             phase = .ranking
         }
     }

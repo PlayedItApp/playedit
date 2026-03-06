@@ -32,6 +32,8 @@ struct PlayedItApp: App {
                 .environmentObject(SupabaseManager.shared)
                 .preferredColorScheme(appearanceManager.colorScheme)
                 .onAppear {
+                    AnalyticsService.shared.track(.appOpened)
+                    AnalyticsService.shared.track(.sessionStarted)
                     let resolved: ColorScheme
                     if let manual = appearanceManager.colorScheme {
                         resolved = manual
@@ -85,6 +87,14 @@ struct PlayedItApp: App {
     
     private func handleDeepLink(_ url: URL) {
         debugLog("🔗 Deep link received: \(url)")
+        
+        let linkType = url.pathComponents.contains("game") ? "game" : "profile"
+        let linkSource = url.scheme == "https" ? "universal" : "custom_scheme"
+        AnalyticsService.shared.track(.deepLinkOpened, properties: [
+            "type": linkType,
+            "source": linkSource
+        ])
+        
         // Handle Universal Links (https://playedit.app/...) and custom scheme (playedit://...)
         if url.scheme == "https" && url.host == "playedit.app" {
             if url.pathComponents.count >= 3 && url.pathComponents[1] == "game",

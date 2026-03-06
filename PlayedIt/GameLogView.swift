@@ -26,6 +26,7 @@ struct GameLogView: View {
     @State private var curatedReleaseYear: Int? = nil
     @State private var isLoadingDescription = true
     @State private var computedPredictedRange: (lower: Int, upper: Int)? = nil
+    @State private var rankingFlowStartTime = Date()
     
     static let allPlatforms = [
         "Android", "Apple TV", "Apple Vision Pro",
@@ -129,7 +130,7 @@ struct GameLogView: View {
                             isLoadingDescription: isLoadingDescription,
                             curatedGenres: curatedGenres,
                             curatedTags: curatedTags,
-curatedPlatforms: curatedPlatforms
+                            curatedPlatforms: curatedPlatforms
                         )
                         .padding(.top, 16)
                     
@@ -251,6 +252,10 @@ curatedPlatforms: curatedPlatforms
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        AnalyticsService.shared.track(.rankingFlowAbandoned, properties: [
+                            "at_comparison": 0,
+                            "of_total": existingUserGames.count
+                        ])
                         dismiss()
                     }
                     .foregroundColor(.primaryBlue)
@@ -312,6 +317,13 @@ curatedPlatforms: curatedPlatforms
                     Text("\(game.title) is already ranked at #\(existing.rank_position). Would you like to re-rank it?")
                 }
             }
+        }
+        .onAppear {
+            rankingFlowStartTime = Date()
+            AnalyticsService.shared.track(.rankingFlowStarted, properties: [
+                "game_title": game.title,
+                "source": source
+            ])
         }
     }
     
@@ -777,6 +789,12 @@ curatedPlatforms: curatedPlatforms
                         .execute()
                         
                         debugLog("✅ Game logged at position \(position)")
+                        AnalyticsService.shared.track(.rankingFlowCompleted, properties: [
+                            "game_title": game.title,
+                            "rank_position": position,
+                            "total_games": existingUserGames.count + 1,
+                            "comparisons_used": 0
+                        ])
                             PredictionEngine.shared.invalidateContext()
                             await WantToPlayManager.shared.removeGameIfPresent(rawgId: game.rawgId)
                             await RecommendationManager.checkAndUpdateOnRank(gameId: gameId, rankPosition: position, totalGames: existingUserGames.count + 1)

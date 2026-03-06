@@ -98,6 +98,10 @@ struct GameSearchView: View {
                         LazyVStack(spacing: 12) {
                             ForEach(games) { game in
                                 GameSearchRow(game: game, isRanked: rankedGameIds.contains(game.id)) {
+                                    AnalyticsService.shared.track(.gameSearchSelected, properties: [
+                                        "game_title": game.title,
+                                        "game_id": game.id
+                                    ])
                                     selectedGame = game
                                 }
                             }
@@ -149,9 +153,13 @@ struct GameSearchView: View {
         searchError = nil
         do {
             games = try await RAWGService.shared.searchGames(query: searchText)
-            if games.isEmpty {
-                searchError = nil
-            }
+                AnalyticsService.shared.track(.gameSearchCompleted, properties: [
+                    "query": searchText,
+                    "result_count": games.count
+                ])
+                if games.isEmpty {
+                    searchError = nil
+                }
         } catch {
             debugLog("Search error: \(error)")
             games = []

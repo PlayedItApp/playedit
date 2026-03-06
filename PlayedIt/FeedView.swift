@@ -89,6 +89,7 @@ struct FeedView: View {
         }
         .task {
             if combinedFeed.isEmpty {
+                AnalyticsService.shared.track(.feedOpened)
                 await fetchFeed()
             }
             if !hideNotifications {
@@ -264,6 +265,9 @@ struct FeedView: View {
                             "emoji": "❤️"
                         ])
                         .execute()
+                    AnalyticsService.shared.track(.feedPostLiked, properties: [
+                        "post_type": "game"
+                    ])
                 }
             } catch {
                 // Revert on failure

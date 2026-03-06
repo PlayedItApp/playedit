@@ -152,6 +152,9 @@ struct OnboardingQuizView: View {
                     switch step {
                     case .welcome:
                         welcomeView
+                        .onAppear {
+                            AnalyticsService.shared.track(.onboardingStarted)
+                        }
                     case .platforms:
                         platformsView
                     case .genres:
@@ -215,6 +218,7 @@ struct OnboardingQuizView: View {
                 .buttonStyle(PrimaryButtonStyle())
                 
                 Button("Skip. Just take me to the app!") {
+                    AnalyticsService.shared.track(.onboardingSkipped)
                     if let onSkip = onSkip {
                         onSkip()
                     } else {
@@ -295,6 +299,10 @@ struct OnboardingQuizView: View {
             
             // Next button
             Button("Next") {
+                AnalyticsService.shared.track(.onboardingPlatformsSelected, properties: [
+                    "platforms": selectedPlatforms.map { $0.rawValue },
+                    "count": selectedPlatforms.count
+                ])
                 step = .genres
             }
             .buttonStyle(PrimaryButtonStyle())
@@ -371,10 +379,14 @@ struct OnboardingQuizView: View {
                 .buttonStyle(TertiaryButtonStyle())
                 
                 Button("Next") {
+                    AnalyticsService.shared.track(.onboardingGenresSelected, properties: [
+                        "genres": selectedGenres.map { $0.rawValue },
+                        "count": selectedGenres.count
+                    ])
                     Task { await loadFilteredGames() }
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(selectedGenres.isEmpty)
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(selectedPlatforms.isEmpty)
                 .opacity(selectedGenres.isEmpty ? 0.5 : 1.0)
             }
             .padding(.horizontal, 24)
@@ -591,6 +603,12 @@ struct OnboardingQuizView: View {
     private func startRanking() {
         gamesToRank = filteredGames.filter { selectedGameIds.contains($0.id) }
         debugLog("🎮 Starting ranking with \(gamesToRank.count) games")
+        AnalyticsService.shared.track(.onboardingGamesSelected, properties: [
+            "count": gamesToRank.count
+        ])
+        AnalyticsService.shared.track(.onboardingRankingStarted, properties: [
+            "game_count": gamesToRank.count
+        ])
         showRankingFlow = true
     }
 }

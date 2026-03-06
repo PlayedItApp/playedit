@@ -180,6 +180,11 @@ struct ComparisonView: View {
         highIndex = existingGames.count - 1
         comparisonCount = 0
         
+        AnalyticsService.shared.track(.comparisonStarted, properties: [
+            "low": lowIndex,
+            "high": highIndex,
+            "list_size": existingGames.count
+        ])
         debugLog("📊 RANKING START: '\(newGame.title)' into list of \(existingGames.count) games | predicted=#\(predictedPosition ?? -1)")
         nextComparison()
     }
@@ -219,6 +224,10 @@ struct ComparisonView: View {
         impactFeedback.impactOccurred()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            AnalyticsService.shared.track(.comparisonChoiceMade, properties: [
+                "chose": side == "left" ? "new" : "existing",
+                "comparison_number": comparisonCount + 1
+            ])
             if side == "left" {
                 userChoseNewGame()
             } else {
@@ -273,6 +282,7 @@ struct ComparisonView: View {
     
     private func undoLastComparison() {
         guard let lastState = comparisonHistory.popLast() else { return }
+        AnalyticsService.shared.track(.rankingUndoUsed)
         
         // Restore previous state
         lowIndex = lastState.lowIndex

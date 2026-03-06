@@ -386,6 +386,9 @@ struct FriendsView: View {
                 ))
                 .execute()
             
+            AnalyticsService.shared.track(.friendRequestSent, properties: [
+                "method": "username_search"
+            ])
             searchSuccess = "Friend request sent to \(searchUsername)!"
             searchUsername = ""
             await fetchFriends()
@@ -404,6 +407,7 @@ struct FriendsView: View {
                 .eq("id", value: friend.friendshipId)
                 .execute()
 
+            AnalyticsService.shared.track(.friendRequestAccepted)
             PredictionEngine.shared.invalidateContext()
             await fetchFriends()
             
@@ -420,6 +424,7 @@ struct FriendsView: View {
                 .eq("id", value: friend.friendshipId)
                 .execute()
             
+            AnalyticsService.shared.track(.friendRequestDeclined)
             await fetchFriends()
             
         } catch {
@@ -1579,7 +1584,9 @@ struct FriendProfileView: View {
             }
             
             isLoading = false
-                        
+            AnalyticsService.shared.track(.friendProfileViewed, properties: [
+                "taste_match": matchPercentage
+            ])
             friendWantToPlay = await WantToPlayManager.shared.fetchFriendList(friendId: friend.userId)
             
         } catch {

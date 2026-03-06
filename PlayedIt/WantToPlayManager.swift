@@ -126,6 +126,10 @@ class WantToPlayManager: ObservableObject {
                     myWantToPlayRawgIds.insert(gameId)
                 }
                 debugLog("✅ Added \(gameTitle) to Want to Play (local ID: \(localGameId))")
+                AnalyticsService.shared.track(.wantToPlayAdded, properties: [
+                    "game_title": gameTitle,
+                    "source": source
+                ])
                 
                 // Post to activity feed (batched)
                 await postWantToPlayFeedEntry(
@@ -293,6 +297,9 @@ class WantToPlayManager: ObservableObject {
                 
             myWantToPlayIds.remove(localGameId)
             myWantToPlayRawgIds.remove(gameId)
+            AnalyticsService.shared.track(.wantToPlayRemoved, properties: [
+                "game_id": localGameId
+            ])
                 
             // Remove associated feed posts (check both local and original ID)
             await removeWantToPlayFeedPosts(userId: userId.uuidString, gameId: localGameId, rawgId: gameId != localGameId ? gameId : nil)
