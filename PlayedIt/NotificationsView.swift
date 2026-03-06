@@ -70,7 +70,7 @@ struct NotificationsView: View {
                 .font(.system(size: 18, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.adaptiveSlate)
             
-            Text("When friends like or comment on your rankings, you'll see it here.")
+            Text("When friends interact with your rankings, you'll see it here.")
                 .font(.body)
                 .foregroundStyle(Color.adaptiveGray)
                 .multilineTextAlignment(.center)
@@ -442,7 +442,7 @@ struct NotificationsView: View {
                 )
             }
             
-        case .friendRequest, .friendAccepted:
+        case .friendRequest, .friendAccepted, .friendRanked, .friendRankedShared:
             // Navigate to the friend's profile
             selectedFriend = Friend(
                 id: notification.fromUserId,
@@ -461,6 +461,8 @@ enum NotificationType: String {
     case comment
     case friendRequest = "friend_request"
     case friendAccepted = "friend_accepted"
+    case friendRanked = "friend_ranked"
+    case friendRankedShared = "friend_ranked_shared"
 }
 
 struct AppNotification: Identifiable {
@@ -536,6 +538,10 @@ struct NotificationRow: View {
             return "person.badge.plus"
         case .friendAccepted:
             return "person.2.fill"
+        case .friendRanked:
+            return "list.number"
+        case .friendRankedShared:
+            return "arrow.left.arrow.right"
         }
     }
     
@@ -566,6 +572,18 @@ struct NotificationRow: View {
             action = AttributedString(" sent you a friend request")
         case .friendAccepted:
             action = AttributedString(" accepted your friend request")
+        case .friendRanked:
+            if let game = notification.gameTitle {
+                action = AttributedString(" ranked \(game)")
+            } else {
+                action = AttributedString(" ranked a game")
+            }
+        case .friendRankedShared:
+            if let game = notification.gameTitle {
+                action = AttributedString(" ranked \(game). Tap to see how you compare")
+            } else {
+                action = AttributedString(" ranked a game you've also ranked. Tap to see how you compare")
+            }
         }
         action.font = .system(size: 15, design: .rounded)
         result.append(action)
