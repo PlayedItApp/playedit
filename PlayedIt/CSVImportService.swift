@@ -298,11 +298,21 @@ class CSVImportService {
         var currentField = ""
         var inQuotes = false
         
-        for char in content {
+        var index = content.startIndex
+        while index < content.endIndex {
+            let char = content[index]
+            let nextIndex = content.index(after: index)
+            
             if inQuotes {
                 if char == "\"" {
-                    // Check for escaped quote
-                    inQuotes = false
+                    // Check for escaped quote ("")
+                    if nextIndex < content.endIndex && content[nextIndex] == "\"" {
+                        currentField.append("\"")
+                        index = content.index(after: nextIndex) // skip both quotes
+                        continue
+                    } else {
+                        inQuotes = false
+                    }
                 } else {
                     currentField.append(char)
                 }
@@ -327,6 +337,8 @@ class CSVImportService {
                     currentField.append(char)
                 }
             }
+            
+            index = nextIndex
         }
         
         // Final row

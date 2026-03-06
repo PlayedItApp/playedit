@@ -488,7 +488,13 @@ struct CSVImportView: View {
                     suppressDismiss: true,
                     onComplete: { position in
                         Task {
-                            await saveImportedGame(game: game, position: position)
+                            let saved = await saveImportedGame(game: game, position: position)
+                            guard saved else {
+                                await MainActor.run {
+                                    phase = .error("Failed to save \(game.displayTitle). Please try again.")
+                                }
+                                return
+                            }
                             await refreshExistingGames()
                             await MainActor.run {
                                 currentRankIndex += 1
@@ -840,12 +846,12 @@ struct CSVImportView: View {
         }
     }
     
-    private func saveImportedGame(game: MatchedCSVGame, position: Int) async {
+    private func saveImportedGame(game: MatchedCSVGame, position: Int) async -> Bool {
         debugLog("💾 saveImportedGame START: \(game.displayTitle) at position \(position)")
         guard let userId = supabase.currentUser?.id,
               let rawgId = game.rawgId else {
             debugLog("❌ saveImportedGame GUARD FAILED: userId=\(supabase.currentUser?.id.uuidString ?? "nil"), rawgId=\(game.rawgId?.description ?? "nil")")
-            return
+            return false
         }
         debugLog("💾 userId=\(userId.uuidString), rawgId=\(rawgId), csvPlatforms=\(game.csvPlatforms), csvNotes=\(game.csvNotes ?? "nil")")
         
@@ -906,10 +912,12 @@ struct CSVImportView: View {
                 .execute()
             
             debugLog("✅ CSV imported \(game.displayTitle) at position \(position)")
-                        
-            } catch {
-                debugLog("❌ Error saving CSV imported game: \(error)")
-                debugLog("❌ Full error: \(String(describing: error))")
-            }
+            return true
+            
+        } catch {
+            debugLog("❌ Error saving CSV imported game: \(error)")
+            debugLog("❌ Full error: \(String(describing: error))")
+            return false
+        }
     }
 }

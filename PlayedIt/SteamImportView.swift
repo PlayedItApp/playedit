@@ -537,7 +537,13 @@ struct SteamImportView: View {
             suppressDismiss: true,
             onComplete: { position in
                 Task {
-                    await saveImportedGame(game: game, position: position)
+                    let saved = await saveImportedGame(game: game, position: position)
+                    guard saved else {
+                        await MainActor.run {
+                            phase = .error("Failed to save \(game.displayTitle). Please try again.")
+                        }
+                        return
+                    }
                     await refreshExistingGames()
                     await MainActor.run {
                         currentRankIndex += 1
@@ -1000,9 +1006,9 @@ struct SteamImportView: View {
         }
     }
     
-    private func saveImportedGame(game: MatchedSteamGame, position: Int) async {
+    private func saveImportedGame(game: MatchedSteamGame, position: Int) async -> Bool {
         guard let userId = supabase.currentUser?.id,
-              let rawgId = game.rawgId else { return }
+              let rawgId = game.rawgId else { return false }
         
         do {
             struct GameInsert: Encodable {
@@ -1054,9 +1060,11 @@ struct SteamImportView: View {
                 .execute()
             
             debugLog("✅ Imported \(game.displayTitle) at position \(position)")
+            return true
             
         } catch {
             debugLog("❌ Error saving imported game: \(error)")
+            return false
         }
     }
 }

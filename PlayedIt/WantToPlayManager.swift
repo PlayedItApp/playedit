@@ -15,6 +15,7 @@ struct WantToPlayGame: Identifiable, Codable {
     let isVisible: Bool
     let createdAt: String?
     let sortPosition: Int?
+    let rawgId: Int?
     
     // For displaying source friend name (not from DB)
     var sourceFriendName: String?
@@ -31,13 +32,14 @@ struct WantToPlayGame: Identifiable, Codable {
         case isVisible = "is_visible"
         case createdAt = "created_at"
         case sortPosition = "sort_position"
+        case rawgId = "rawg_id"
     }
     
     /// Convert to Game for use in ComparisonView
     func toGame() -> Game {
         Game(
             id: gameId,
-            rawgId: 0,
+            rawgId: rawgId ?? gameId,
             title: gameTitle,
             coverURL: gameCoverUrl,
             genres: [],
@@ -107,6 +109,7 @@ class WantToPlayManager: ObservableObject {
                 let game_cover_url: String?
                 let source: String
                 let source_friend_id: String?
+                let rawg_id: Int
             }
             
             try await supabase.client
@@ -117,7 +120,8 @@ class WantToPlayManager: ObservableObject {
                     game_title: gameTitle,
                     game_cover_url: gameCoverUrl,
                     source: source,
-                    source_friend_id: sourceFriendId
+                    source_friend_id: sourceFriendId,
+                    rawg_id: gameId
                 ))
                 .execute()
             
@@ -579,7 +583,7 @@ class WantToPlayManager: ObservableObject {
     func status(for gameId: Int, rankedGameIds: Set<Int>) -> GameStatus {
         if rankedGameIds.contains(gameId) {
             return .ranked
-        } else if myWantToPlayIds.contains(gameId) {
+        } else if myWantToPlayIds.contains(gameId) || myWantToPlayRawgIds.contains(gameId) {
             return .wantToPlay
         } else {
             return .none
