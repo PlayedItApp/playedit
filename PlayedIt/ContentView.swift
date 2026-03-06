@@ -1542,6 +1542,7 @@ struct GameDetailSheet: View {
             debugLog("✅ Notes saved")
             displayedNotes = trimmed
             isEditingNotes = false
+            NotificationCenter.default.post(name: .didUpdateGameNote, object: nil)
             
         } catch {
             debugLog("❌ Error saving notes: \(error)")

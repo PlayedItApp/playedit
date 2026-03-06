@@ -87,6 +87,9 @@ struct FeedView: View {
             .onReceive(NotificationCenter.default.publisher(for: .didCompleteRanking)) { _ in
                 Task { await fetchFeed() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .didUpdateGameNote)) { _ in
+                Task { await fetchFeed() }
+            }
         }
         .task {
             let isStale = lastFetched.map { Date().timeIntervalSince($0) > 120 } ?? true
@@ -149,6 +152,7 @@ struct FeedView: View {
                                     gameTitle: "\(group.username) ranked \(group.gameCount) games",
                                     gameCoverURL: nil,
                                     rankPosition: nil,
+                                    note: nil,
                                     loggedAt: nil,
                                     batchSource: group.batchSource,
                                     likeCount: group.likeCount,
@@ -173,6 +177,7 @@ struct FeedView: View {
                                     gameTitle: "Reset Rankings",
                                     gameCoverURL: nil,
                                     rankPosition: nil,
+                                    note: nil,
                                     loggedAt: nil,
                                     batchSource: nil,
                                     likeCount: item.likeCount,
@@ -197,6 +202,7 @@ struct FeedView: View {
                                     gameTitle: wtp.displayLabel,
                                     gameCoverURL: nil,
                                     rankPosition: nil,
+                                    note: nil,
                                     loggedAt: nil,
                                     batchSource: nil,
                                     likeCount: wtp.likeCount,
@@ -240,7 +246,7 @@ struct FeedView: View {
                 id: existing.id, feedPostId: existing.feedPostId, userGameId: existing.userGameId,
                 userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
                 gameId: existing.gameId, gameTitle: existing.gameTitle, gameCoverURL: existing.gameCoverURL,
-                rankPosition: existing.rankPosition, loggedAt: existing.loggedAt, batchSource: existing.batchSource,
+                rankPosition: existing.rankPosition, note: existing.note, loggedAt: existing.loggedAt, batchSource: existing.batchSource,
                 likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
                 commentCount: existing.commentCount,
                 isLikedByMe: !existing.isLikedByMe
@@ -279,7 +285,7 @@ struct FeedView: View {
                         id: existing.id, feedPostId: existing.feedPostId, userGameId: existing.userGameId,
                         userId: existing.userId, username: existing.username, avatarURL: existing.avatarURL,
                         gameId: existing.gameId, gameTitle: existing.gameTitle, gameCoverURL: existing.gameCoverURL,
-                        rankPosition: existing.rankPosition, loggedAt: existing.loggedAt, batchSource: existing.batchSource,
+                        rankPosition: existing.rankPosition, note: existing.note, loggedAt: existing.loggedAt, batchSource: existing.batchSource,
                         likeCount: existing.isLikedByMe ? existing.likeCount - 1 : existing.likeCount + 1,
                         commentCount: existing.commentCount,
                         isLikedByMe: !existing.isLikedByMe
@@ -515,6 +521,7 @@ struct FeedView: View {
                 struct GamePostInfo: Decodable {
                     let game_id: Int
                     let rank_position: Int?
+                    let notes: String?
                     let logged_at: String?
                     let batch_source: String?
                     let games: GameDetails
@@ -530,7 +537,7 @@ struct FeedView: View {
             
             var allPosts: [FeedPostRow] = try await supabase.client
                 .from("feed_posts")
-                .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, notes, logged_at, batch_source, games(title, cover_url))")
                 .in("user_id", values: feedUserIds)
                 .is("batch_post_id", value: nil)
                 .order("created_at", ascending: false)
@@ -549,7 +556,7 @@ struct FeedView: View {
             if !batchParentIds.isEmpty {
                 let missingChildren: [FeedPostRow] = try await supabase.client
                     .from("feed_posts")
-                    .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                    .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, notes, logged_at, batch_source, games(title, cover_url))")
                     .in("batch_post_id", values: batchParentIds)
                     .execute()
                     .value
@@ -630,6 +637,7 @@ struct FeedView: View {
                         gameTitle: ug.games.title,
                         gameCoverURL: ug.games.cover_url,
                         rankPosition: ug.rank_position,
+                        note: ug.notes,
                         loggedAt: ug.logged_at,
                         batchSource: ug.batch_source,
                         likeCount: likes,
@@ -661,6 +669,7 @@ struct FeedView: View {
                             gameTitle: ug.games.title,
                             gameCoverURL: ug.games.cover_url,
                             rankPosition: ug.rank_position,
+                            note: ug.notes,
                             loggedAt: ug.logged_at,
                             batchSource: ug.batch_source,
                             likeCount: childLikes,
@@ -834,6 +843,7 @@ struct FeedView: View {
                 struct GamePostInfo: Decodable {
                     let game_id: Int
                     let rank_position: Int?
+                    let notes: String?
                     let logged_at: String?
                     let batch_source: String?
                     let games: GameDetails
@@ -849,7 +859,7 @@ struct FeedView: View {
             
             var olderPosts: [FeedPostRow] = try await supabase.client
                 .from("feed_posts")
-                .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, notes, logged_at, batch_source, games(title, cover_url))")
                 .in("user_id", values: feedUserIds)
                 .is("batch_post_id", value: nil)
                 .lt("created_at", value: cursor)
@@ -877,7 +887,7 @@ struct FeedView: View {
             if !batchParentIds.isEmpty {
                 let batchChildren: [FeedPostRow] = try await supabase.client
                     .from("feed_posts")
-                    .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, logged_at, batch_source, games(title, cover_url))")
+                    .select("id, user_id, post_type, user_game_id, activity_feed_id, batch_post_id, metadata, created_at, users(username, avatar_url), user_games(game_id, rank_position, notes, logged_at, batch_source, games(title, cover_url))")
                     .in("batch_post_id", values: batchParentIds)
                     .execute()
                     .value
@@ -948,6 +958,7 @@ struct FeedView: View {
                         gameTitle: ug.games.title,
                         gameCoverURL: ug.games.cover_url,
                         rankPosition: ug.rank_position,
+                        note: ug.notes,
                         loggedAt: ug.logged_at,
                         batchSource: ug.batch_source,
                         likeCount: likes,
@@ -971,6 +982,7 @@ struct FeedView: View {
                             gameTitle: ug.games.title,
                             gameCoverURL: ug.games.cover_url,
                             rankPosition: ug.rank_position,
+                            note: ug.notes,
                             loggedAt: ug.logged_at,
                             batchSource: ug.batch_source,
                             likeCount: likeCountMap[child.id] ?? 0,
@@ -1234,6 +1246,7 @@ struct FeedItem: Identifiable {
     let gameTitle: String
     let gameCoverURL: String?
     let rankPosition: Int?
+    let note: String?
     let loggedAt: String?
     let batchSource: String?
     let likeCount: Int
@@ -1330,6 +1343,17 @@ struct FeedItemRow: View {
                 .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                        
+            // Note / mini-review
+            if let note = item.note, !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 14, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                    .italic()
+                    .lineLimit(3)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+            }
             
             // Divider
             Divider()
@@ -1597,7 +1621,7 @@ struct FeedGameDetailSheet: View {
             userId: item.userId,
             rankPosition: item.rankPosition ?? 0,
             platformPlayed: [],
-            notes: nil,
+            notes: item.note,
             loggedAt: item.loggedAt,
             canonicalGameId: nil,
             status: .played,
@@ -2707,6 +2731,7 @@ struct WantToPlayExpandedRow: View {
                     gameTitle: item.gameTitle,
                     gameCoverURL: item.gameCoverURL,
                     rankPosition: nil,
+                    note: nil,
                     loggedAt: nil,
                     batchSource: nil,
                     likeCount: likeCount,
@@ -2793,6 +2818,7 @@ struct WantToPlayExpandedRow: View {
 
 extension Notification.Name {
     static let didCompleteRanking = Notification.Name("didCompleteRanking")
+    static let didUpdateGameNote = Notification.Name("didUpdateGameNote")
 }
 
 #Preview {
