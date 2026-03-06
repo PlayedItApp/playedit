@@ -126,7 +126,7 @@ struct PlayedItApp: App {
         if url.host == "login-callback" {
             Task {
                 do {
-                    let session = try await SupabaseManager.shared.client.auth.session(from: url)
+                    _ = try await SupabaseManager.shared.client.auth.session(from: url)
                     debugLog("✅ Auto-logged in from email confirmation")
                 } catch {
                     debugLog("❌ Auto-login from confirmation failed: \(error)")

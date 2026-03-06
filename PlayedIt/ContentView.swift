@@ -118,7 +118,7 @@ private func checkOnboardingStatus() async {
             //needsOnboarding = true // TEMP: force onboarding
         } catch {
             debugLog("❌ Error checking onboarding status: \(error)")
-            needsOnboarding = true
+            // Don't force onboarding on network failure — leave current state unchanged
         }
     }
 }
@@ -145,6 +145,10 @@ struct SplashView: View {
                         .font(Font.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundColor(.accentOrange)
             }
+
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .adaptiveGray))
+                .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cardBackground) 

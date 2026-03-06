@@ -29,7 +29,7 @@ struct OnboardingRankingFlowView: View {
                         .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.adaptiveSlate)
                     
-                    Text("Game \(max(currentIndex, 1)) of \(games.count)")
+                    Text("Game \(currentIndex + 1) of \(games.count)")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.adaptiveGray)
                     
@@ -116,13 +116,6 @@ struct OnboardingRankingFlowView: View {
     // MARK: - Process Current Game
     private func processCurrentGame() async {
         guard let game = currentGame else {
-            if let userId = supabase.currentUser?.id {
-                _ = try? await supabase.client
-                    .rpc("renormalize_ranks", params: [
-                        "p_user_id": AnyJSON.string(userId.uuidString)
-                    ])
-                    .execute()
-            }
             onComplete()
             return
         }
@@ -303,7 +296,12 @@ struct OnboardingRankingFlowView: View {
     // MARK: - Save User Game
     
     private func saveUserGame(gameId: Int, position: Int) async {
-        guard let userId = supabase.currentUser?.id else { return }
+        guard let userId = supabase.currentUser?.id else {
+            await MainActor.run {
+                errorMessage = "Your session expired. Please restart the app and sign in again."
+            }
+            return
+        }
         
         do {
             let canonicalId = await RAWGService.shared.getParentGameId(for: currentGame?.rawgId ?? gameId) ?? gameId
@@ -326,6 +324,9 @@ struct OnboardingRankingFlowView: View {
             
         } catch {
             debugLog("❌ Error saving user game during onboarding: \(error)")
+            await MainActor.run {
+                errorMessage = "Couldn't save \(currentGame?.title ?? "that game"). Try re-ranking it later from your profile."
+            }
         }
     }
     

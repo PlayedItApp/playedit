@@ -682,7 +682,6 @@ struct GameLogView: View {
                 let _ = await PredictionEngine.shared.refreshContext()
             }
 
-            isLoading = false
             self.savedGameId = gameId
             if existingUserGames.count >= 6 {
                 if let context = PredictionEngine.shared.cachedContext {
@@ -707,9 +706,11 @@ struct GameLogView: View {
             if existingUserGames.isEmpty && existingUserGame == nil {
                 // First game ever - no comparison needed, save at #1
                 await saveUserGame(gameId: gameId, position: 1)
+                isLoading = false
                 dismiss()
             } else {
                 // Show comparison (either new game with existing list, or re-ranking)
+                isLoading = false
                 showComparison = true
             }
             
@@ -788,6 +789,10 @@ struct GameLogView: View {
                 
             } catch {
                 debugLog("❌ Error saving user game: \(error)")
+                await MainActor.run {
+                    errorMessage = "Couldn't save your ranking. Please try again."
+                }
+                return
             }
             
             // Silently log prediction accuracy if we had a prediction

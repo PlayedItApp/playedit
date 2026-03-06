@@ -121,6 +121,17 @@ struct FeedView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             
+            Button {
+                showGameSearch = true
+            } label: {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Log a Game")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, 60)
+            
             Spacer()
         }
     }

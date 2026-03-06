@@ -13,6 +13,7 @@ struct SignUpView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var isAnimating = false
+    @State private var isModerating = false
     @State private var moderationError: String?
     @State private var showEmailConfirmation = false
     
@@ -35,9 +36,14 @@ struct SignUpView: View {
         !email.isEmpty && !username.isEmpty && !password.isEmpty && passwordMeetsRequirements
     }
     /*
-    var isFormValid: Bool {
-        !email.isEmpty && !username.isEmpty && !password.isEmpty && passwordsMatch
-    }
+     private var isEmailValid: Bool {
+         let emailRegex = #"^[^\s@]+@[^\s@]+\.[^\s@]+$"#
+         return email.range(of: emailRegex, options: .regularExpression) != nil
+     }
+
+     var isFormValid: Bool {
+         isEmailValid && !username.isEmpty && !password.isEmpty && passwordMeetsRequirements
+     }
     */
     var body: some View {
         ZStack {
@@ -144,9 +150,11 @@ struct SignUpView: View {
                         Button {
                             Task {
                                 moderationError = nil
-                                
-                                // Check username moderation
+                                isModerating = true
+
+                                isModerating = true
                                 let result = await ModerationService.shared.moderateUsername(username)
+                                isModerating = false
                                 if !result.allowed {
                                     moderationError = result.reason
                                     return
@@ -166,7 +174,7 @@ struct SignUpView: View {
                                 }
                             }
                         } label: {
-                            if supabase.isLoading {
+                            if isModerating || supabase.isLoading {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             } else {
@@ -174,7 +182,7 @@ struct SignUpView: View {
                             }
                         }
                         .buttonStyle(PrimaryButtonStyle())
-                        .disabled(!isFormValid || supabase.isLoading)
+                        .disabled(!isFormValid || isModerating || supabase.isLoading)
                         .opacity(isFormValid ? 1.0 : 0.6)
                         
                         Button {

@@ -109,6 +109,7 @@ struct OnboardingQuizView: View {
     @State private var filteredGames: [OnboardingGame] = []
     @State private var selectedGameIds: Set<UUID> = []
     @State private var isLoadingGames = false
+    @State private var gamesLoadError = false
     
     // Ranking flow
     @State private var showRankingFlow = false
@@ -378,16 +379,17 @@ struct OnboardingQuizView: View {
                 }
                 .buttonStyle(TertiaryButtonStyle())
                 
-                Button("Next") {
+                Button(isLoadingGames ? "Loading..." : (gamesLoadError ? "Try Again" : "Next")) {
+                    gamesLoadError = false
                     AnalyticsService.shared.track(.onboardingGenresSelected, properties: [
                         "genres": selectedGenres.map { $0.rawValue },
                         "count": selectedGenres.count
                     ])
                     Task { await loadFilteredGames() }
                 }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(selectedPlatforms.isEmpty)
-                .opacity(selectedGenres.isEmpty ? 0.5 : 1.0)
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(selectedGenres.isEmpty || isLoadingGames)
+                .opacity((selectedGenres.isEmpty || isLoadingGames) ? 0.5 : 1.0)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
@@ -596,7 +598,7 @@ struct OnboardingQuizView: View {
         } catch {
             debugLog("❌ Error fetching onboarding games: \(error)")
             isLoadingGames = false
-            step = .gameGrid
+            gamesLoadError = true
         }
     }
     

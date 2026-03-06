@@ -38,7 +38,14 @@ struct ComparisonView: View {
     private var maxComparisons: Int {
         let count = existingGames.count
         if count <= 1 { return 1 }
-        return min(Int(ceil(log2(Double(count)))) + 2, 15)
+        return Int(ceil(log2(Double(count)))) + 2
+    }
+    
+    private func currentMidIndex() -> Int {
+        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
+            return max(vm.lowIndex, min(predicted - 1, vm.highIndex))
+        }
+        return (vm.lowIndex + vm.highIndex) / 2
     }
     
     private let prompts = [
@@ -211,13 +218,7 @@ struct ComparisonView: View {
             return
         }
         
-        let standardMid = (vm.lowIndex + vm.highIndex) / 2
-        let rawMid: Int
-        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            rawMid = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
-        } else {
-            rawMid = standardMid
-        }
+        let rawMid = currentMidIndex()
         
         // Find nearest non-skipped index, searching outward from rawMid
         let midIndex: Int
@@ -280,13 +281,7 @@ struct ComparisonView: View {
             skippedIndices: vm.skippedIndices
         ))
         
-        // Use the same midIndex that was shown to the user
-        let midIndex: Int
-        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
-        } else {
-            midIndex = (vm.lowIndex + vm.highIndex) / 2
-        }
+        let midIndex = currentMidIndex()
         
         vm.highIndex = midIndex - 1
         vm.comparisonCount += 1
@@ -301,13 +296,7 @@ struct ComparisonView: View {
             skippedIndices: vm.skippedIndices
         ))
         
-        // Use the same midIndex that was shown to the user
-        let midIndex: Int
-        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
-        } else {
-            midIndex = (vm.lowIndex + vm.highIndex) / 2
-        }
+        let midIndex = currentMidIndex()
         
         vm.lowIndex = midIndex + 1
         vm.comparisonCount += 1
@@ -317,12 +306,7 @@ struct ComparisonView: View {
     private func skipComparison() {
         guard let currentOpponent = vm.currentComparison else { return }
         
-        let midIndex: Int
-        if vm.comparisonCount == 0, let predicted = predictedPosition, existingGames.count >= 6 {
-            midIndex = max(vm.lowIndex, min(predicted - 1, vm.highIndex))
-        } else {
-            midIndex = (vm.lowIndex + vm.highIndex) / 2
-        }
+        let midIndex = currentMidIndex()
         
         vm.comparisonHistory.append(ComparisonViewModel.ComparisonState(
             lowIndex: vm.lowIndex,

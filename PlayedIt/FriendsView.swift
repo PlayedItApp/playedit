@@ -12,6 +12,7 @@ struct FriendsView: View {
     @State private var searchSuccess: String?
     @State private var sentRequests: [Friend] = []
     @State private var suggestedFriends: [(friend: Friend, mutualCount: Int)] = []
+    @State private var loadError = false
     
     var body: some View {
         NavigationStack {
@@ -87,7 +88,25 @@ struct FriendsView: View {
                 }
                 
                 // Friends list
-                if friends.isEmpty && pendingRequests.isEmpty && sentRequests.isEmpty {
+                if loadError {
+                    VStack(spacing: 16) {
+                        Spacer().frame(height: 60)
+                        
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 48))
+                            .foregroundStyle(Color.adaptiveSilver)
+                        
+                        Text("Couldn't load friends")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.adaptiveSlate)
+                        
+                        Text("Check your connection and pull down to try again.")
+                            .font(.body)
+                            .foregroundStyle(Color.adaptiveGray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+                } else if friends.isEmpty && pendingRequests.isEmpty && sentRequests.isEmpty {
                     VStack(spacing: 16) {
                         Spacer().frame(height: 60)
                         
@@ -161,6 +180,7 @@ struct FriendsView: View {
             }
             .background(Color(.systemGroupedBackground))
             .refreshable {
+                loadError = false
                 await fetchFriends()
             }
         }
@@ -316,6 +336,7 @@ struct FriendsView: View {
             
         } catch {
             debugLog("❌ Error fetching friends: \(error)")
+            loadError = true
             isLoading = false
         }
     }
@@ -375,7 +396,12 @@ struct FriendsView: View {
             
         } catch {
             debugLog("❌ Error sending friend request: \(error)")
-            searchError = "Couldn't send request. Maybe you're already friends?"
+            let msg = error.localizedDescription.lowercased()
+            if msg.contains("duplicate") || msg.contains("unique") || msg.contains("conflict") {
+                searchError = "You've already sent a request to this person."
+            } else {
+                searchError = "Couldn't send the request. Check your connection and try again."
+            }
         }
     }
     
@@ -393,6 +419,7 @@ struct FriendsView: View {
             
         } catch {
             debugLog("❌ Error accepting friend: \(error)")
+            searchError = "Couldn't accept the request. Try again?"
         }
     }
     
@@ -409,6 +436,7 @@ struct FriendsView: View {
             
         } catch {
             debugLog("❌ Error declining friend: \(error)")
+            searchError = "Couldn't decline the request. Try again?"
         }
     }
     
@@ -424,6 +452,7 @@ struct FriendsView: View {
             
         } catch {
             debugLog("❌ Error cancelling friend request: \(error)")
+            searchError = "Couldn't cancel the request. Try again?"
         }
     }
     

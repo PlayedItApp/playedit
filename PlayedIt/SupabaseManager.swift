@@ -100,9 +100,20 @@ class SupabaseManager: ObservableObject {
             self.isAuthenticated = true
             debugLog("✅ Session restored for user \(session.user.id.uuidString.prefix(8))…")
         } catch {
-            self.isAuthenticated = false
-            self.currentUser = nil
-            debugLog("ℹ️ No valid session found")
+            let errorString = error.localizedDescription.lowercased()
+            let isNetworkError = errorString.contains("network") ||
+                                 errorString.contains("connection") ||
+                                 errorString.contains("offline") ||
+                                 errorString.contains("timed out") ||
+                                 errorString.contains("internet")
+            if isNetworkError {
+                // Don't log out — keep whatever auth state we already have
+                debugLog("⚠️ Network error during session check, preserving auth state")
+            } else {
+                self.isAuthenticated = false
+                self.currentUser = nil
+                debugLog("ℹ️ No valid session found")
+            }
         }
     }
     

@@ -66,8 +66,6 @@ struct CSVImportView: View {
             .onAppear {
                 if let pending = resumingImport {
                     debugLog("📋 Resuming import: \(pending.games.count) games, source=\(pending.source)")
-                    for g in pending.games {
-                    }
                     gamesToRank = pending.games.map { g in
                         MatchedCSVGame(
                             csvTitle: g.sourceMetadata["csv_title"] ?? g.title,

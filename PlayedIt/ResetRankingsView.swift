@@ -580,7 +580,7 @@ struct ResetRankingsView: View {
             debugLog("✅ All rank positions wiped")
             
             // Capture previous rank positions for prediction bias
-            let totalGames = games.count
+            _ = games.count
             for game in games {
                 if game.rankPosition > 0 {
                     previousRanks[game.id] = game.rankPosition

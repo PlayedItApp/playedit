@@ -34,6 +34,9 @@ struct ProfileView: View {
     @State private var showResetFlow = false
     @State private var hasUnrankedGames = false
     @State private var unrankedCount = 0
+    @State private var hasMoreGames = false
+    @State private var isLoadingMoreGames = false
+    private let gamesPageSize = 100
     @State private var showSteamImport = false
     @State private var showCSVImport = false
     @State private var hasSteamConnected = false
@@ -296,13 +299,35 @@ struct ProfileView: View {
                                                 await fetchRankedGames()
                                             }
                                         }
+                                        
+                                        if hasMoreGames {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 16)
+                                                .onAppear {
+                                                    Task { await loadMoreGames() }
+                                                }
+                                        }
                                     }
                                     .padding(.horizontal, 20)
                                     .tourAnchor("rankedList")
                                 } else {
-                                    ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
-                                        RankedGameRow(rank: index + 1, game: game) {
-                                            await fetchRankedGames()
+                                    LazyVStack(spacing: 0) {
+                                        ForEach(Array(rankedGames.enumerated()), id: \.element.id) { index, game in
+                                            RankedGameRow(rank: index + 1, game: game) {
+                                                await fetchRankedGames()
+                                            }
+                                        }
+                                        
+                                        if hasMoreGames {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 16)
+                                                .onAppear {
+                                                    Task { await loadMoreGames() }
+                                                }
                                         }
                                     }
                                     .padding(.horizontal, 20)
@@ -713,8 +738,11 @@ struct ProfileView: View {
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
+                .limit(gamesPageSize)
                 .execute()
                 .value
+            
+            hasMoreGames = rows.count >= gamesPageSize
             
             for row in rows {
                 let desc = row.games.curated_description ?? row.games.description
@@ -792,18 +820,100 @@ struct ProfileView: View {
             }
         }
         
-        let profileCoverUrls = rankedGames.compactMap { $0.gameCoverURL }
-        let priorityProfileUrls = Array(profileCoverUrls.prefix(15))
-        await withTaskGroup(of: Void.self) { group in
-            for url in priorityProfileUrls {
-                group.addTask { _ = await ImageCache.shared.image(for: url) }
-            }
-            for await _ in group { }
-        }
-        ImageCache.shared.prefetch(urls: Array(profileCoverUrls.dropFirst(15)))
         isLoadingGames = false
         NotificationCenter.default.post(name: .wantToPlayShouldRefresh, object: nil)
     }
+    
+    private func loadMoreGames() async {
+        guard !isLoadingMoreGames, hasMoreGames else { return }
+        guard let userId = supabase.currentUser?.id else { return }
+        
+        isLoadingMoreGames = true
+        let cursor = rankedGames.count  // offset by current count
+        
+        do {
+            struct UserGameRow: Decodable {
+                let id: String
+                let game_id: Int
+                let user_id: String
+                let rank_position: Int
+                let platform_played: [String]
+                let notes: String?
+                let logged_at: String?
+                let status: String?
+                let games: GameDetails
+                
+                struct GameDetails: Decodable {
+                    let title: String
+                    let cover_url: String?
+                    let release_date: String?
+                    let rawg_id: Int?
+                    let description: String?
+                    let curated_description: String?
+                    let metacritic_score: Int?
+                    let curated_genres: [String]?
+                    let curated_tags: [String]?
+                    let curated_platforms: [String]?
+                    let curated_release_year: Int?
+                }
+            }
+            
+            let rows: [UserGameRow] = try await supabase.client
+                .from("user_games")
+                .select("*, games(title, cover_url, release_date, rawg_id, description, curated_description, metacritic_score, curated_genres, curated_tags, curated_platforms, curated_release_year)")
+                .eq("user_id", value: userId.uuidString)
+                .not("rank_position", operator: .is, value: "null")
+                .order("rank_position", ascending: true)
+                .range(from: cursor, to: cursor + gamesPageSize - 1)
+                .execute()
+                .value
+            
+            hasMoreGames = rows.count >= gamesPageSize
+            
+            let newGames = rows.map { row in
+                UserGame(
+                    id: row.id,
+                    gameId: row.game_id,
+                    userId: row.user_id,
+                    rankPosition: row.rank_position,
+                    platformPlayed: row.platform_played,
+                    notes: row.notes,
+                    loggedAt: row.logged_at,
+                    canonicalGameId: nil,
+                    status: GameStatus(rawValue: row.status ?? "played") ?? .played,
+                    gameTitle: row.games.title,
+                    gameCoverURL: row.games.cover_url,
+                    gameReleaseDate: row.games.release_date,
+                    gameRawgId: row.games.rawg_id
+                )
+            }
+            
+            for row in rows {
+                let desc = row.games.curated_description ?? row.games.description
+                if desc != nil || row.games.metacritic_score != nil {
+                    GameMetadataCache.shared.set(
+                        gameId: row.game_id,
+                        description: desc,
+                        metacriticScore: row.games.metacritic_score,
+                        releaseDate: row.games.release_date,
+                        curatedGenres: row.games.curated_genres,
+                        curatedTags: row.games.curated_tags,
+                        curatedPlatforms: row.games.curated_platforms,
+                        curatedReleaseYear: row.games.curated_release_year
+                    )
+                }
+            }
+            
+            ImageCache.shared.prefetch(urls: newGames.compactMap { $0.gameCoverURL })
+            rankedGames.append(contentsOf: newGames)
+            
+        } catch {
+            debugLog("❌ Error loading more games: \(error)")
+        }
+        
+        isLoadingMoreGames = false
+    }
+    
     private func loadUnrankedAndResume() async {
         guard let userId = supabase.currentUser?.id else { return }
         
