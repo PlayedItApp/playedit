@@ -283,8 +283,9 @@ class CSVImportService {
                 ))
             }
             
-            // Small delay to be respectful of RAWG rate limits
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            // Only delay if we might have hit RAWG (local cache miss)
+            // 100ms is enough breathing room without slowing down local hits
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
         
         return matched

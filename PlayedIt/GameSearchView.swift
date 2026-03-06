@@ -8,6 +8,7 @@ struct GameSearchView: View {
     @State private var hasSearched = false
     @State private var selectedGame: Game?
     @State private var rankedGameIds: Set<Int> = []
+    @State private var searchError: String? = nil
     @Environment(\.dismiss) var dismiss
     
     private var rawgAttribution: some View {
@@ -66,9 +67,17 @@ struct GameSearchView: View {
                         Image(systemName: "gamecontroller")
                             .font(.system(size: 48))
                             .foregroundStyle(Color.adaptiveSilver)
-                        Text("No games found. Try a different search?")
-                            .font(.body)
-                            .foregroundStyle(Color.adaptiveGray)
+                        if let error = searchError {
+                            Text(error)
+                                .font(.body)
+                                .foregroundStyle(Color.adaptiveGray)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        } else {
+                            Text("No games found. Try a different search?")
+                                .font(.body)
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
                     }
                     Spacer()
                     rawgAttribution
@@ -137,11 +146,16 @@ struct GameSearchView: View {
         // Refresh ranked game IDs before showing results
         await fetchRankedGameIds()
         
+        searchError = nil
         do {
             games = try await RAWGService.shared.searchGames(query: searchText)
+            if games.isEmpty {
+                searchError = nil
+            }
         } catch {
             debugLog("Search error: \(error)")
             games = []
+            searchError = "Can't reach the game database right now. Check your connection and try again."
         }
         
         isLoading = false

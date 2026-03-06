@@ -1986,6 +1986,9 @@ struct FirstTwoComparisonView: View {
                 debugLog("⚠️ No games row found for gameId \(game.gameId), fetching directly from RAWG")
                 let details = try await RAWGService.shared.getGameDetails(id: game.gameId)
                 gameDescription = details.gameDescription ?? details.gameDescriptionHtml
+                if let desc = gameDescription, !desc.isEmpty {
+                    GameMetadataCache.shared.set(gameId: game.gameId, description: desc, metacriticScore: details.metacriticScore, releaseDate: details.releaseDate, curatedGenres: nil, curatedTags: nil, curatedPlatforms: nil, curatedReleaseYear: nil)
+                }
                 return
             }
             

@@ -757,7 +757,8 @@ struct CSVImportView: View {
             phase = .reviewingMatches
             
         } catch {
-            phase = .error("Matching failed: \(error.localizedDescription)")
+            debugLog("❌ CSV matching error: \(error)")
+            phase = .error("Couldn't match your games right now. Check your connection and try again.")
         }
     }
     

@@ -897,7 +897,8 @@ struct SteamImportView: View {
             phase = .reviewingMatches
             
         } catch {
-            phase = .error("Matching failed: \(error.localizedDescription)")
+            debugLog("❌ Steam matching error: \(error)")
+            phase = .error("Couldn't match your games right now. Check your connection and try again.")
         }
     }
     
@@ -1161,6 +1162,8 @@ struct MatchSwapSearchView: View {
     @State private var searchText = ""
     @State private var searchResults: [Game] = []
     @State private var isSearching = false
+    @State private var searchError = false
+    @State private var debounceTask: Task<Void, Never>? = nil
     @FocusState private var isSearchFocused: Bool
     
     var body: some View {
@@ -1200,9 +1203,11 @@ struct MatchSwapSearchView: View {
                 Spacer()
             } else if searchResults.isEmpty && !searchText.isEmpty {
                 Spacer()
-                Text("No results")
+                Text(searchError ? "Can't reach the game database right now. Check your connection and try again." : "No results")
                     .font(.system(size: 16, design: .rounded))
                     .foregroundStyle(Color.adaptiveGray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
                 Spacer()
             } else {
                 ScrollView {
@@ -1265,20 +1270,28 @@ struct MatchSwapSearchView: View {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else {
             searchResults = []
+            isSearching = false
             return
         }
-        
-        isSearching = true
-        Task {
+
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000) // 400ms debounce
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run { isSearching = true }
+
             do {
                 let results = try await RAWGService.shared.searchGames(query: query)
                 await MainActor.run {
                     searchResults = results
+                    searchError = false
                     isSearching = false
                 }
             } catch {
                 await MainActor.run {
                     searchResults = []
+                    searchError = true
                     isSearching = false
                 }
             }

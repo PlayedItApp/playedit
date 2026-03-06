@@ -312,6 +312,9 @@ curatedPlatforms: curatedPlatforms
                     gameReleaseDate = details.releaseDate
                     gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                     metacriticScore = details.metacriticScore
+                    if let desc = gameDescription, !desc.isEmpty {
+                        GameMetadataCache.shared.set(gameId: gameId, description: desc, metacriticScore: metacriticScore, releaseDate: gameReleaseDate, curatedGenres: nil, curatedTags: nil, curatedPlatforms: nil, curatedReleaseYear: nil)
+                    }
                 } catch {
                     debugLog("❌ RAWG lookup failed for gameId \(gameId): \(error)")
                     gameNotFound = true
@@ -352,6 +355,7 @@ curatedPlatforms: curatedPlatforms
                     gameDescription = details.gameDescription ?? details.gameDescriptionHtml
                     
                     if let desc = gameDescription, !desc.isEmpty {
+                        GameMetadataCache.shared.set(gameId: gameId, description: desc, metacriticScore: metacriticScore, releaseDate: gameReleaseDate, curatedGenres: curatedGenres, curatedTags: curatedTags, curatedPlatforms: curatedPlatforms, curatedReleaseYear: curatedReleaseYear)
                         _ = try? await supabase.client
                             .from("games")
                             .update(["description": desc])

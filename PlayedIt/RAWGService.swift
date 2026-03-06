@@ -11,6 +11,13 @@ class RAWGService {
     // MARK: - Search Cache
     private var searchCache: [String: (results: [Game], timestamp: Date)] = [:]
     private let searchCacheTTL: TimeInterval = 600
+
+    // MARK: - Parent Game ID Cache
+    private var parentGameIdCache: [Int: Int] = [:]
+
+    // MARK: - Discovery Cache
+    private var discoveryCache: [String: (results: [Game], timestamp: Date)] = [:]
+    private let discoveryCacheTTL: TimeInterval = 3600 // 1 hour — genre preferences are stable
     
     // MARK: - Search Games
     func searchGames(query: String) async throws -> [Game] {
@@ -76,6 +83,32 @@ class RAWGService {
         return sorted
     }
     
+    // MARK: - Retry with Backoff
+    private func withRetry<T>(
+        maxRetries: Int = 2,
+        baseDelay: TimeInterval = 1.0,
+        _ request: @escaping () async throws -> T
+    ) async throws -> T {
+        var lastError: Error?
+        for attempt in 0...maxRetries {
+            if attempt > 0 {
+                let delay = baseDelay * pow(2.0, Double(attempt - 1))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            do {
+                return try await request()
+            } catch {
+                // Don't retry on cancellation
+                if let urlError = error as? URLError, urlError.code == .cancelled {
+                    throw error
+                }
+                debugLog("⚠️ RAWG attempt \(attempt + 1) failed: \(error)")
+                lastError = error
+            }
+        }
+        throw lastError!
+    }
+    
     private func sortByRelevance(_ games: [Game], query: String) -> [Game] {
         let queryLower = query.lowercased()
         let queryWords = Set(queryLower.split(separator: " ").map { String($0) })
@@ -110,7 +143,9 @@ class RAWGService {
             throw RAWGError.invalidURL
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await withRetry {
+            try await URLSession.shared.data(from: url)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -430,18 +465,29 @@ class RAWGService {
     
     // MARK: - Get Parent Game
     func getParentGameId(for gameId: Int) async -> Int? {
+        if let cached = parentGameIdCache[gameId] {
+            debugLog("📦 Returning cached parent game ID for: \(gameId)")
+            return cached
+        }
+
         let urlString = "\(baseURL)/games/\(gameId)/parent-games?key=\(apiKey)"
-        
+
         guard let url = URL(string: urlString) else { return nil }
-        
+
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
-            
+
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else { return nil }
-            
+
             let decoded = try JSONDecoder().decode(RAWGSearchResponse.self, from: data)
-            return decoded.results.first?.id
+            if let parentId = decoded.results.first?.id {
+                parentGameIdCache[gameId] = parentId
+                return parentId
+            }
+            // No parent — cache the gameId itself so we don't re-query
+            parentGameIdCache[gameId] = gameId
+            return nil
         } catch {
             debugLog("⚠️ Could not fetch parent game for \(gameId): \(error)")
             return nil
@@ -450,6 +496,13 @@ class RAWGService {
     
     // MARK: - Discover Games by Genre
     func discoverGames(genres: [String], tags: [String] = [], page: Int = 1) async throws -> [Game] {
+        let cacheKey = (genres.sorted() + tags.sorted() + [String(page)]).joined(separator: "|")
+        if let cached = discoveryCache[cacheKey],
+           Date().timeIntervalSince(cached.timestamp) < discoveryCacheTTL {
+            debugLog("📦 Returning cached discovery results for: \(genres)")
+            return cached.results
+        }
+
         // RAWG genre slugs: action, adventure, rpg, shooter, puzzle, platformer, etc.
         let genreSlugs = genres.map { $0.lowercased().replacingOccurrences(of: " ", with: "-") }
         let tagSlugs = tags.map { $0.lowercased().replacingOccurrences(of: " ", with: "-") }
@@ -471,8 +524,10 @@ class RAWGService {
               httpResponse.statusCode == 200 else { throw RAWGError.invalidResponse }
         
         let searchResponse = try JSONDecoder().decode(RAWGSearchResponse.self, from: data)
-        return searchResponse.results.map { Game(from: $0) }
-    }
+            let results = searchResponse.results.map { Game(from: $0) }
+            discoveryCache[cacheKey] = (results, Date())
+            return results
+        }
 }
 
 // MARK: - Errors

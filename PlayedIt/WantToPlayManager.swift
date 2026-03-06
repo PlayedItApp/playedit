@@ -216,7 +216,11 @@ class WantToPlayManager: ObservableObject {
             var releaseDate: String? = nil
             var genres: [String] = []
             var metacriticScore: Int = 0
-            if let details = try? await RAWGService.shared.getGameDetails(id: rawgOrLocalId) {
+            if let cached = GameMetadataCache.shared.get(gameId: rawgOrLocalId) {
+                releaseDate = cached.releaseDate
+                genres = cached.curatedGenres ?? []
+                metacriticScore = cached.metacriticScore ?? 0
+            } else if let details = try? await RAWGService.shared.getGameDetails(id: rawgOrLocalId) {
                 releaseDate = details.releaseDate
                 genres = details.genres
                 metacriticScore = details.metacriticScore ?? 0

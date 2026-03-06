@@ -174,10 +174,17 @@ struct OnboardingRankingFlowView: View {
                         .execute()
                         .value
                     
-                    // If game doesn't exist in DB, fetch from RAWG and insert
-                    if gameRecords.isEmpty {
-                        debugLog("🔍 Game not in DB, fetching from RAWG: \(game.title) (rawg_id: \(game.rawgId))")
-                        let rawgGame = try await RAWGService.shared.getGameDetails(id: game.rawgId)
+            // If game doesn't exist in DB, fetch from RAWG and insert
+            if gameRecords.isEmpty {
+                debugLog("🔍 Game not in DB, fetching from RAWG: \(game.title) (rawg_id: \(game.rawgId))")
+                // Check in-memory cache before hitting RAWG
+                let cached = GameMetadataCache.shared.get(gameId: game.rawgId)
+                let rawgGame: Game
+                if let cached = cached, !(cached.curatedGenres ?? []).isEmpty {
+                    rawgGame = Game(id: game.rawgId, rawgId: game.rawgId, title: game.title, coverURL: game.coverUrl, genres: cached.curatedGenres ?? game.genres, platforms: game.platforms, releaseDate: cached.releaseDate ?? game.releaseDate, metacriticScore: cached.metacriticScore, added: nil, rating: nil, gameDescription: cached.description, tags: cached.curatedTags ?? [])
+                } else {
+                    rawgGame = try await RAWGService.shared.getGameDetails(id: game.rawgId)
+                }
                         
                         struct GameInsertFallback: Encodable {
                             let rawg_id: Int

@@ -555,22 +555,25 @@ curatedPlatforms: curatedPlatforms
                 let tags: [String]
             }
             
-            // Fetch prediction inputs from RAWG detail endpoint (search results don't include them reliably)
-            var predictionGenres = game.genres
-            var predictionTags = game.tags
-            var predictionMetacritic = game.metacriticScore
+            // Use data already fetched by fetchDescription() — prefer curated, then cached, then game fields
+            var predictionGenres = curatedGenres ?? game.genres
+            var predictionTags = curatedTags ?? game.tags
+            var predictionMetacritic = metacriticScore ?? game.metacriticScore
 
+            // Only hit RAWG if we genuinely have nothing (e.g. game came from a source with no metadata)
+            if predictionGenres.isEmpty || predictionTags.isEmpty || predictionMetacritic == nil {
+                if let cached = GameMetadataCache.shared.get(gameId: game.rawgId) {
+                    if predictionGenres.isEmpty { predictionGenres = cached.curatedGenres ?? predictionGenres }
+                    if predictionTags.isEmpty { predictionTags = cached.curatedTags ?? predictionTags }
+                    if predictionMetacritic == nil { predictionMetacritic = cached.metacriticScore }
+                }
+            }
+            // Last resort: RAWG (only fires if cache and fetchDescription both came up empty)
             if predictionGenres.isEmpty || predictionTags.isEmpty || predictionMetacritic == nil {
                 if let details = try? await RAWGService.shared.getGameDetails(id: game.rawgId) {
-                    if predictionGenres.isEmpty {
-                        predictionGenres = details.genres
-                    }
-                    if predictionTags.isEmpty {
-                        predictionTags = details.tags
-                    }
-                    if predictionMetacritic == nil {
-                        predictionMetacritic = details.metacriticScore
-                    }
+                    if predictionGenres.isEmpty { predictionGenres = details.genres }
+                    if predictionTags.isEmpty { predictionTags = details.tags }
+                    if predictionMetacritic == nil { predictionMetacritic = details.metacriticScore }
                 }
             }
 
@@ -618,37 +621,7 @@ curatedPlatforms: curatedPlatforms
             
             let gameId = gameRecord.id
                         
-            // Cache game description in background (only if not already cached)
-            Task {
-                do {
-                    struct DescCheck: Decodable { let description: String? }
-                    let existing: [DescCheck] = try await supabase.client
-                        .from("games")
-                        .select("description")
-                        .eq("rawg_id", value: game.rawgId)
-                        .limit(1)
-                        .execute()
-                        .value
-                    
-                    // Skip if description already exists
-                    if let cached = existing.first?.description, !cached.isEmpty {
-                        debugLog("📖 Description already cached for \(game.title), skipping RAWG call")
-                        return
-                    }
-                    
-                    let details = try await RAWGService.shared.getGameDetails(id: game.rawgId)
-                    if let desc = details.gameDescriptionHtml ?? details.gameDescription, !desc.isEmpty {
-                        _ = try? await supabase.client
-                            .from("games")
-                            .update(["description": desc])
-                            .eq("rawg_id", value: game.rawgId)
-                            .execute()
-                        debugLog("📖 Cached description for \(game.title)")
-                    }
-                } catch {
-                    debugLog("⚠️ Background description cache failed: \(error)")
-                }
-            }
+            // Description is already fetched and cached by fetchDescription() on view load — no extra call needed
             
             struct UserGameRow: Decodable {
                 let id: String

@@ -628,6 +628,7 @@ struct OnboardingGameSearchSheet: View {
     @State private var isSearching = false
     @State private var hasSearched = false
     @State private var addedRawgIds: Set<Int> = []
+    @State private var searchError: String? = nil
     
     var body: some View {
         NavigationStack {
@@ -674,9 +675,17 @@ struct OnboardingGameSearchSheet: View {
                         Image(systemName: "gamecontroller")
                             .font(.system(size: 40))
                             .foregroundStyle(Color.adaptiveSilver)
-                        Text("No games found")
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.adaptiveGray)
+                        if let error = searchError {
+                            Text(error)
+                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        } else {
+                            Text("No games found")
+                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color.adaptiveGray)
+                        }
                     }
                     Spacer()
                 } else if searchResults.isEmpty {
@@ -776,11 +785,13 @@ struct OnboardingGameSearchSheet: View {
         isSearching = true
         hasSearched = true
         
+        searchError = nil
         do {
             searchResults = try await RAWGService.shared.searchGames(query: searchText)
         } catch {
             debugLog("Search error: \(error)")
             searchResults = []
+            searchError = "Can't reach the game database right now. Check your connection and try again."
         }
         
         isSearching = false
