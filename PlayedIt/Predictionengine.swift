@@ -11,6 +11,8 @@ struct GamePrediction {
     let friendSignals: [FriendSignal]    // Individual friend data points
     let topGenreAffinity: Double?        // User's avg percentile for this game's top genre
     let topTagAffinity: Double?          // User's avg percentile for this game's top tag
+    var friendPredictedPercentile: Double? = nil
+    var genrePredictedPercentile: Double? = nil
     
     var displayText: String {
         let rank = estimatedRankRange
@@ -82,6 +84,8 @@ struct PredictionContext {
     let myGames: [RankedGameData]
     let friends: [FriendData]
     var weights: PredictionWeights = .default
+    var predictionBias: Double = 0.0
+    var dismissWeights: [String: Double] = [:]
 
     var myGameCount: Int { myGames.count }
     var hasEnoughData: Bool { myGames.count >= 3 }
@@ -96,6 +100,7 @@ struct RankedGameData {
     let tags: [String]
     let metacriticScore: Int?
     let releaseYear: Int?
+    var title: String? = nil
 }
 
 struct FriendData {
@@ -111,6 +116,7 @@ struct FriendRankedGame {
     let canonicalGameId: Int?
     let rankPosition: Int
     let totalGames: Int
+    var loggedAt: String? = nil
 }
 
 // MARK: - Game Data for Prediction Target
@@ -122,6 +128,8 @@ struct PredictionTarget {
     let tags: [String]
     let metacriticScore: Int?
     var releaseYear: Int? = nil
+    var popularityScore: Double? = nil  // avg percentile across all users who ranked it
+    var title: String? = nil
 }
 
 // MARK: - Per-User Weight Adjustments
@@ -193,17 +201,23 @@ class PredictionEngine {
         // Tier 3: Metacritic correlation (disabled — not used in blend)
         let metacriticScore: Double? = nil
         
+        // Tier 4: Popularity signal
+        let popularityScore = game.popularityScore
+        
         // Track which tiers contributed
         if let fr = friendResult, !fr.signals.isEmpty { tiersUsed.append("friends") }
         if genreTagScore != nil { tiersUsed.append("genre") }
+        if popularityScore != nil { tiersUsed.append("popularity") }
         
         // Blend tiers
         let blended = blendTiers(
             friendResult: friendResult,
             genreTagScore: genreTagScore,
             metacriticScore: metacriticScore,
+            popularityScore: popularityScore,
             context: context,
-            targetReleaseYear: game.releaseYear
+            targetReleaseYear: game.releaseYear,
+            targetTitle: game.title
         )
         
         guard let finalPercentile = blended else { return nil }
@@ -218,7 +232,7 @@ class PredictionEngine {
         
         let confidenceLabels = ["", "Guess", "Low", "Medium", "High", "Very High"]
         
-        return GamePrediction(
+        var prediction = GamePrediction(
             predictedPercentile: finalPercentile,
             confidence: confidence,
             confidenceLabel: confidenceLabels[confidence],
@@ -227,6 +241,9 @@ class PredictionEngine {
             topGenreAffinity: genreAffinity,
             topTagAffinity: tagAffinity
         )
+        prediction.friendPredictedPercentile = friendResult?.percentile
+        prediction.genrePredictedPercentile = genreTagScore
+        return prediction
     }
     
     // MARK: - Tier 1: Friend-Weighted Rankings
@@ -259,21 +276,36 @@ class PredictionEngine {
             
             // Weight by taste match (normalized 0-1, with floor at 0.3)
             let tasteWeight = Double(friend.tasteMatch) / 100.0
-            
+
+            // Recency boost: games ranked recently are a fresher signal
+            var recencyBoost = 1.0
+            if let loggedAt = friendGame.loggedAt,
+               let loggedDate = ISO8601DateFormatter().date(from: loggedAt) {
+                let daysSinceRanked = Date().timeIntervalSince(loggedDate) / 86400
+                recencyBoost = 1.0 + max(0, 0.2 - daysSinceRanked / 365 * 0.2)
+            }
+
             signals.append(FriendSignal(
                 friendName: friend.username,
                 friendRankPercentile: percentile,
                 tasteMatch: friend.tasteMatch,
-                weight: tasteWeight
+                weight: tasteWeight * recencyBoost
             ))
         }
         
         guard !signals.isEmpty else { return nil }
-        
+                
         // Weighted average
         let totalWeight = signals.reduce(0.0) { $0 + $1.weight }
         let weightedSum = signals.reduce(0.0) { $0 + $1.friendRankPercentile * $1.weight }
-        let percentile = weightedSum / totalWeight
+        var percentile = weightedSum / totalWeight
+        
+        // Consensus boost: if 3+ friends all ranked it in their top 20%, signal is stronger
+        let topFifthSignals = signals.filter { $0.friendRankPercentile >= 80 }
+        if topFifthSignals.count >= 3 {
+            let consensusBonus = Double(topFifthSignals.count - 1) * 5.0
+            percentile = min(100, percentile + consensusBonus)
+        }
         
         let negativeSignals = signals.filter { $0.friendRankPercentile <= 20.0 }
         let negativeWeight = negativeSignals.reduce(0.0) { $0 + $1.weight }
@@ -319,7 +351,8 @@ class PredictionEngine {
         
         guard !genrePercentiles.isEmpty else { return nil }
         
-        return genrePercentiles.reduce(0.0, +) / Double(genrePercentiles.count)
+        let raw = genrePercentiles.reduce(0.0, +) / Double(genrePercentiles.count)
+        return min(raw, 85)
     }
     
     // MARK: - Tier 2: Genre Pair Affinity
@@ -411,7 +444,8 @@ class PredictionEngine {
         
         guard !tagPercentiles.isEmpty else { return nil }
         
-        return tagPercentiles.reduce(0.0, +) / Double(tagPercentiles.count)
+        let raw = tagPercentiles.reduce(0.0, +) / Double(tagPercentiles.count)
+        return min(raw, 85)
     }
     
     // MARK: - Blend Genre + Tag
@@ -492,16 +526,19 @@ class PredictionEngine {
         friendResult: FriendResult?,
         genreTagScore: Double?,
         metacriticScore: Double?,
+        popularityScore: Double? = nil,
         context: PredictionContext,
-        targetReleaseYear: Int? = nil
+        targetReleaseYear: Int? = nil,
+        targetTitle: String? = nil
     ) -> Double? {
         let friendCount = friendResult?.signals.count ?? 0
         let hasFriends = friendCount > 0
         let hasGenreTag = genreTagScore != nil
         let hasMetacritic = metacriticScore != nil
+        let hasPopularity = popularityScore != nil
         
         // At least one signal needed
-        guard hasFriends || hasGenreTag || hasMetacritic else { return nil }
+        guard hasFriends || hasGenreTag || hasMetacritic || hasPopularity else { return nil }
         
         // Determine weights based on available signals
         var friendWeight: Double = 0
@@ -526,6 +563,11 @@ class PredictionEngine {
         friendWeight *= context.weights.friendWeight
         genreTagWeight *= context.weights.genreWeight
 
+        // Apply dismiss pattern penalties per source
+        friendWeight *= context.dismissWeights["friend_ranked"] ?? 1.0
+        genreTagWeight *= (context.dismissWeights["genre_discovery"] ?? 1.0)
+            * (context.dismissWeights["tag_discovery"] ?? 1.0)
+
         // Normalize weights to sum to 1
         let totalWeight = friendWeight + genreTagWeight + metacriticWeight
         guard totalWeight > 0 else { return nil }
@@ -538,6 +580,11 @@ class PredictionEngine {
         if let fr = friendResult { blended += fr.percentile * friendWeight }
         if let gt = genreTagScore { blended += gt * genreTagWeight }
         if let mc = metacriticScore { blended += mc * metacriticWeight }
+        
+        // Popularity: low-weight fallback, only nudges when other signals are weak
+        if let pop = popularityScore, !hasFriends && !hasGenreTag {
+            blended = blended * 0.85 + pop * 0.15
+        }
         
         // Genre drag: if friends love it but genre/tag affinity doesn't match, limit friend influence
         if let fr = friendResult, !fr.signals.isEmpty {
@@ -556,8 +603,17 @@ class PredictionEngine {
             }
         }
         
-        // Era modifier: boost/penalize based on how candidate's era matches user preference
-        if let targetYear = targetReleaseYear {
+        // Franchise boost: boost games in a series the user has ranked highly
+       if let title = targetTitle {
+           let franchiseBoost = computeFranchiseBoost(title: title, context: context)
+           if franchiseBoost > 0 {
+               debugLog("🎮 Franchise boost: +\(String(format: "%.1f", franchiseBoost)) for \(title)")
+           }
+           blended += franchiseBoost
+       }
+
+       // Era modifier: boost/penalize based on how candidate's era matches user preference
+       if let targetYear = targetReleaseYear {
             let eraModifier = computeEraModifier(targetYear: targetYear, context: context)
             if eraModifier != 0 {
                 debugLog("🕰️ Era modifier: \(eraModifier > 0 ? "+" : "")\(String(format: "%.1f", eraModifier)) for year \(targetYear)")
@@ -574,7 +630,9 @@ class PredictionEngine {
             }
         }
 
-        return max(0, min(100, blended))
+        // Bias calibration: correct for this user's historical over/under-prediction
+        let calibrated = blended - context.predictionBias
+        return max(0, min(100, calibrated))
     }
     
     // MARK: - Era Modifier
@@ -612,8 +670,47 @@ class PredictionEngine {
         return (eraAffinity - 50) / 50.0 * 10.0
     }
     
-    // MARK: - Confidence Calculation
+    // MARK: - Franchise Boost
+    private func baseTitle(_ title: String) -> String {
+        let suffixes = [" Remastered", " Remake", " Definitive Edition", " HD Collection", " HD Remaster", " HD", " Game of the Year Edition", " GOTY Edition", " Director's Cut", " Royal Edition", " Complete Edition", " Ultimate Edition", " Enhanced Edition", " Special Edition", " Part I"]
+        var t = title
+        for suffix in suffixes {
+            if t.lowercased().hasSuffix(suffix.lowercased()) {
+                t = String(t.dropLast(suffix.count))
+                break
+            }
+        }
+        return t.lowercased().trimmingCharacters(in: .whitespaces)
+    }
+
+    private func computeFranchiseBoost(title: String, context: PredictionContext) -> Double {
+        let candidateBase = baseTitle(title)
+        guard !candidateBase.isEmpty else { return 0 }
+
+        let candidateWords = candidateBase.split(separator: " ").prefix(3).joined(separator: " ")
+
+        var matchingPercentiles: [Double] = []
+
+        for game in context.myGames {
+            guard let gameTitle = game.title else { continue }
+            let gameBase = baseTitle(gameTitle)
+            guard candidateBase != gameBase else { continue }
+
+            let gameWords = gameBase.split(separator: " ").prefix(3).joined(separator: " ")
+            guard candidateWords == gameWords else { continue }
+
+            let percentile = (1.0 - (Double(game.rankPosition - 1) / Double(max(context.myGameCount - 1, 1)))) * 100.0
+            matchingPercentiles.append(percentile)
+        }
+
+        guard !matchingPercentiles.isEmpty else { return 0 }
+
+        let avgPercentile = matchingPercentiles.reduce(0, +) / Double(matchingPercentiles.count)
+        guard avgPercentile > 50 else { return 0 }
+        return min(15, (avgPercentile - 50) / 50.0 * 15.0)
+    }
     
+    // MARK: - Confidence Calculation
     private func calculateConfidence(
         friendResult: FriendResult?,
         genreTagScore: Double?,
@@ -659,52 +756,147 @@ class PredictionEngine {
 
         do {
             struct OutcomeRow: Decodable {
-                let tiers_used: [String]
-                let prediction_accuracy: Double
+                let actual_percentile: Double?
+                let friend_predicted_percentile: Double?
+                let genre_predicted_percentile: Double?
             }
 
             let outcomes: [OutcomeRow] = try await SupabaseManager.shared.client
                 .from("recommendations")
-                .select("tiers_used, prediction_accuracy")
+                .select("actual_percentile, friend_predicted_percentile, genre_predicted_percentile")
                 .eq("user_id", value: userId.uuidString)
-                .not("prediction_accuracy", operator: .is, value: "null")
+                .not("actual_percentile", operator: .is, value: "null")
+                .order("created_at", ascending: false)
+                .limit(50)
                 .execute()
                 .value
 
             guard outcomes.count >= 5 else { return .default }
 
-            var tierErrors: [String: [Double]] = ["genre": [], "friends": []]
+            var friendErrors: [Double] = []
+            var genreErrors: [Double] = []
 
             for outcome in outcomes {
-                for tier in outcome.tiers_used {
-                    switch tier {
-                    case "genre", "friends":
-                        tierErrors[tier, default: []].append(outcome.prediction_accuracy)
-                    default:
-                        continue
-                    }
+                guard let actual = outcome.actual_percentile else { continue }
+                if let friendPred = outcome.friend_predicted_percentile {
+                    friendErrors.append(abs(friendPred - actual))
+                }
+                if let genrePred = outcome.genre_predicted_percentile {
+                    genreErrors.append(abs(genrePred - actual))
                 }
             }
 
-            func multiplierFor(errors: [Double]?) -> Double {
-                guard let errors = errors, errors.count >= 5 else { return 1.0 }
-                let meanBias = errors.reduce(0, +) / Double(errors.count)
-                let adjustment = -(meanBias / 10.0) * 0.1
+            func multiplierFrom(errors: [Double], vsErrors: [Double]) -> Double {
+                guard errors.count >= 5 else { return 1.0 }
+                let myMAE = errors.reduce(0, +) / Double(errors.count)
+                guard vsErrors.count >= 5 else { return 1.0 }
+                let vsMAE = vsErrors.reduce(0, +) / Double(vsErrors.count)
+                let relativeAdvantage = (vsMAE - myMAE) / max(vsMAE, 1.0)
+                let adjustment = relativeAdvantage * 0.3
                 return max(PredictionWeights.minMultiplier, min(PredictionWeights.maxMultiplier, 1.0 + adjustment))
             }
 
             var weights = PredictionWeights()
-            weights.genreWeight = multiplierFor(errors: tierErrors["genre"])
-            weights.friendWeight = multiplierFor(errors: tierErrors["friends"])
+            weights.friendWeight = multiplierFrom(errors: friendErrors, vsErrors: genreErrors)
+            weights.genreWeight = multiplierFrom(errors: genreErrors, vsErrors: friendErrors)
             weights.tagWeight = weights.genreWeight
 
-            debugLog("⚖️ Prediction weights: genre=\(String(format: "%.2f", weights.genreWeight)), friend=\(String(format: "%.2f", weights.friendWeight)) (from \(outcomes.count) outcomes)")
+            let friendMAE = friendErrors.isEmpty ? 0.0 : friendErrors.reduce(0, +) / Double(friendErrors.count)
+            let genreMAE = genreErrors.isEmpty ? 0.0 : genreErrors.reduce(0, +) / Double(genreErrors.count)
+            debugLog("⚖️ Tier accuracy — friend MAE: \(String(format: "%.1f", friendMAE)), genre MAE: \(String(format: "%.1f", genreMAE))")
+            debugLog("⚖️ Weights — friend: \(String(format: "%.2f", weights.friendWeight)), genre: \(String(format: "%.2f", weights.genreWeight)) (from \(outcomes.count) outcomes)")
 
             return weights
 
         } catch {
             debugLog("⚠️ Failed to compute prediction weights: \(error)")
             return .default
+        }
+    }
+    
+    // MARK: - Prediction Bias Calibration
+    static func computePredictionBias(userId: String) async -> Double {
+        do {
+            struct AccuracyRow: Decodable {
+                let prediction_accuracy: Double
+            }
+
+            let rows: [AccuracyRow] = try await SupabaseManager.shared.client
+                .from("recommendations")
+                .select("prediction_accuracy")
+                .eq("user_id", value: userId)
+                .not("prediction_accuracy", operator: .is, value: "null")
+                .order("created_at", ascending: false)
+                .limit(50)  // Use most recent 50 to stay adaptive
+                .execute()
+                .value
+
+            guard rows.count >= 5 else { return 0.0 }
+
+            let avgBias = rows.map { $0.prediction_accuracy }.reduce(0, +) / Double(rows.count)
+
+            // Only correct if bias is meaningful (>2 points)
+            guard abs(avgBias) > 2.0 else { return 0.0 }
+
+            // Cap correction at ±20 points to avoid overcorrecting
+            let capped = max(-20.0, min(20.0, avgBias))
+            debugLog("🎯 Prediction bias: \(String(format: "%.1f", capped)) (from \(rows.count) outcomes)")
+            return capped
+
+        } catch {
+            debugLog("⚠️ Failed to compute prediction bias: \(error)")
+            return 0.0
+        }
+    }
+
+
+    // MARK: - Dismiss Pattern Learning
+
+    static func computeDismissWeights(userId: String) async -> [String: Double] {
+        do {
+            struct DismissRow: Decodable {
+                let source: String?
+                let dismiss_reason: String?
+            }
+
+            let rows: [DismissRow] = try await SupabaseManager.shared.client
+                .from("recommendations")
+                .select("source, dismiss_reason")
+                .eq("user_id", value: userId)
+                .eq("status", value: "dismissed")
+                .not("dismiss_reason", operator: .is, value: "null")
+                .not("source", operator: .is, value: "null")
+                .order("created_at", ascending: false)
+                .limit(100)
+                .execute()
+                .value
+
+            var dismissCounts: [String: Int] = [:]
+            for row in rows {
+                guard let source = row.source, let reason = row.dismiss_reason else { continue }
+                let key = "\(source):\(reason)"
+                dismissCounts[key, default: 0] += 1
+            }
+
+            var sourceMultipliers: [String: Double] = [:]
+            for (key, count) in dismissCounts {
+                let source = String(key.split(separator: ":").first ?? "")
+                guard !source.isEmpty else { continue }
+                let reduction = Double(count / 3) * 0.1
+                let existing = sourceMultipliers[source] ?? 1.0
+                sourceMultipliers[source] = max(0.5, existing - reduction)
+            }
+
+            if !sourceMultipliers.isEmpty {
+                let summary = sourceMultipliers.map { "\($0.key)=\(String(format: "%.2f", $0.value))" }.joined(separator: ", ")
+                debugLog("🚫 Dismiss weights: \(summary)")
+            }
+
+            return sourceMultipliers
+
+        } catch {
+            debugLog("⚠️ Failed to compute dismiss weights: \(error)")
+            return [:]
         }
     }
 
@@ -724,6 +916,7 @@ class PredictionEngine {
                 
                 struct GameData: Decodable {
                     let rawg_id: Int
+                    let title: String?
                     let genres: [String]?
                     let tags: [String]?
                     let curated_genres: [String]?
@@ -735,7 +928,7 @@ class PredictionEngine {
             
             let myRows: [MyGameRow] = try await SupabaseManager.shared.client
                 .from("user_games")
-                .select("id, game_id, rank_position, canonical_game_id, games(rawg_id, genres, tags, curated_genres, curated_tags, metacritic_score, curated_release_year)")
+                .select("id, game_id, rank_position, canonical_game_id, games(rawg_id, title, genres, tags, curated_genres, curated_tags, metacritic_score, curated_release_year)")
                 .eq("user_id", value: userId.uuidString)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -751,7 +944,8 @@ class PredictionEngine {
                     genres: row.games.curated_genres ?? row.games.genres ?? [],
                     tags: row.games.curated_tags ?? row.games.tags ?? [],
                     metacriticScore: row.games.metacritic_score,
-                    releaseYear: row.games.curated_release_year
+                    releaseYear: row.games.curated_release_year,
+                    title: row.games.title
                 )
             }
             
@@ -794,6 +988,7 @@ class PredictionEngine {
                 let game_id: Int
                 let rank_position: Int
                 let canonical_game_id: Int?
+                let logged_at: String?
                 let games: FriendGameData
                 
                 struct FriendGameData: Decodable {
@@ -803,7 +998,7 @@ class PredictionEngine {
             
             let allFriendRows: [FriendGameRow] = friendIds.isEmpty ? [] : try await SupabaseManager.shared.client
                 .from("user_games")
-                .select("user_id, game_id, rank_position, canonical_game_id, games(rawg_id)")
+                .select("user_id, game_id, rank_position, canonical_game_id, logged_at, games(rawg_id)")
                 .in("user_id", values: friendIds)
                 .not("rank_position", operator: .is, value: "null")
                 .order("rank_position", ascending: true)
@@ -819,14 +1014,15 @@ class PredictionEngine {
                 let friendRows = rowsByFriend[friendId.lowercased()] ?? []
                 
                 let friendGames = friendRows.map { row in
-                    FriendRankedGame(
-                        gameId: row.game_id,
-                        rawgId: row.games.rawg_id,
-                        canonicalGameId: row.canonical_game_id,
-                        rankPosition: row.rank_position,
-                        totalGames: friendRows.count
-                    )
-                }
+                   FriendRankedGame(
+                       gameId: row.game_id,
+                       rawgId: row.games.rawg_id,
+                       canonicalGameId: row.canonical_game_id,
+                       rankPosition: row.rank_position,
+                       totalGames: friendRows.count,
+                       loggedAt: row.logged_at
+                   )
+               }
                 
                 let tasteMatch = computeTasteMatch(
                     myGames: myGames,
@@ -842,7 +1038,15 @@ class PredictionEngine {
             }
             
             let weights = await computeWeights()
-            return PredictionContext(myGames: myGames, friends: friends, weights: weights)
+            let bias = await computePredictionBias(userId: userId.uuidString)
+            let dismissWeights = await computeDismissWeights(userId: userId.uuidString)
+            return PredictionContext(
+                myGames: myGames,
+                friends: friends,
+                weights: weights,
+                predictionBias: bias,
+                dismissWeights: dismissWeights
+            )
             
         } catch {
             debugLog("❌ Error building prediction context: \(error)")
