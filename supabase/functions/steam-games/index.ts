@@ -191,9 +191,37 @@ serve(async (req) => {
 
 // Levenshtein-based similarity (0-100)
 function calculateSimilarity(a: string, b: string): number {
-  // Normalize: strip special chars, extra spaces
-  const normalize = (s: string) =>
-    s.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  const normalize = (s: string): string => {
+    let n = s.toLowerCase();
+    // Diacritics
+    n = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    // Strip special chars except spaces
+    n = n.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+    // Roman numeral → digit (trailing only)
+    const romanMap: Record<string, string> = {
+      " x": " 10", " ix": " 9", " viii": " 8", " vii": " 7", " vi": " 6",
+      " v": " 5", " iv": " 4", " iii": " 3", " ii": " 2", " i": " 1",
+    };
+    for (const [roman, digit] of Object.entries(romanMap)) {
+      if (n.endsWith(roman)) {
+        n = n.slice(0, -roman.length) + digit;
+        break;
+      }
+    }
+    // Common abbreviations
+    const subs: Record<string, string> = {
+      "baldurs gate": "baldurs gate",  // apostrophe already stripped
+      "gta": "grand theft auto",
+      "cod": "call of duty",
+      "ff": "final fantasy",
+    };
+    for (const [short, full] of Object.entries(subs)) {
+      if (n === short || n.startsWith(short + " ")) {
+        n = n.replace(short, full);
+      }
+    }
+    return n;
+  };
 
   const na = normalize(a);
   const nb = normalize(b);

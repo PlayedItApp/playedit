@@ -40,6 +40,8 @@ struct ProfileView: View {
     @State private var showSteamImport = false
     @State private var showCSVImport = false
     @State private var hasSteamConnected = false
+    @State private var showPSNImport = false
+    @State private var hasPSNConnected = false
     @State private var pendingImport: PendingImport?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
@@ -222,7 +224,7 @@ struct ProfileView: View {
                                             .foregroundColor(.white)
                                         
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(pending.source == "steam_import" ? "Steam import in progress" : "Import in progress")
+                                            Text(pending.source == "steam_import" ? "Steam import in progress" : pending.source == "psn_import" ? "PlayStation import in progress" : "Import in progress")
                                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                                                 .foregroundColor(.white)
                                             Text("\(pending.currentIndex) of \(pending.totalCount) ranked")
@@ -235,6 +237,8 @@ struct ProfileView: View {
                                         Button {
                                             if pending.source == "steam_import" {
                                                 showSteamImport = true
+                                            } else if pending.source == "psn_import" {
+                                                showPSNImport = true
                                             } else if pending.source == "csv_import" {
                                                 showCSVImport = true
                                             }
@@ -373,6 +377,17 @@ struct ProfileView: View {
                 }
             }) {
                 CSVImportView(resumingImport: pendingImport?.source == "csv_import" ? pendingImport : nil)
+                    .presentationDetents(horizontalSizeClass == .regular ? [.large] : [.large])
+            }
+            .sheet(isPresented: $showPSNImport, onDismiss: {
+                Task {
+                    await fetchRankedGames()
+                    hasPSNConnected = await PSNService.shared.getPSNId() != nil
+                    pendingImport = await PendingImportManager.shared.fetchAny()
+                }
+            }) {
+                PSNImportView()
+                    .environmentObject(supabase)
                     .presentationDetents(horizontalSizeClass == .regular ? [.large] : [.large])
             }
             .alert("Start fresh?", isPresented: $showResetRankings) {
@@ -565,6 +580,12 @@ struct ProfileView: View {
                                 } label: {
                                     Label(hasSteamConnected ? "Steam (Connected)" : "Steam", systemImage: "arrow.down.circle")
                                 }
+
+                                Button {
+                                    showPSNImport = true
+                                } label: {
+                                    Label("PlayStation", systemImage: "gamecontroller")
+                                }
                                 
                                 Button {
                                     showCSVImport = true
@@ -623,11 +644,13 @@ struct ProfileView: View {
             async let rankedTask: () = fetchRankedGames()
             async let appleTask = supabase.hasAppleIdentity()
             async let steamTask = SteamService.shared.getSteamId()
+            async let psnTask = PSNService.shared.getPSNId()
             async let pendingTask = PendingImportManager.shared.fetchAny()
             
             _ = await (profileTask, rankedTask)
             hasAppleLinked = await appleTask
             hasSteamConnected = await steamTask != nil
+            hasPSNConnected = await psnTask != nil
             pendingImport = await pendingTask
         }
         .onReceive(NotificationCenter.default.publisher(for: .profileNudgeTapped)) { _ in

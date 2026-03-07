@@ -481,3 +481,15 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/moderate-text/deno.json"
 entrypoint = "./functions/moderate-text/index.ts"
+
+[functions.psn-auth]
+enabled = true
+verify_jwt = true
+import_map = "./functions/psn-auth/deno.json"
+entrypoint = "./functions/psn-auth/index.ts"
+
+[functions.psn-games]
+enabled = true
+verify_jwt = true
+import_map = "./functions/psn-games/deno.json"
+entrypoint = "./functions/psn-games/index.ts"

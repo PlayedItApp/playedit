@@ -1232,6 +1232,8 @@ struct GroupedFeedItem: Identifiable {
         switch batchSource {
         case "steam_import":
             return "\(username) imported their Steam library. \(gameCount) games ranked!"
+        case "psn_import":
+            return "\(username) imported their PSN library. \(gameCount) games ranked!"
         case "onboarding":
             return "\(username) just joined and ranked \(gameCount) games!"
         default:
@@ -1924,7 +1926,8 @@ struct GroupedFeedRow: View {
             HStack(spacing: 12) {
                 // Avatar
                 NavigationLink(destination: group.userId.lowercased() == (SupabaseManager.shared.currentUser?.id.uuidString.lowercased() ?? "") ? AnyView(ProfileView()) : AnyView(FriendProfileView(friend: Friend(id: group.userId, friendshipId: "", username: group.username, userId: group.userId, avatarURL: group.avatarURL)))) {
-                    if let avatarURL = group.avatarURL, let url = URL(string: avatarURL) {
+                    if let avatarURL = group.avatarURL,
+                   let url = URL(string: avatarURL.contains("?") ? avatarURL : "\(avatarURL)?t=\(Int(Date().timeIntervalSince1970 / 3600))") {
                         AsyncImage(url: url) { image in
                             image.resizable().aspectRatio(contentMode: .fill)
                         } placeholder: {
@@ -2257,6 +2260,8 @@ struct GroupedFeedRow: View {
         switch group.batchSource {
         case "steam_import":
             return " imported their Steam library. \(group.gameCount) games ranked!"
+        case "psn_import":
+            return " imported their PSN library. \(group.gameCount) games ranked!"
         case "onboarding":
             return " just joined and ranked \(group.gameCount) games!"
         default:
@@ -2277,7 +2282,7 @@ struct GroupedFeedRow: View {
     
     private var batchIcon: String {
         switch group.batchSource {
-        case "steam_import": return "arrow.down.circle"
+        case "steam_import", "psn_import": return "arrow.down.circle"
         case "onboarding": return "star.circle"
         default: return "square.stack"
         }

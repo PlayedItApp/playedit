@@ -130,6 +130,8 @@ enum AnalyticsEvent: String {
     case csvImportAbandoned             = "csv_import_abandoned"
     case steamImportStarted             = "steam_import_started"
     case steamImportCompleted           = "steam_import_completed"
+    case psnImportStarted               = "psn_import_started"
+    case psnImportCompleted             = "psn_import_completed"
 
     // Deep Links
     case deepLinkOpened                 = "deep_link_opened"
@@ -160,6 +162,7 @@ enum ScreenName: String {
     case onboarding         = "Onboarding"
     case csvImport          = "CSVImport"
     case steamImport        = "SteamImport"
+    case psnImport          = "PSNImport"
     case deepLinkGame       = "DeepLinkGame"
     case deepLinkProfile    = "DeepLinkProfile"
 }
