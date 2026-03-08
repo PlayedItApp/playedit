@@ -1483,7 +1483,11 @@ struct GameDetailSheet: View {
         guard let userId = supabase.currentUser?.id else { return }
         
         do {
-            let canonicalId = await RAWGService.shared.getParentGameId(for: game.gameRawgId ?? game.gameId) ?? (game.gameRawgId ?? game.gameId)
+            guard let rawgId = game.gameRawgId else {
+                debugLog("⚠️ saveReRankedGame: missing rawgId for \(game.gameTitle), skipping canonical lookup")
+                return
+            }
+            let canonicalId = await RAWGService.shared.getParentGameId(for: rawgId) ?? rawgId
             
             try await supabase.client
                 .rpc("rerank_game", params: [

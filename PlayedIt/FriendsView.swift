@@ -1492,6 +1492,7 @@ struct FriendProfileView: View {
                 let notes: String?
                 let logged_at: String?
                 let status: String?
+                let canonical_game_id: Int?
                 let games: GameDetails
                 
                 struct GameDetails: Decodable {
@@ -1528,7 +1529,7 @@ struct FriendProfileView: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
-                    canonicalGameId: nil,
+                    canonicalGameId: row.canonical_game_id,
                     status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,
@@ -1556,7 +1557,7 @@ struct FriendProfileView: View {
                     platformPlayed: row.platform_played,
                     notes: row.notes,
                     loggedAt: row.logged_at,
-                    canonicalGameId: nil,
+                    canonicalGameId: row.canonical_game_id,
                     status: GameStatus(rawValue: row.status ?? "played") ?? .played,
                     gameTitle: row.games.title,
                     gameCoverURL: row.games.cover_url,

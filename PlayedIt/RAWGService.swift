@@ -491,8 +491,7 @@ class RAWGService {
                 parentGameIdCache[gameId] = parentId
                 return parentId
             }
-            // No parent — cache the gameId itself so we don't re-query
-            parentGameIdCache[gameId] = gameId
+            // No parent — return nil without caching, so we don't poison the cache with a bad ID
             return nil
         } catch {
             debugLog("⚠️ Could not fetch parent game for \(gameId): \(error)")

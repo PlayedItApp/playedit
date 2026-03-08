@@ -85,6 +85,9 @@ struct PSNImportView: View {
                 }
             }
         }
+        .task {
+            await checkForPendingImport()
+        }
         .interactiveDismissDisabled(phase != .ready && phase != .complete)
         .confirmationDialog(
             "Cancel import?",
@@ -770,6 +773,34 @@ struct PSNImportView: View {
     }
 
     // MARK: - Actions
+
+    private func checkForPendingImport() async {
+        guard let pending = await PendingImportManager.shared.fetch(source: "psn_import"),
+              !pending.games.isEmpty else { return }
+
+        debugLog("♻️ Resuming PSN import at index \(pending.currentIndex)")
+        await fetchExistingRankedIds()
+        await refreshExistingGames()
+
+        gamesToRank = pending.games.map { p in
+            MatchedPSNGame(
+                titleId: p.sourceMetadata["psn_title_id"] ?? UUID().uuidString,
+                psnName: p.sourceMetadata["psn_name"] ?? p.title,
+                playtimeMinutes: Int(p.sourceMetadata["psn_playtime_minutes"] ?? "0") ?? 0,
+                platform: p.sourceMetadata["psn_platform"] ?? "PlayStation",
+                rawgId: p.rawgId,
+                rawgTitle: p.title,
+                rawgCoverUrl: p.coverUrl,
+                rawgGenres: p.genres,
+                rawgPlatforms: p.platforms,
+                rawgReleaseDate: p.releaseDate,
+                rawgMetacriticScore: p.metacriticScore,
+                matchConfidence: 100
+            )
+        }
+        currentRankIndex = pending.currentIndex
+        phase = .ranking
+    }
 
     private func startAuth() async {
         // If already connected, skip straight to library fetch

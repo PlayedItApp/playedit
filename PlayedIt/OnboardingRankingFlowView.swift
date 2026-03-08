@@ -304,7 +304,8 @@ struct OnboardingRankingFlowView: View {
         }
         
         do {
-            let canonicalId = await RAWGService.shared.getParentGameId(for: currentGame?.rawgId ?? gameId) ?? gameId
+            let rawgId = currentGame?.rawgId ?? gameId
+            let canonicalId = await RAWGService.shared.getParentGameId(for: rawgId) ?? rawgId
             
             try await supabase.client
                 .rpc("insert_game_at_rank", params: [

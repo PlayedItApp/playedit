@@ -66,7 +66,7 @@ struct PSNAuthView: View {
                             stepCard(
                                 number: "2",
                                 title: "Set Gaming History to 'Anyone'",
-                                description: "In your PlayStation privacy settings, make sure Gaming History is set to Anyone — otherwise we can't see your library.",
+                                description: "In your PlayStation privacy settings, make sure Gaming History is set to Anyone. Otherwise we can't see your library.",
                                 action: {
                                     Button {
                                         UIApplication.shared.open(URL(string: "https://id.sonyentertainmentnetwork.com/id/management_ca/")!)
