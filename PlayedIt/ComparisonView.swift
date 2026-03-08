@@ -517,17 +517,17 @@ struct RetroCompletionView: View {
                     .padding(.top, 4)
                     .opacity(showContent ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.6), value: showContent)
-                    .sheet(isPresented: $showShareSheet) {
-                        ShareSheetWrapper(
-                            game: game,
-                            rank: position,
-                            total: totalGames,
-                            onDismiss: onDone
-                        )
-                        .presentationDetents([.medium])
-                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .sheet(isPresented: $showShareSheet) {
+                    ShareSheetWrapper(
+                        game: game,
+                        rank: position,
+                        total: totalGames,
+                        onDismiss: onDone
+                    )
+                    .presentationDetents([.medium])
+                }
             }
             .onAppear {
                 generateConfetti(in: geometry.size)
@@ -697,7 +697,6 @@ struct ShareSheetWrapper: View {
             
             Button {
                 isSharing = true
-                dismiss()
                 Task {
                     await GameShareService.shared.shareGame(
                         gameTitle: game.title,
@@ -707,6 +706,7 @@ struct ShareSheetWrapper: View {
                         totalGames: total,
                         gameId: game.rawgId
                     )
+                    dismiss()
                     onDismiss()
                 }
             } label: {

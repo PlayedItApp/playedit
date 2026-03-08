@@ -130,6 +130,15 @@ struct PlayedItApp: App {
                    let referrer = components.queryItems?.first(where: { $0.name == "user" })?.value {
                     pendingReferrerUsername = referrer
                 }
+                AnalyticsService.shared.track(.deepLinkGameViewed, properties: [
+                    "game_id": gId,
+                    "has_referrer": pendingReferrerUsername != nil
+                ])
+                if supabase.currentUser == nil && pendingReferrerUsername != nil {
+                    AnalyticsService.shared.track(.installFromShareLink, properties: [
+                        "referrer": pendingReferrerUsername ?? ""
+                    ])
+                }
                 if supabase.currentUser != nil {
                     deepLinkGameId = gId
                 } else {
@@ -137,6 +146,9 @@ struct PlayedItApp: App {
                 }
             } else if url.pathComponents.count >= 3 && url.pathComponents[1] == "profile" {
                 let uname = url.pathComponents[2]
+                AnalyticsService.shared.track(.deepLinkProfileViewed, properties: [
+                    "username": uname
+                ])
                 if supabase.currentUser != nil {
                     deepLinkUsername = uname
                 } else {

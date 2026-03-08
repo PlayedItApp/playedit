@@ -855,6 +855,7 @@ struct CommentRowView: View {
             gameTitle: "The Legend of Zelda: Breath of the Wild",
             gameCoverURL: nil,
             rankPosition: 1,
+            platformPlayed: [],
             note: nil,
             loggedAt: nil,
             batchSource: nil,

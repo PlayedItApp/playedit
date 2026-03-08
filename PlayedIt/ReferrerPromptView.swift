@@ -69,6 +69,11 @@ struct ReferrerPromptView: View {
             .padding(.bottom, 8)
         }
         .background(Color.appBackground)
+        .onAppear {
+            AnalyticsService.shared.track(.referrerPromptShown, properties: [
+                "referrer_username": referrerUsername
+            ])
+        }
     }
     
     private func sendFriendRequest() async {
@@ -104,6 +109,9 @@ struct ReferrerPromptView: View {
                 ])
                 .execute()
             
+            AnalyticsService.shared.track(.referrerPromptAccepted, properties: [
+                "referrer_username": referrerUsername
+            ])
             didSend = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                 onDismiss()

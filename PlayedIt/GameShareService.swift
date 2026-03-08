@@ -21,7 +21,7 @@ class GameShareService {
         // Pre-fetch cover image so ImageRenderer doesn't deal with async loading
         let coverImage = await fetchCoverImage(urlString: coverURL)
         
-        _ = GameShareCardView(
+        let card = GameShareCardView(
             gameTitle: gameTitle,
             coverURL: coverURL,
             rankPosition: rankPosition,
@@ -30,28 +30,26 @@ class GameShareService {
             totalGames: totalGames,
             coverImage: coverImage
         )
-        
-        // Build URL with share context for OG image generation
-        var urlString = "https://playedit.app/game/\(gameId)"
-        var params: [String] = []
-        if let rank = rankPosition { params.append("rank=\(rank)") }
-        if totalGames > 0 { params.append("total=\(totalGames)") }
-        params.append("user=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username)")
-        if !params.isEmpty { urlString += "?" + params.joined(separator: "&") }
-        
-        let shareURL = URL(string: urlString)!
-        
+
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 3.0
+
         let shareText: String
-            if let rank = rankPosition {
-                shareText = "I ranked \(gameTitle) #\(rank) on PlayedIt! Check it out 🎮"
-            } else {
-                shareText = "Check out \(gameTitle) on PlayedIt! 🎮"
-            }
-            
-            let activityVC = UIActivityViewController(
-                activityItems: [shareText, shareURL],
-                applicationActivities: nil
-            )
+        if let rank = rankPosition {
+            shareText = "I ranked \(gameTitle) #\(rank) on PlayedIt! Check it out 🎮"
+        } else {
+            shareText = "Check out \(gameTitle) on PlayedIt! 🎮"
+        }
+
+        var activityItems: [Any] = [shareText]
+        if let shareImage = renderer.uiImage {
+            activityItems.insert(shareImage, at: 0)
+        }
+
+        let activityVC = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
         
         // Present
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -69,6 +67,23 @@ class GameShareService {
             }
             
             presenter.present(activityVC, animated: true)
+            AnalyticsService.shared.track(.shareCardPresented, properties: [
+                "game_id": gameId,
+                "game_title": gameTitle,
+                "rank_position": rankPosition ?? 0,
+                "total_games": totalGames
+            ])
+            
+            activityVC.completionWithItemsHandler = { _, completed, _, _ in
+                if completed {
+                    AnalyticsService.shared.track(.gameShared, properties: [
+                        "game_id": gameId,
+                        "game_title": gameTitle,
+                        "rank_position": rankPosition ?? 0,
+                        "total_games": totalGames
+                    ])
+                }
+            }
         }
     }
     

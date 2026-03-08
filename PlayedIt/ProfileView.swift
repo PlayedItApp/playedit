@@ -520,6 +520,11 @@ struct ProfileView: View {
                                 // Wait for menu to dismiss
                                 try? await Task.sleep(nanoseconds: 600_000_000)
                                 
+                                AnalyticsService.shared.track(.topListSharePresented, properties: [
+                                    "game_count": min(rankedGames.count, 5),
+                                    "username": username
+                                ])
+                                
                                 let activityVC = UIActivityViewController(
                                     activityItems: [image],
                                     applicationActivities: nil
@@ -537,6 +542,14 @@ struct ProfileView: View {
                                         popover.permittedArrowDirections = []
                                     }
                                     presenter.present(activityVC, animated: true)
+                                        activityVC.completionWithItemsHandler = { _, completed, _, _ in
+                                            if completed {
+                                                AnalyticsService.shared.track(.topListShared, properties: [
+                                                    "game_count": min(rankedGames.count, 5),
+                                                    "username": username
+                                                ])
+                                            }
+                                        }
                                 }
                             }
                         } label: {

@@ -473,7 +473,7 @@ struct GameLogView: View {
             
             let response: [ExistingUserGame] = try await supabase.client
                 .from("user_games")
-                .select("id, rank_position")
+                .select("id, rank_position, platform_played")
                 .eq("user_id", value: userId.uuidString)
                 .eq("game_id", value: gameRecord.id)
                 .not("rank_position", operator: .is, value: "null")
@@ -482,6 +482,7 @@ struct GameLogView: View {
             
             if let existing = response.first {
                 existingUserGame = existing
+                selectedPlatforms = Set(existing.platform_played)
                 showReRankAlert = true
             }
         } catch {
@@ -1014,6 +1015,7 @@ struct PlatformButton: View {
 struct ExistingUserGame: Decodable {
     let id: String
     let rank_position: Int
+    let platform_played: [String]
 }
 
 // MARK: - Flow Layout

@@ -134,7 +134,7 @@ struct GameShareCardView: View {
             // CTA
             HStack {
                 Spacer()
-                Text("See the full list & rank it yourself →")
+                Text("playedit.app/profile/\(username)")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(Color(hex: "E07B4C"))
                 Spacer()
@@ -150,7 +150,7 @@ struct GameShareCardView: View {
                 endPoint: .bottomTrailing
             )
         )
-        .cornerRadius(24)
+        .cornerRadius(0)
     }
 }
 

@@ -435,6 +435,7 @@ struct NotificationsView: View {
                     gameTitle: notification.gameTitle ?? "Unknown Game",
                     gameCoverURL: notification.gameCoverURL,
                     rankPosition: rankPosition,
+                    platformPlayed: [],
                     note: nil,
                     loggedAt: nil,
                     batchSource: nil,

@@ -122,7 +122,13 @@ enum AnalyticsEvent: String {
 
     // Sharing
     case gameShared                     = "game_shared"
+    case shareCardPresented             = "share_card_presented"
     case profileLinkShared              = "profile_link_shared"
+    case topListSharePresented          = "top_list_share_presented"
+    case topListShared                  = "top_list_shared"
+    case referrerPromptShown            = "referrer_prompt_shown"
+    case referrerPromptAccepted         = "referrer_prompt_accepted"
+    case installFromShareLink           = "install_from_share_link"
 
     // Imports
     case csvImportStarted               = "csv_import_started"
