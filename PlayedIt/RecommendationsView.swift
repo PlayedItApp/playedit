@@ -627,23 +627,22 @@ curatedPlatforms: curatedPlatforms
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        
                         // Overview
                         sectionHeader("Overview")
-                        Text("Each candidate game is scored on a 0–100 percentile scale by blending two independent signals: friend rankings and genre/tag affinity. Only games scoring 65%+ and available on platforms you own are shown.")
+                        Text("Each game in your Want to Play list gets a predicted percentile score (0–100) based on your ranked library, friend rankings, and a handful of modifiers. A score of 100 means it's predicted to be your #1 game.")
                             .bodyStyle()
-                        
+
                         // Tier 1
                         sectionHeader("Tier 1: Friend Signal")
-                        Text("For each friend who ranked the game, we compute:")
+                        Text("For each friend who has ranked the game, their rank is converted to a percentile:")
                             .bodyStyle()
                         mathBlock("friendPercentile = (1 - (rank - 1) / (totalGames - 1)) × 100")
-                        Text("Friends are weighted by taste match (Spearman ρ). The friend signal is the weighted average:")
+                        Text("Friends are weighted by taste match (Spearman ρ). The friend signal is the weighted average of their percentiles, with a small recency boost for games ranked in the last year:")
                             .bodyStyle()
-                        mathBlock("friendScore = Σ(percentileᵢ × tasteMatchᵢ) / Σ(tasteMatchᵢ)")
-                        Text("Only friends with ≥30% taste match contribute. Friends with ≥70% match qualify as recommendation sources.")
+                        mathBlock("friendScore = Σ(percentileᵢ × tasteMatchᵢ × recencyᵢ) / Σ(tasteMatchᵢ × recencyᵢ)")
+                        Text("Only friends with ≥30% taste match contribute. If 3+ friends all ranked a game in their top 20%, a consensus bonus of up to +15 points is applied.")
                             .bodyStyle()
-                        
+
                         // Taste Match
                         sectionHeader("Taste Match (Spearman ρ)")
                         Text("Compares rank orderings of shared games between two users:")
@@ -651,48 +650,87 @@ curatedPlatforms: curatedPlatforms
                         mathBlock("ρ = 1 - (6 × Σdᵢ²) / (n × (n² - 1))")
                         Text("Where dᵢ is the rank difference for each shared game and n is the number of shared games. Normalized to 0–100%.")
                             .bodyStyle()
-                        
+
                         // Tier 2
                         sectionHeader("Tier 2: Genre & Tag Affinity")
-                        Text("For each genre/tag the candidate has, we compute a rank-weighted average percentile across your games that share that genre/tag. Games you rank higher contribute more to the signal.")
+                        Text("For each genre and tag the candidate has, a rank-weighted average percentile is computed across your games that share it. Games you rank higher contribute more weight:")
                             .bodyStyle()
                         mathBlock("affinity = Σ(percentileᵢ × weightᵢ) / Σ(weightᵢ)")
-                        Text("Tags require ≥2 matching games. Tags are weighted 70%, genres 30% — tags are more specific signals. Positive affinities get a boost to create separation:")
+                        Text("Tags require ≥2 matching games. Tags carry 70% of the genre/tag signal; genres carry 30% — tags are more specific to your taste. Genre pairs (e.g. Action + RPG together) are also scored and blended in at 40% weight when enough data exists.")
+                            .bodyStyle()
+                        Text("Positive affinities above 50% get a boost to create separation:")
                             .bodyStyle()
                         mathBlock("boost = (affinity - 50) × 0.5 × countFactor")
-                        
-                        // Era Modifier
-                        sectionHeader("Era Modifier")
-                        Text("Games are bucketed into eras (pre-1995, 1995–2004, 2005–2012, 2013–2019, 2020+). If you tend to rank games from a particular era highly, candidates from that era get a boost of up to ±10 points.")
+                        Text("Genre/tag scores are capped at 85 to prevent overconfidence from genre alone.")
                             .bodyStyle()
-                        
+
                         // Blending
                         sectionHeader("Blending Weights")
+                        Text("Friend signal and genre/tag affinity are blended based on how many friends have ranked the game:")
+                            .bodyStyle()
                         VStack(alignment: .leading, spacing: 8) {
                             weightRow("2+ friends ranked it:", "30% friend, 70% genre/tag")
                             weightRow("1 friend ranked it:", "25% friend, 75% genre/tag")
                             weightRow("No friend signal:", "100% genre/tag")
                         }
-                        
+                        Text("These base weights are further adjusted by self-tuning multipliers learned from your past prediction accuracy.")
+                            .bodyStyle()
+
                         // Genre Drag
                         sectionHeader("Genre Drag")
-                        Text("If a friend loves a game but your genre/tag affinity is low, the score is penalized:")
+                        Text("If a friend loves a game but your genre/tag affinity is low, the blended score is penalized to prevent recommendations in genres you don't enjoy:")
                             .bodyStyle()
                         mathBlock("if genreTag < 50: penalty = (50 - genreTag) / 50 × 20")
                         mathBlock("if genreTag < 70 & friend > 80th: reduction = (70 - genreTag) / 20 × 0.4 × friendContribution")
-                        Text("This prevents recommendations in genres you don't enjoy, even when friends rank them highly.")
+
+                        // Negative Signal
+                        sectionHeader("Negative Friend Signal")
+                        Text("If friends with good taste match have ranked a game near the bottom of their lists, a penalty is applied proportional to how many friends disliked it:")
                             .bodyStyle()
-                        
+                        mathBlock("penalty = negativeStrength × min(friendCount / 3, 1) × 25")
+
+                        // Franchise Boost
+                        sectionHeader("Franchise Boost")
+                        Text("If you've ranked other games in the same series highly, the candidate gets a boost of up to +15 points. Series matching is done by comparing the first three words of the title after stripping edition suffixes.")
+                            .bodyStyle()
+
+                        // Era Modifier
+                        sectionHeader("Era Modifier")
+                        Text("Games are bucketed into eras (pre-1995, 1995–2004, 2005–2012, 2013–2019, 2020+). If you tend to rank games from a particular era highly, candidates from that era get up to ±10 points.")
+                            .bodyStyle()
+
+                        // Self-Tuning
+                        sectionHeader("Self-Tuning Weights")
+                        Text("After you rank a predicted game, the actual outcome is compared against what each signal predicted. Over time, the engine learns whether friend signals or genre/tag signals are more accurate for you personally, and shifts the blend weights accordingly (±50% max adjustment).")
+                            .bodyStyle()
+
+                        // Candidate Sources & Diversity
+                        sectionHeader("Where Candidates Come From")
+                        Text("Every recommendation batch pulls from four sources: games your high-taste-match friends (70%+) have ranked in their top half; games from your top genres in the PlayedIt database; games from your top tags; and fresh discoveries from the RAWG API. Games you've already ranked, added to Want to Play, or dismissed in the last 6 months are excluded, as are games recommended in the last 5 rounds — so the list stays fresh.")
+                            .bodyStyle()
+                        Text("Results are then diversified: no more than 3 games sharing the same primary genre, and no more than 2 games from the same friend source per batch.")
+                            .bodyStyle()
+
+                        // Cold Start
+                        sectionHeader("New User Mode")
+                        Text("If you have fewer than 3 ranked games, predictions can't run yet. Instead, the app shows highly-rated games (by Metacritic) that match the genres and platforms you selected during onboarding, with a confidence of 1 dot. Accuracy improves fast — rank a handful of games and the full engine kicks in.")
+                            .bodyStyle()
+
                         // Platform Filtering
                         sectionHeader("Platform Filtering")
-                        Text("Only games available on platforms you own are recommended. A platform is considered \"owned\" if you've ranked 2+ games on it. Only games with curated platform data are eligible.")
+                        Text("Only games available on platforms you own are shown. A platform is considered owned if you've ranked 2+ games on it. Only games with curated platform data are eligible.")
                             .bodyStyle()
-                        
+
+                        // Confidence
+                        sectionHeader("Confidence Dots")
+                        Text("The dots (●●●○○) reflect how much data backed the prediction. 5 dots requires 3+ friends with strong taste match plus solid genre/tag data. 1 dot means it's mostly a guess — treat it accordingly.")
+                            .bodyStyle()
+
                         // Threshold
-                        sectionHeader("Threshold")
-                        Text("Only games with a final blended score ≥ 65% are shown. This corresponds to the \"You'll love this\" tier: games predicted to land in your top third.")
+                        sectionHeader("Threshold (Recommendations only)")
+                        Text("The Recommendations tab only shows games scoring ≥65% — the \"You'll love this\" tier. Predictions on Want to Play games are shown regardless of score.")
                             .bodyStyle()
-                        
+
                         Spacer(minLength: 30)
                     }
                     .padding(.horizontal, 20)
