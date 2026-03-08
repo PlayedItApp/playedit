@@ -44,6 +44,8 @@ struct ProfileView: View {
     @State private var hasPSNConnected = false
     @State private var pendingImport: PendingImport?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var topListShareImage: UIImage?
+    @State private var showTopListShare = false
     
     var body: some View {
         NavigationStack {
@@ -352,6 +354,12 @@ struct ProfileView: View {
                 .background(Color(.systemGroupedBackground))
                 .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showTopListShare) {
+                if let image = topListShareImage {
+                    let url = URL(string: "https://playedit.app/profile/\(username)")!
+                    ShareSheet(items: [image, url])
+                }
+            }
             .sheet(isPresented: $showGameSearch, onDismiss: {
                 Task {
                     await fetchRankedGames()
@@ -501,13 +509,49 @@ struct ProfileView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button {
+                            Task {
+                                let image = await TopListShareService.shared.renderTopList(
+                                    games: rankedGames,
+                                    username: username
+                                )
+                                guard let image else { return }
+                                let urlString = "https://playedit.app/profile/\(username)"
+                                                                
+                                // Wait for menu to dismiss
+                                try? await Task.sleep(nanoseconds: 600_000_000)
+                                
+                                let activityVC = UIActivityViewController(
+                                    activityItems: [image],
+                                    applicationActivities: nil
+                                )
+                                
+                                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                   let rootVC = windowScene.windows.first?.rootViewController {
+                                    var presenter = rootVC
+                                    while let presented = presenter.presentedViewController {
+                                        presenter = presented
+                                    }
+                                    if let popover = activityVC.popoverPresentationController {
+                                        popover.sourceView = presenter.view
+                                        popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 0, height: 0)
+                                        popover.permittedArrowDirections = []
+                                    }
+                                    presenter.present(activityVC, animated: true)
+                                }
+                            }
+                        } label: {
+                            Label("Share My Top 5", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(rankedGames.isEmpty)
+                        
+                        Button {
                             UIPasteboard.general.string = "https://playedit.app/profile/\(username)"
                             message = "Profile link copied!"
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                 message = nil
                             }
                         } label: {
-                            Label("Share Profile Link", systemImage: "link")
+                            Label("Copy Profile Link", systemImage: "link")
                         }
                         
                         Menu {
@@ -1185,6 +1229,16 @@ extension UIImage: @retroactive Identifiable {
     public var id: Int {
         hashValue
     }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #Preview {

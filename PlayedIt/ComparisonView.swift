@@ -442,6 +442,7 @@ struct RetroCompletionView: View {
     
     @State private var showContent = false
     @State private var confettiParticles: [ConfettiParticle] = []
+    @State private var showShareSheet = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -495,14 +496,36 @@ struct RetroCompletionView: View {
                             .animation(.easeOut(duration: 0.4).delay(0.5), value: showContent)
                     }
                     
-                    Button("Done") {
-                        onDone()
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Share")
+                        }
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .padding(.horizontal, 60)
-                    .padding(.top, 20)
+                    .opacity(showContent ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.58), value: showContent)
+                    
+                    Button("Maybe later") {
+                        onDone()
+                    }
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+                    .padding(.top, 4)
                     .opacity(showContent ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.6), value: showContent)
+                    .sheet(isPresented: $showShareSheet) {
+                        ShareSheetWrapper(
+                            game: game,
+                            rank: position,
+                            total: totalGames,
+                            onDismiss: onDone
+                        )
+                        .presentationDetents([.medium])
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -628,6 +651,88 @@ struct ScaleButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Share Sheet Wrapper
+struct ShareSheetWrapper: View {
+    let game: Game
+    let rank: Int
+    let total: Int
+    let onDismiss: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var isSharing = false
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Capsule()
+                .fill(Color.adaptiveSilver)
+                .frame(width: 36, height: 4)
+                .padding(.top, 12)
+            
+            VStack(spacing: 6) {
+                Text("Share Your Ranking")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                Text("Let friends know where \(game.title) landed")
+                    .font(.system(size: 14, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+            
+            VStack(spacing: 4) {
+                PixelRankBadge(position: rank)
+                Text(game.title)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.adaptiveSlate)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                Text("ranked #\(rank) of \(total)")
+                    .font(.system(size: 14, design: .rounded))
+                    .foregroundStyle(Color.adaptiveGray)
+            }
+            .padding(.vertical, 8)
+            
+            Button {
+                isSharing = true
+                dismiss()
+                Task {
+                    await GameShareService.shared.shareGame(
+                        gameTitle: game.title,
+                        coverURL: game.coverURL,
+                        rankPosition: rank,
+                        platforms: [],
+                        totalGames: total,
+                        gameId: game.rawgId
+                    )
+                    onDismiss()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if isSharing {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Share to...")
+                    }
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, 40)
+            .disabled(isSharing)
+            
+            Button("Maybe later") {
+                dismiss()
+                onDismiss()
+            }
+            .font(.system(size: 15, weight: .medium, design: .rounded))
+            .foregroundStyle(Color.adaptiveGray)
+            .padding(.bottom, 24)
+        }
+        .background(Color.appBackground)
     }
 }
 

@@ -10,6 +10,8 @@ struct PlayedItApp: App {
     @State private var pendingDeepLinkUsername: String?
     @State private var deepLinkGameId: Int?
     @State private var pendingDeepLinkGameId: Int?
+    @State private var pendingReferrerUsername: String?
+    @State private var showReferrerPrompt = false
     @StateObject private var supabase = SupabaseManager.shared
     @StateObject private var appearanceManager = AppearanceManager()
     
@@ -51,8 +53,16 @@ struct PlayedItApp: App {
                 .onOpenURL { url in
                     handleDeepLink(url)
                 }
-                .onChange(of: supabase.currentUser) { _, newUser in
-                    // If user just logged in and we have a pending deep link, present it
+                .onChange(of: supabase.currentUser) { oldUser, newUser in
+                    // User just signed up/in
+                    if oldUser == nil && newUser != nil {
+                        if pendingReferrerUsername != nil {
+                            // Small delay so the main UI settles first
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                showReferrerPrompt = true
+                            }
+                        }
+                    }
                     if newUser != nil && pendingDeepLinkUsername != nil {
                         deepLinkUsername = pendingDeepLinkUsername
                         pendingDeepLinkUsername = nil
@@ -60,6 +70,16 @@ struct PlayedItApp: App {
                     if newUser != nil && pendingDeepLinkGameId != nil {
                         deepLinkGameId = pendingDeepLinkGameId
                         pendingDeepLinkGameId = nil
+                    }
+                }
+                .sheet(isPresented: $showReferrerPrompt) {
+                    if let referrer = pendingReferrerUsername {
+                        ReferrerPromptView(referrerUsername: referrer) {
+                            pendingReferrerUsername = nil
+                            showReferrerPrompt = false
+                        }
+                        .environmentObject(SupabaseManager.shared)
+                        .presentationDetents([.height(320)])
                     }
                 }
                 .sheet(item: $deepLinkUsername) { username in
@@ -104,6 +124,12 @@ struct PlayedItApp: App {
         if url.scheme == "https" && url.host == "playedit.app" {
             if url.pathComponents.count >= 3 && url.pathComponents[1] == "game",
                let gId = Int(url.pathComponents.last ?? "") {
+                // Capture referrer from ?user= param for new signups
+                if supabase.currentUser == nil,
+                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                   let referrer = components.queryItems?.first(where: { $0.name == "user" })?.value {
+                    pendingReferrerUsername = referrer
+                }
                 if supabase.currentUser != nil {
                     deepLinkGameId = gId
                 } else {
